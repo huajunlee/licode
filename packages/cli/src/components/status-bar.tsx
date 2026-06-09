@@ -19,7 +19,7 @@ export function StatusBar({ model, tokens, sessionId }: StatusBarProps) {
         <Text dimColor>·</Text>
         <Text dimColor>session: {shortId}</Text>
       </Box>
-      <Text dimColor>Ctrl+Q 返回会话列表</Text>
+      <Text dimColor>Ctrl+Q 返回会话列表 · Ctrl+↑↓ 查看推理过程 · Enter 收起</Text>
     </Box>
   );
 }

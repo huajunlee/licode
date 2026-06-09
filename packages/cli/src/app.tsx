@@ -3,6 +3,7 @@ import { Box, Text, useInput } from "ink";
 import { ChatView } from "./components/chat-view.js";
 import { StreamRenderer } from "./components/stream-renderer.js";
 import { WaitingIndicator } from "./components/waiting-indicator.js";
+import { ThinkingAccordion } from "./components/thinking-accordion.js";
 import { InputBox } from "./components/input-box.js";
 import { StatusBar } from "./components/status-bar.js";
 import { SessionList } from "./components/session-list.js";
@@ -79,9 +80,7 @@ function App({ apiKey, model, sessionId: initialSessionId, baseUrl, existingSess
 
   const isWelcome = state.view === "welcome";
 
-  // Two separate useInput hooks with isActive guards:
-  // - welcome screen: arrow key navigation
-  // - chat screen: Ctrl+Q to return to session list
+  // Welcome screen: arrow key navigation
   useInput(
     (_input, key) => {
       if (!isWelcome) return;
@@ -91,7 +90,7 @@ function App({ apiKey, model, sessionId: initialSessionId, baseUrl, existingSess
     { isActive: isWelcome }
   );
 
-  // Global Ctrl+Q to return to session list from chat
+  // Chat screen: Ctrl+Q to return to session list
   useInput(
     (input, key) => {
       if (isWelcome) return;
@@ -162,13 +161,43 @@ function ChatApp({
     tokenCount,
     error,
     sessionId: currentSessionId,
+    thinkingBlocks,
     handleSubmit,
   } = useConversation({ apiKey, model, sessionId, baseUrl, existingSessions });
+
+  // Accordion navigation: Ctrl+↑/↓ to move, -1 = no focus (input mode)
+  const [focusedIndex, setFocusedIndex] = useState(-1);
+
+  // Ctrl+↑↓ navigation, Enter to collapse
+  useInput(
+    (input, key) => {
+      if (key.ctrl && key.upArrow) {
+        setFocusedIndex((prev) => {
+          if (thinkingBlocks.length === 0) return -1;
+          return Math.max(prev - 1, -1);
+        });
+      } else if (key.ctrl && key.downArrow) {
+        setFocusedIndex((prev) => {
+          if (thinkingBlocks.length === 0) return -1;
+          return Math.min(prev + 1, thinkingBlocks.length - 1);
+        });
+      } else if (key.return && focusedIndex >= 0) {
+        // Enter collapses the currently focused accordion item
+        setFocusedIndex(-1);
+      }
+    },
+    { isActive: true }
+  );
+
+  const hasThinking = thinkingBlocks.length > 0;
 
   return (
     <Box flexDirection="column" padding={1}>
       <ChatView messages={messages} />
-      {isLoading && !streaming && (
+      {hasThinking && (
+        <ThinkingAccordion blocks={thinkingBlocks} focusedIndex={focusedIndex} />
+      )}
+      {isLoading && !streaming && !hasThinking && (
         <Box marginBottom={1}>
           <WaitingIndicator isActive={true} />
         </Box>
@@ -179,7 +208,7 @@ function ChatApp({
           <Text color="red">Error: {error}</Text>
         </Box>
       )}
-      <InputBox onSubmit={handleSubmit} loading={isLoading} />
+      <InputBox onSubmit={handleSubmit} loading={isLoading} disabled={focusedIndex >= 0} />
       <StatusBar
         model={model ?? "deepseek-v4-pro"}
         tokens={tokenCount}

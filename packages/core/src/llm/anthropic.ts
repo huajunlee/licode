@@ -152,14 +152,23 @@ export class AnthropicProvider implements LLMProvider {
   ): StreamChunk | null {
     const e = event as Record<string, unknown>;
 
-    // Only text_delta produces visible tokens; all other SSE event
-    // types (content_block_start, message_delta, etc.) are internal
-    // protocol events we silently skip.
+    // Only text_delta produces visible tokens; thinking_delta captures
+    // extended thinking content for collapsible display in the CLI.
+    // All other SSE event types are internal protocol events we silently skip.
     if (e.type === "content_block_delta") {
-      const delta = e.delta as { type: string; text?: string } | undefined;
+      const delta = e.delta as
+        | { type: "text_delta"; text: string }
+        | { type: "thinking_delta"; thinking: string }
+        | { type: "signature_delta"; signature: string }
+        | undefined;
+
       if (delta?.type === "text_delta" && delta.text) {
         return { type: "token", text: delta.text, index };
       }
+      if (delta?.type === "thinking_delta" && delta.thinking) {
+        return { type: "thinking", text: delta.thinking };
+      }
+      // signature_delta: internal, silently skip
       return null;
     }
 

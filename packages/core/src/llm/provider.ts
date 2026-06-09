@@ -25,6 +25,7 @@ export interface TokenUsage {
 
 export type StreamChunk =
   | { type: "token"; text: string; index: number }
+  | { type: "thinking"; text: string }
   | { type: "stop"; stopReason: string; usage: TokenUsage }
   | { type: "error"; error: Error };
 

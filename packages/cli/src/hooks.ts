@@ -11,6 +11,8 @@ import {
   tokenCountingMiddleware,
 } from "@licode/core";
 import type { Message, PipelineEvent } from "@licode/core";
+import type { ThinkingBlock } from "./components/thinking-accordion.js";
+import { inferPurpose } from "./components/thinking-accordion.js";
 
 export interface UseConversationConfig {
   model?: string;
@@ -27,24 +29,18 @@ export interface UseConversationResult {
   tokenCount: number;
   error: string | null;
   sessionId: string;
+  thinkingBlocks: ThinkingBlock[];
   handleSubmit: (input: string) => Promise<void>;
 }
 
 const SESSIONS_DIR = ".licode/sessions";
 
-/**
- * Resolve a session ID to a file path.
- * Supports exact match and prefix match — users can type partial UUIDs
- * (as displayed in the welcome screen) to resume a session.
- */
 function resolveSessionPath(sessionId: string): string | null {
   const sessionsDir = path.resolve(SESSIONS_DIR);
 
-  // Try exact match first
   const exactPath = path.join(sessionsDir, `${sessionId}.json`);
   if (fs.existsSync(exactPath)) return exactPath;
 
-  // Try prefix match (user typed truncated UUID)
   if (fs.existsSync(sessionsDir)) {
     const files = fs.readdirSync(sessionsDir).filter((f) => f.endsWith(".json"));
     const matches = files.filter((f) => f.startsWith(sessionId));
@@ -72,8 +68,8 @@ export function useConversation(
   const [tokenCount, setTokenCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState("");
+  const [thinkingBlocks, setThinkingBlocks] = useState<ThinkingBlock[]>([]);
 
-  // Initialize provider and manager
   useEffect(() => {
     if (!apiKey) return;
 
@@ -88,7 +84,6 @@ export function useConversation(
         if (resolvedPath) {
           manager = await ConversationManager.load(resolvedPath);
         } else {
-          // Session not found — create new with error
           setError(
             `会话 ${config.sessionId} 未找到。使用 --session <id> 恢复已有会话，或直接 Enter 新建。`
           );
@@ -98,7 +93,6 @@ export function useConversation(
         manager = new ConversationManager({ model });
       }
 
-      // Set up system prompt layers
       const systemPrompt = new SystemPrompt();
       const layers = loadDefaultLayers();
       for (const layer of layers) {
@@ -123,6 +117,11 @@ export function useConversation(
       setIsLoading(true);
       setStreaming("");
       setError(null);
+      // Reset thinking blocks for this turn
+      const blocks: ThinkingBlock[] = [];
+      let blockIdCounter = 0;
+      let currentThinking = "";
+      setThinkingBlocks([]);
 
       try {
         const pipeline = new EventPipeline();
@@ -131,16 +130,49 @@ export function useConversation(
         pipeline
           .use(async (event: PipelineEvent, next) => {
             if (event.type === "user-message") {
-              // Show user question immediately, before streaming starts
               setMessages([...manager.getMessages()]);
             }
             await next();
           })
           .use(tokenCountingMiddleware((total) => setTokenCount(total)))
           .use(async (event: PipelineEvent, next) => {
-            if (event.type === "llm-token") {
+            if (event.type === "llm-thinking") {
+              currentThinking += event.text;
+              // Update or create current block as streaming
+              const updated = [...blocks];
+              const last = updated[updated.length - 1];
+              if (last && last.isStreaming) {
+                last.reasoning = currentThinking;
+              } else {
+                updated.push({
+                  id: ++blockIdCounter,
+                  purpose: "🤔 正在推理...",
+                  reasoning: currentThinking,
+                  isStreaming: true,
+                });
+              }
+              // Use blocks mutation directly (pipeline is synchronous per-event)
+              blocks.length = 0;
+              blocks.push(...updated);
+              setThinkingBlocks([...blocks]);
+            } else if (event.type === "llm-thinking-complete") {
+              // Finalize current block
+              const updated = [...blocks];
+              const last = updated[updated.length - 1];
+              if (last) {
+                last.purpose = inferPurpose(last.reasoning);
+                last.isStreaming = false;
+              }
+              blocks.length = 0;
+              blocks.push(...updated);
+              setThinkingBlocks([...blocks]);
+              currentThinking = "";
+            } else if (event.type === "llm-token") {
               streamText += event.text;
               setStreaming(streamText);
+            } else if (event.type === "stream-complete") {
+              // Clear thinking blocks once the full response finishes.
+              setThinkingBlocks([]);
             }
             await next();
           })
@@ -173,6 +205,7 @@ export function useConversation(
     tokenCount,
     error,
     sessionId,
+    thinkingBlocks,
     handleSubmit,
   };
 }

@@ -256,4 +256,74 @@ describe("generateChatEvents", () => {
     await collectEvents(manager, provider, "Save test");
     expect(saved).toBe(true);
   });
+
+  it("yields llm-thinking events for thinking chunks", async () => {
+    const manager = new ConversationManager({ model: "test-model" });
+    const provider = stubProvider(
+      (async function* () {
+        yield { type: "thinking" as const, text: "Let me think" };
+        yield { type: "thinking" as const, text: " about this..." };
+        yield { type: "token" as const, text: "Answer", index: 0 };
+        yield {
+          type: "stop" as const,
+          stopReason: "end_turn",
+          usage: { input: 10, output: 2 },
+        };
+      })()
+    );
+
+    const events = await collectEvents(manager, provider, "Q");
+
+    expect(events).toContainEqual({
+      type: "llm-thinking",
+      text: "Let me think",
+    });
+    expect(events).toContainEqual({
+      type: "llm-thinking",
+      text: " about this...",
+    });
+  });
+
+  it("yields llm-thinking-complete when first token arrives after thinking", async () => {
+    const manager = new ConversationManager({ model: "test-model" });
+    const provider = stubProvider(
+      (async function* () {
+        yield { type: "thinking" as const, text: "Hmm" };
+        yield { type: "token" as const, text: "OK", index: 0 };
+        yield {
+          type: "stop" as const,
+          stopReason: "end_turn",
+          usage: { input: 5, output: 1 },
+        };
+      })()
+    );
+
+    const events = await collectEvents(manager, provider, "Q");
+
+    const eventTypes = events.map((e) => e.type);
+    const thinkingIdx = eventTypes.indexOf("llm-thinking");
+    const completeIdx = eventTypes.indexOf("llm-thinking-complete");
+    const tokenIdx = eventTypes.indexOf("llm-token");
+
+    expect(thinkingIdx).toBeLessThan(completeIdx);
+    expect(completeIdx).toBeLessThan(tokenIdx);
+  });
+
+  it("yields llm-thinking-complete before stop when thinking-only (no tokens)", async () => {
+    const manager = new ConversationManager({ model: "test-model" });
+    const provider = stubProvider(
+      (async function* () {
+        yield { type: "thinking" as const, text: "Just thinking" };
+        yield {
+          type: "stop" as const,
+          stopReason: "end_turn",
+          usage: { input: 5, output: 0 },
+        };
+      })()
+    );
+
+    const events = await collectEvents(manager, provider, "Q");
+
+    expect(events).toContainEqual({ type: "llm-thinking-complete" });
+  });
 });

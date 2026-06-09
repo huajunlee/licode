@@ -18,16 +18,28 @@ export async function* generateChatEvents(
   try {
     let tokenIndex = 0;
     let hasTokens = false;
+    let inThinking = false;
     for await (const chunk of llmProvider.stream({
       messages,
       model: conversationManager.metadata.model,
     })) {
-      if (chunk.type === "token") {
+      if (chunk.type === "thinking") {
+        yield { type: "llm-thinking", text: chunk.text };
+        inThinking = true;
+      } else if (chunk.type === "token") {
+        if (inThinking) {
+          yield { type: "llm-thinking-complete" };
+          inThinking = false;
+        }
         yield { type: "llm-token", text: chunk.text, index: tokenIndex };
         conversationManager.appendToAssistantMessage(chunk.text);
         tokenIndex++;
         hasTokens = true;
       } else if (chunk.type === "stop") {
+        if (inThinking) {
+          yield { type: "llm-thinking-complete" };
+          inThinking = false;
+        }
         // LLM may return stop without producing any token chunks.
         // Ensure an assistant message exists so finalize works.
         if (!hasTokens) {
