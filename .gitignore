@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.licode/
+.superpowers/
+.env
+*.tsbuildinfo
