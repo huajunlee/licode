@@ -1,0 +1,64 @@
+config_version: 2
+default_workflow: tdd-local
+
+setup:
+  dependencies: []
+  skills: []
+
+stages:
+  - name: implement-with-tdd
+    kind: builtin
+    agent: generate
+    description: Implement the requested change with strict test-first development, then write a stage note explaining the tests added, the code changed, and how a new reader can understand the work.
+
+  - name: local-tests
+    kind: shell
+    command: pnpm test
+    cwd: .
+    timeout_seconds: 600
+    description: Run all Vitest tests from the repository root; record the result in the next human-written stage note.
+
+  - name: local-build
+    kind: shell
+    command: pnpm build
+    cwd: .
+    timeout_seconds: 600
+    description: Build all workspace packages after the test suite passes; record the result in the next human-written stage note.
+
+  - name: fix
+    kind: builtin
+    agent: fix
+    unlimited_retries: true
+    skip_on_fallthrough: true
+    description: Repair failed tests or build errors, document what failed and what changed, then return to the local test gate.
+
+  - name: deliver
+    kind: builtin
+    agent: deliver
+    description: Close only after all local gates pass and a beginner-friendly final handoff document exists.
+
+workflows:
+  - name: tdd-local
+    mode: full
+    default_max_retries: 3
+    rules:
+      - "Use strict TDD for every behavior change: write one focused automated test first, run it, and verify the expected red failure before editing production code."
+      - "Implement the smallest production change that turns the red test green."
+      - "Refactor only after the relevant test is green, and keep the full test suite green during refactoring."
+      - "Do not close the task while any TDD test, regression test, or local build check is failing."
+      - "Before delivery, run pnpm test from the repository root and require it to pass."
+      - "Before delivery, run pnpm build from the repository root and require it to pass."
+      - "If pnpm test or pnpm build fails, fix the cause and rerun the workflow from local-tests."
+      - "After every stage, create or update a closeout note under docs/omh-stage-notes/ for that stage."
+      - "Each closeout note must explain in plain language what was completed, which files or commands matter, what evidence proves the stage is complete, and what a person new to the project should read or try next."
+      - "Use simple language in closeout notes; avoid assuming the reader already knows this repository, OMH, or the implementation details."
+      - "The deliver stage must produce a final summary under docs/omh-stage-notes/ that links the per-stage notes and confirms pnpm test and pnpm build both passed."
+    stages:
+      - name: implement-with-tdd
+      - name: local-tests
+        on_fail: fix
+      - name: local-build
+        on_fail: fix
+      - name: fix
+        on_success: local-tests
+      - name: deliver
