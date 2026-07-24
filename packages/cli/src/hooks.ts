@@ -1,18 +1,32 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { loadCLAUDE, loadSpecFiles } from "@licode/spec-kit";
 import {
   AnthropicProvider,
   ConversationManager,
   SystemPrompt,
   loadDefaultLayers,
   EventPipeline,
-  generateChatEvents,
   tokenCountingMiddleware,
+  ToolRegistry,
+  builtinTools,
+  createAgentLoopMiddleware,
+  CommandRouter,
+  initializeExtensions,
+  registerExtensionMiddleware,
 } from "@licode/core";
-import type { Message, PipelineEvent } from "@licode/core";
+import type {
+  Message,
+  PipelineEvent,
+  AgentConfig,
+  EventBus,
+  InitializedExtensions,
+} from "@licode/core";
 import type { ThinkingBlock } from "./components/thinking-accordion.js";
 import { inferPurpose } from "./components/thinking-accordion.js";
+import type { ToolCallState } from "./components/tool-call-card.js";
 
 export interface UseConversationConfig {
   model?: string;
@@ -30,6 +44,10 @@ export interface UseConversationResult {
   error: string | null;
   sessionId: string;
   thinkingBlocks: ThinkingBlock[];
+  activeToolCalls: ToolCallState[];
+  commandMessage: string | null;
+  /** Available slash commands and skills for autocomplete */
+  slashCommands: Array<{ name: string; description: string }>;
   handleSubmit: (input: string) => Promise<void>;
 }
 
@@ -52,15 +70,124 @@ function resolveSessionPath(sessionId: string): string | null {
   return null;
 }
 
+function createEventBus(
+  setStreaming: (s: string) => void,
+  setThinkingBlocks: (blocks: ThinkingBlock[]) => void,
+  setActiveToolCalls: Dispatch<SetStateAction<ToolCallState[]>>,
+  setError: (e: string | null) => void
+): EventBus {
+  let streamText = "";
+  const blocks: ThinkingBlock[] = [];
+  let blockIdCounter = 0;
+  let currentThinking = "";
+
+  return {
+    emit(event: PipelineEvent) {
+      switch (event.type) {
+        case "llm-token":
+          streamText += event.text;
+          setStreaming(streamText);
+          break;
+
+        case "llm-thinking":
+          currentThinking += event.text;
+          {
+            const updated = [...blocks];
+            const last = updated[updated.length - 1];
+            if (last && last.isStreaming) {
+              last.reasoning = currentThinking;
+            } else {
+              updated.push({
+                id: ++blockIdCounter,
+                purpose: "🤔 正在推理...",
+                reasoning: currentThinking,
+                isStreaming: true,
+              });
+            }
+            blocks.length = 0;
+            blocks.push(...updated);
+            setThinkingBlocks([...blocks]);
+          }
+          break;
+
+        case "llm-thinking-complete":
+          {
+            const updated = [...blocks];
+            const last = updated[updated.length - 1];
+            if (last) {
+              last.purpose = inferPurpose(last.reasoning);
+              last.isStreaming = false;
+            }
+            blocks.length = 0;
+            blocks.push(...updated);
+            setThinkingBlocks([...blocks]);
+            currentThinking = "";
+          }
+          break;
+
+        case "tool-use-detected":
+          setActiveToolCalls(
+            event.toolUses.map((tu) => ({
+              toolName: tu.name,
+              status: "pending" as const,
+              detail: JSON.stringify(tu.input).slice(0, 80),
+            }))
+          );
+          break;
+
+        case "tool-execute-start":
+          setActiveToolCalls((prev) =>
+            prev.map((c) =>
+              c.toolName === event.toolName && c.status === "pending"
+                ? { ...c, status: "running" as const }
+                : c
+            )
+          );
+          break;
+
+        case "tool-execute-complete":
+          setActiveToolCalls((prev) =>
+            prev.map((c) =>
+              c.toolName === event.toolName && c.status === "running"
+                ? {
+                    ...c,
+                    status:
+                      event.result.status === "success" ? "done" : "error",
+                    result:
+                      event.result.status === "success"
+                        ? event.result.content
+                        : event.result.error,
+                  }
+                : c
+            )
+          );
+          break;
+
+        case "agent-loop-complete":
+          setStreaming("");
+          setThinkingBlocks([]);
+          setActiveToolCalls([]);
+          break;
+
+        case "error":
+          setError(`${event.context}: ${event.error.message}`);
+          break;
+      }
+    },
+  };
+}
+
 export function useConversation(
   config: UseConversationConfig
 ): UseConversationResult {
-  const model = config.model ?? "deepseek-v4-pro";
+  const model = config.model ?? "deepseek-chat";
   const apiKey = config.apiKey;
   const baseUrl = config.baseUrl;
 
   const providerRef = useRef<AnthropicProvider | null>(null);
   const managerRef = useRef<ConversationManager | null>(null);
+  const toolsRef = useRef<ToolRegistry>(new ToolRegistry());
+  const extensionsRef = useRef<InitializedExtensions | null>(null);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [streaming, setStreaming] = useState("");
@@ -69,12 +196,22 @@ export function useConversation(
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState("");
   const [thinkingBlocks, setThinkingBlocks] = useState<ThinkingBlock[]>([]);
+  const [activeToolCalls, setActiveToolCalls] = useState<ToolCallState[]>([]);
+  const [commandMessage, setCommandMessage] = useState<string | null>(null);
+  const [slashCommands, setSlashCommands] = useState<Array<{ name: string; description: string }>>([]);
+
+  const commandRouterRef = useRef<CommandRouter>(new CommandRouter());
 
   useEffect(() => {
     if (!apiKey) return;
 
     const provider = new AnthropicProvider({ apiKey, baseUrl });
     providerRef.current = provider;
+
+    // Initialize ToolRegistry with builtin tools
+    const tools = new ToolRegistry();
+    tools.registerAll(builtinTools);
+    toolsRef.current = tools;
 
     const initManager = async () => {
       let manager: ConversationManager;
@@ -98,7 +235,28 @@ export function useConversation(
       for (const layer of layers) {
         systemPrompt.addLayer(layer);
       }
+      await loadCLAUDE(systemPrompt, { cwd: process.cwd() });
+      await loadSpecFiles(systemPrompt, { cwd: process.cwd() });
       manager.systemPrompt = systemPrompt;
+
+      const extensions = await initializeExtensions({
+        workingDirectory: process.cwd(),
+        toolRegistry: tools,
+        systemPrompt,
+        commandRouter: commandRouterRef.current,
+      });
+      extensionsRef.current = extensions;
+
+      // Populate slash commands for autocomplete (commands + skills)
+      const cmds = extensions.commands.list().map((c) => ({
+        name: `/${c.name}`,
+        description: c.description,
+      }));
+      const skillItems = extensions.skills.map((s) => ({
+        name: `/${s.name}`,
+        description: s.description.slice(0, 80),
+      }));
+      setSlashCommands([...cmds, ...skillItems]);
 
       managerRef.current = manager;
       setSessionId(manager.id);
@@ -112,67 +270,120 @@ export function useConversation(
     async (input: string) => {
       const provider = providerRef.current;
       const manager = managerRef.current;
+      const tools = toolsRef.current;
+      const router = commandRouterRef.current;
       if (!provider || !manager || !input.trim()) return;
 
       setIsLoading(true);
       setStreaming("");
       setError(null);
-      // Reset thinking blocks for this turn
-      const blocks: ThinkingBlock[] = [];
-      let blockIdCounter = 0;
-      let currentThinking = "";
       setThinkingBlocks([]);
+      setActiveToolCalls([]);
+      setCommandMessage(null);
+
+      // Phase 3: route / commands before pipeline
+      const cmdResult = await router.route(input.trim(), {
+        conversation: manager,
+        toolRegistry: tools,
+        workingDirectory: process.cwd(),
+      });
+
+      if (cmdResult !== null) {
+        setIsLoading(false);
+        if (cmdResult.type === "action") {
+          setCommandMessage(cmdResult.message);
+          setMessages([...manager.getMessages()]);
+        } else if (cmdResult.type === "error") {
+          setCommandMessage(cmdResult.message);
+        } else if (cmdResult.type === "prompt") {
+          // Fall through to pipeline with the prompt content
+          // Recurse with the prompt content
+          setIsLoading(true);
+          setCommandMessage(null);
+          const promptContent = (cmdResult as { type: "prompt"; content: string }).content;
+          try {
+            const eventBus = createEventBus(
+              setStreaming,
+              setThinkingBlocks,
+              setActiveToolCalls,
+              setError
+            );
+
+            const pipeline = new EventPipeline();
+            registerExtensionMiddleware(pipeline, extensionsRef.current!, "before:agentLoop");
+
+            pipeline
+              .use(tokenCountingMiddleware((total) => setTokenCount(total)))
+              .use(
+                createAgentLoopMiddleware({
+                  llm: provider,
+                  conversation: manager,
+                  tools,
+                  eventBus,
+                })
+              )
+              .use("hook:after:agentLoop", async (event, next) => {
+                const extensions = extensionsRef.current;
+                if (extensions) {
+                  await extensions.hooks.onEvent(
+                    event,
+                    extensions.hooks.getHooksAt("after:agentLoop")
+                  );
+                }
+                await next();
+              })
+              .use(async (event: PipelineEvent, next) => {
+                if (event.type === "error") {
+                  setError(`${event.context}: ${event.error.message}`);
+                  return;
+                }
+                await next();
+              });
+
+            async function* singleEvent(): AsyncGenerator<PipelineEvent> {
+              yield { type: "user-message", content: promptContent };
+            }
+            await pipeline.run(singleEvent());
+
+            setMessages([...manager.getMessages()]);
+            setStreaming("");
+          } catch (err) {
+            setError(err instanceof Error ? err.message : String(err));
+          } finally {
+            setIsLoading(false);
+          }
+        }
+        return;
+      }
 
       try {
+        const eventBus = createEventBus(
+          setStreaming,
+          setThinkingBlocks,
+          setActiveToolCalls,
+          setError
+        );
+
         const pipeline = new EventPipeline();
-        let streamText = "";
+        registerExtensionMiddleware(pipeline, extensionsRef.current!, "before:agentLoop");
 
         pipeline
-          .use(async (event: PipelineEvent, next) => {
-            if (event.type === "user-message") {
-              setMessages([...manager.getMessages()]);
-            }
-            await next();
-          })
           .use(tokenCountingMiddleware((total) => setTokenCount(total)))
-          .use(async (event: PipelineEvent, next) => {
-            if (event.type === "llm-thinking") {
-              currentThinking += event.text;
-              // Update or create current block as streaming
-              const updated = [...blocks];
-              const last = updated[updated.length - 1];
-              if (last && last.isStreaming) {
-                last.reasoning = currentThinking;
-              } else {
-                updated.push({
-                  id: ++blockIdCounter,
-                  purpose: "🤔 正在推理...",
-                  reasoning: currentThinking,
-                  isStreaming: true,
-                });
-              }
-              // Use blocks mutation directly (pipeline is synchronous per-event)
-              blocks.length = 0;
-              blocks.push(...updated);
-              setThinkingBlocks([...blocks]);
-            } else if (event.type === "llm-thinking-complete") {
-              // Finalize current block
-              const updated = [...blocks];
-              const last = updated[updated.length - 1];
-              if (last) {
-                last.purpose = inferPurpose(last.reasoning);
-                last.isStreaming = false;
-              }
-              blocks.length = 0;
-              blocks.push(...updated);
-              setThinkingBlocks([...blocks]);
-              currentThinking = "";
-            } else if (event.type === "llm-token") {
-              streamText += event.text;
-              setStreaming(streamText);
-            } else if (event.type === "stream-complete") {
-              // Clear thinking blocks once the full response finishes.
-              setThinkingBlocks([]);
+          .use(
+            createAgentLoopMiddleware({
+              llm: provider,
+              conversation: manager,
+              tools,
+              eventBus,
+            })
+          )
+          .use("hook:after:agentLoop", async (event, next) => {
+            const extensions = extensionsRef.current;
+            if (extensions) {
+              await extensions.hooks.onEvent(
+                event,
+                extensions.hooks.getHooksAt("after:agentLoop")
+              );
             }
             await next();
           })
@@ -184,8 +395,12 @@ export function useConversation(
             await next();
           });
 
-        const events = generateChatEvents(input, manager, provider);
-        await pipeline.run(events);
+        // Push a single user-message event to kick off the pipeline.
+        // AgentLoop intercepts it and drives the entire ReAct loop.
+        async function* singleEvent(): AsyncGenerator<PipelineEvent> {
+          yield { type: "user-message", content: input };
+        }
+        await pipeline.run(singleEvent());
 
         setMessages([...manager.getMessages()]);
         setStreaming("");
@@ -206,6 +421,9 @@ export function useConversation(
     error,
     sessionId,
     thinkingBlocks,
+    activeToolCalls,
+    commandMessage,
+    slashCommands,
     handleSubmit,
   };
 }

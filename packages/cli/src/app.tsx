@@ -8,6 +8,7 @@ import { InputBox } from "./components/input-box.js";
 import { StatusBar } from "./components/status-bar.js";
 import { SessionList } from "./components/session-list.js";
 import { WelcomeInput } from "./components/welcome-input.js";
+import { ToolCallCards } from "./components/tool-call-card.js";
 import { useConversation } from "./hooks.js";
 import { useSessionSelector } from "./components/use-session-selector.js";
 import { createAppViewState, appViewReducer } from "./app-view.js";
@@ -37,8 +38,15 @@ function App({ apiKey, model, sessionId: initialSessionId, baseUrl, existingSess
   const [welcomeError, setWelcomeError] = useState<string | null>(null);
 
   const sessions = existingSessions ?? [];
-  const { cursorIndex, moveDown, moveUp, selectedId, visibleItems, windowStart } =
-    useSessionSelector(sessions);
+  const {
+    cursorIndex,
+    moveDown,
+    moveUp,
+    selectedId,
+    isOnNewSession,
+    visibleItems,
+    windowStart,
+  } = useSessionSelector(sessions, { includeCreateNew: true });
 
   const enterSession = useCallback(
     (id: string) => {
@@ -69,8 +77,13 @@ function App({ apiKey, model, sessionId: initialSessionId, baseUrl, existingSess
           if (match) fullId = match.id;
         }
         enterSession(fullId);
-      } else if (trimmed === "" && selectedId) {
-        enterSession(selectedId);
+      } else if (trimmed === "") {
+        // Empty Enter: create new if on new-session, else enter selected session
+        if (selectedId === null) {
+          dispatch("enter-chat");
+        } else {
+          enterSession(selectedId);
+        }
       } else {
         dispatch("enter-chat");
       }
@@ -80,12 +93,13 @@ function App({ apiKey, model, sessionId: initialSessionId, baseUrl, existingSess
 
   const isWelcome = state.view === "welcome";
 
-  // Welcome screen: arrow key navigation
+  // Welcome screen: arrow key navigation + Ctrl+N new session
   useInput(
-    (_input, key) => {
+    (input, key) => {
       if (!isWelcome) return;
       if (key.upArrow) moveUp();
       else if (key.downArrow) moveDown();
+      else if (key.ctrl && (input === "n" || input === "\x0e")) dispatch("enter-chat");
     },
     { isActive: isWelcome }
   );
@@ -105,16 +119,21 @@ function App({ apiKey, model, sessionId: initialSessionId, baseUrl, existingSess
         <Box marginBottom={1}>
           <Text bold>LICode v0.1.0</Text>
         </Box>
-        {sessions.length > 0 && (
-          <SessionList
-            visibleItems={visibleItems}
-            totalCount={sessions.length}
-            windowStart={windowStart}
-          />
-        )}
+        <SessionList
+          visibleItems={visibleItems}
+          totalCount={sessions.length}
+          windowStart={windowStart}
+          showCreateNew={true}
+          isOnNewSession={isOnNewSession}
+        />
         <Box marginTop={1}>
           <Text dimColor>
-            ↑↓ 选择会话 · Enter 进入 · 或输入 --session {"<id>"} · 输入关键字进入新对话
+            ↑↓ 选择 · Enter 进入 · Ctrl+N 新建会话 · --session {"<id>"} 恢复 · 输入文字新建
+          </Text>
+        </Box>
+        <Box marginTop={1}>
+          <Text dimColor>
+            📖 新用户？查看用户指南：docs/guide/user-guide.md
           </Text>
         </Box>
         {welcomeError && (
@@ -162,6 +181,9 @@ function ChatApp({
     error,
     sessionId: currentSessionId,
     thinkingBlocks,
+    activeToolCalls,
+    commandMessage,
+    slashCommands,
     handleSubmit,
   } = useConversation({ apiKey, model, sessionId, baseUrl, existingSessions });
 
@@ -197,6 +219,9 @@ function ChatApp({
       {hasThinking && (
         <ThinkingAccordion blocks={thinkingBlocks} focusedIndex={focusedIndex} />
       )}
+      {activeToolCalls.length > 0 && (
+        <ToolCallCards calls={activeToolCalls} />
+      )}
       {isLoading && !streaming && !hasThinking && (
         <Box marginBottom={1}>
           <WaitingIndicator isActive={true} />
@@ -208,7 +233,12 @@ function ChatApp({
           <Text color="red">Error: {error}</Text>
         </Box>
       )}
-      <InputBox onSubmit={handleSubmit} loading={isLoading} disabled={focusedIndex >= 0} />
+      {commandMessage && (
+        <Box marginY={1}>
+          <Text color="yellow">{commandMessage}</Text>
+        </Box>
+      )}
+      <InputBox onSubmit={handleSubmit} loading={isLoading} disabled={focusedIndex >= 0} slashCommands={slashCommands} />
       <StatusBar
         model={model ?? "deepseek-v4-pro"}
         tokens={tokenCount}
