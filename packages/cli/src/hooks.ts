@@ -16,6 +16,10 @@ import {
   CommandRouter,
   initializeExtensions,
   registerExtensionMiddleware,
+  MemoryStore,
+  MemoryLoader,
+  MemoryExtractor,
+  memoryMiddleware,
 } from "@licode/core";
 import type {
   Message,
@@ -201,6 +205,10 @@ export function useConversation(
   const [slashCommands, setSlashCommands] = useState<Array<{ name: string; description: string }>>([]);
 
   const commandRouterRef = useRef<CommandRouter>(new CommandRouter());
+  const memoryStoreRef = useRef<MemoryStore>(
+    new MemoryStore(path.join(process.cwd(), ".licode", "memory"))
+  );
+  const memoryExtractorRef = useRef<MemoryExtractor>(new MemoryExtractor());
 
   useEffect(() => {
     if (!apiKey) return;
@@ -246,6 +254,10 @@ export function useConversation(
         commandRouter: commandRouterRef.current,
       });
       extensionsRef.current = extensions;
+
+      // Load persisted memories into system prompt
+      const memoryLoader = new MemoryLoader(memoryStoreRef.current);
+      await memoryLoader.loadInto(systemPrompt);
 
       // Populate slash commands for autocomplete (commands + skills)
       const cmds = extensions.commands.list().map((c) => ({
@@ -313,6 +325,7 @@ export function useConversation(
             registerExtensionMiddleware(pipeline, extensionsRef.current!, "before:agentLoop");
 
             pipeline
+              .use(memoryMiddleware(memoryExtractorRef.current, memoryStoreRef.current))
               .use(tokenCountingMiddleware((total) => setTokenCount(total)))
               .use(
                 createAgentLoopMiddleware({
@@ -368,6 +381,7 @@ export function useConversation(
         registerExtensionMiddleware(pipeline, extensionsRef.current!, "before:agentLoop");
 
         pipeline
+          .use(memoryMiddleware(memoryExtractorRef.current, memoryStoreRef.current))
           .use(tokenCountingMiddleware((total) => setTokenCount(total)))
           .use(
             createAgentLoopMiddleware({
