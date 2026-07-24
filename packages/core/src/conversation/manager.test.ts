@@ -4,6 +4,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { ConversationManager } from "./manager.js";
 import { SystemPrompt } from "./system-prompt.js";
+import type { AssistantMessage } from "../llm/provider.js";
 
 describe("ConversationManager", () => {
   let tmpDir: string;
@@ -62,11 +63,9 @@ describe("ConversationManager", () => {
     mgr.appendToAssistantMessage("Hi");
     mgr.finalizeAssistantMessage({ input: 10, output: 2 });
     const messages = mgr.getMessages();
-    const firstMsg = messages[0];
+    const firstMsg = messages[0] as AssistantMessage;
     expect(firstMsg.role).toBe("assistant");
-    if (firstMsg.role === "assistant") {
-      expect(firstMsg.usage).toEqual({ input: 10, output: 2 });
-    }
+    expect(firstMsg.usage).toEqual({ input: 10, output: 2 });
   });
 
   it("builds messages with system prompt", () => {
@@ -187,5 +186,33 @@ describe("ConversationManager", () => {
     const mgr = new ConversationManager({ model: "test" });
     expect(() => mgr.trimToBudget(100)).not.toThrow();
     expect(mgr.getMessageCount()).toBe(0);
+  });
+
+  // --- Phase 3: /clear and /context support ---
+
+  it("clear() removes all messages", () => {
+    const mgr = new ConversationManager({ model: "test" });
+    mgr.addUserMessage("Hello");
+    mgr.appendToAssistantMessage("Hi");
+
+    expect(mgr.getMessageCount()).toBe(2);
+
+    mgr.clear();
+
+    expect(mgr.getMessageCount()).toBe(0);
+  });
+
+  it("getStats() returns session summary", () => {
+    const mgr = new ConversationManager({ model: "test-model" });
+    mgr.addUserMessage("Hello");
+    mgr.appendToAssistantMessage("Hi");
+
+    const stats = mgr.getStats();
+
+    expect(stats.model).toBe("test-model");
+    expect(stats.sessionId).toBe(mgr.id);
+    expect(stats.messageCount).toBe(2);
+    expect(typeof stats.tokenCount).toBe("number");
+    expect(stats.tokenCount).toBeGreaterThan(0);
   });
 });

@@ -87,4 +87,83 @@ describe("EventPipeline", () => {
       });
     expect(result).toBe(pipeline);
   });
+
+  // --- Phase 3: named middleware ---
+
+  it("registers named middleware via use(name, mw)", () => {
+    const pipeline = new EventPipeline();
+
+    pipeline.use("logging", async (_e, n) => {
+      await n();
+    });
+
+    const entries = pipeline.listMiddleware();
+    expect(entries).toHaveLength(1);
+    expect(entries[0].name).toBe("logging");
+    expect(entries[0].mw).toBeDefined();
+  });
+
+  it("anonymous middleware gets an auto-generated name", () => {
+    const pipeline = new EventPipeline();
+
+    pipeline.use(async (_e, n) => {
+      await n();
+    });
+
+    const entries = pipeline.listMiddleware();
+    expect(entries).toHaveLength(1);
+    expect(entries[0].name).toBeTruthy();
+  });
+
+  it("named middleware still executes in order", async () => {
+    const order: string[] = [];
+    const pipeline = new EventPipeline();
+
+    pipeline.use("first", async (_event, next) => {
+      order.push("first-enter");
+      await next();
+      order.push("first-leave");
+    });
+
+    pipeline.use("second", async (_event, next) => {
+      order.push("second-enter");
+      await next();
+      order.push("second-leave");
+    });
+
+    async function* events(): AsyncIterable<PipelineEvent> {
+      yield { type: "user-message", content: "test" };
+    }
+
+    await pipeline.run(events());
+
+    expect(order).toEqual([
+      "first-enter",
+      "second-enter",
+      "second-leave",
+      "first-leave",
+    ]);
+  });
+
+  it("mixed named and anonymous middlewares work together", async () => {
+    const order: string[] = [];
+    const pipeline = new EventPipeline();
+
+    pipeline.use("named", async (_event, next) => {
+      order.push("named");
+      await next();
+    });
+
+    pipeline.use(async (_event, next) => {
+      order.push("anonymous");
+      await next();
+    });
+
+    async function* events(): AsyncIterable<PipelineEvent> {
+      yield { type: "user-message", content: "test" };
+    }
+
+    await pipeline.run(events());
+    expect(order).toEqual(["named", "anonymous"]);
+  });
 });

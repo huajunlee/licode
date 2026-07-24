@@ -28,7 +28,12 @@ export class TokenCounter {
   estimateMessages(messages: Message[]): number {
     let total = 0;
     for (const msg of messages) {
-      total += this.estimate(msg.content);
+      if (typeof msg.content === "string") {
+        total += this.estimate(msg.content);
+      } else {
+        // ToolUseMessage or ToolResultMessage: estimate JSON-serialized content
+        total += this.estimate(JSON.stringify(msg.content));
+      }
     }
     return total;
   }

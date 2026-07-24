@@ -7,17 +7,41 @@ interface SessionListProps {
   visibleItems: VisibleItem<SessionInfo>[];
   totalCount: number;
   windowStart: number;
+  /** Whether the "+ 新建会话" virtual item is active */
+  showCreateNew?: boolean;
+  /** Is the cursor currently on the new-session item? */
+  isOnNewSession?: boolean;
 }
 
-export function SessionList({ visibleItems, totalCount, windowStart }: SessionListProps) {
-  if (visibleItems.length === 0) return null;
-
+export function SessionList({
+  visibleItems,
+  totalCount,
+  windowStart,
+  showCreateNew = false,
+  isOnNewSession = false,
+}: SessionListProps) {
   const truncatedTop = windowStart > 0;
   const truncatedBottom = windowStart + visibleItems.length < totalCount;
 
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Text bold>历史会话 (↑↓ 选择, Enter 进入):</Text>
+
+      {/* "+ 新建会话" virtual item */}
+      {showCreateNew && (
+        <>
+          <Box marginLeft={2}>
+            <Text color={isOnNewSession ? "green" : undefined}>
+              {isOnNewSession ? "> " : "  "}
+              🆕 新建会话
+            </Text>
+          </Box>
+          <Box marginLeft={2}>
+            <Text dimColor>──────────────────────────────</Text>
+          </Box>
+        </>
+      )}
+
       {truncatedTop && (
         <Box marginLeft={2}>
           <Text dimColor>... 上方还有 {windowStart} 个会话</Text>

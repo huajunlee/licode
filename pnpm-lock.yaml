@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      tsx:
+        specifier: ^4
+        version: 4.22.4
       typescript:
         specifier: ^5.7
         version: 5.9.3
@@ -20,6 +23,9 @@ importers:
       '@licode/core':
         specifier: workspace:*
         version: link:../core
+      '@licode/spec-kit':
+        specifier: workspace:*
+        version: link:../spec-kit
       chalk:
         specifier: ^5
         version: 5.6.2
@@ -76,6 +82,19 @@ importers:
       '@types/uuid':
         specifier: ^10
         version: 10.0.0
+      typescript:
+        specifier: ^5.7
+        version: 5.9.3
+
+  packages/spec-kit:
+    dependencies:
+      '@licode/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      '@types/node':
+        specifier: ^25.9.1
+        version: 25.9.1
       typescript:
         specifier: ^5.7
         version: 5.9.3

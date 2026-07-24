@@ -53,3 +53,42 @@ export function getVisiblePage<T>(
   }
   return result;
 }
+
+// ---- 新建会话 virtual item helpers ----
+
+/** Whether the "+ 新建会话" item should appear */
+export function hasNewSessionItem(includeCreateNew?: boolean): boolean {
+  return includeCreateNew === true;
+}
+
+/** Is the cursor on the virtual "+ 新建会话" item (always at index 0)? */
+export function isNewSessionIndex(
+  index: number,
+  includeCreateNew?: boolean
+): boolean {
+  return includeCreateNew === true && index === 0;
+}
+
+/** Total selectable items: sessions + 1 virtual item (if enabled) */
+export function sessionItemCount(
+  sessionCount: number,
+  includeCreateNew?: boolean
+): number {
+  return includeCreateNew ? sessionCount + 1 : sessionCount;
+}
+
+/**
+ * Map cursor index to a session ID.
+ * When includeCreateNew is true, index 0 = "new session" → null.
+ */
+export function resolveSelectedId(
+  cursorIndex: number,
+  sessions: Array<{ id: string }>,
+  includeCreateNew?: boolean
+): string | null {
+  if (includeCreateNew && cursorIndex === 0) return null;
+  const offset = includeCreateNew ? 1 : 0;
+  const sessionIndex = cursorIndex - offset;
+  if (sessionIndex < 0 || sessionIndex >= sessions.length) return null;
+  return sessions[sessionIndex].id;
+}

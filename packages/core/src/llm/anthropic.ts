@@ -6,6 +6,8 @@ import type {
   StreamChunk,
   Message,
   SystemMessage,
+  ToolUseBlock,
+  ToolResultBlock,
 } from "./provider.js";
 import { TokenCounter } from "./token-counter.js";
 
@@ -49,6 +51,13 @@ export class AnthropicProvider implements LLMProvider {
     const params = this.toAnthropicParams(req);
     let tokenIndex = 0;
 
+    // Phase 2: accumulate tool_use SSE events into a complete block
+    let pendingToolUse: {
+      id: string;
+      name: string;
+      inputJson: string;
+    } | null = null;
+
     try {
       const stream = this.client.messages.stream({
         ...params,
@@ -62,6 +71,51 @@ export class AnthropicProvider implements LLMProvider {
             tokenIndex++;
           }
           yield chunk;
+        }
+
+        // Phase 2: accumulate tool_use from raw SSE events
+        const e = event as unknown as Record<string, unknown>;
+
+        if (e.type === "content_block_start") {
+          const contentBlock = e.content_block as
+            | { type: string; id?: string; name?: string }
+            | undefined;
+          if (contentBlock?.type === "tool_use" && contentBlock.id && contentBlock.name) {
+            pendingToolUse = {
+              id: contentBlock.id,
+              name: contentBlock.name,
+              inputJson: "",
+            };
+          }
+        } else if (e.type === "content_block_delta") {
+          const delta = e.delta as
+            | { type: string; partial_json?: string }
+            | undefined;
+          if (
+            delta?.type === "input_json_delta" &&
+            delta.partial_json &&
+            pendingToolUse
+          ) {
+            pendingToolUse.inputJson += delta.partial_json;
+          }
+        } else if (e.type === "content_block_stop") {
+          if (pendingToolUse) {
+            let input: Record<string, unknown> = {};
+            try {
+              input = JSON.parse(pendingToolUse.inputJson);
+            } catch {
+              // If JSON parse fails, emit with empty input
+            }
+            yield {
+              type: "tool-use",
+              toolUse: {
+                id: pendingToolUse.id,
+                name: pendingToolUse.name,
+                input,
+              },
+            };
+            pendingToolUse = null;
+          }
         }
       }
 
@@ -77,9 +131,15 @@ export class AnthropicProvider implements LLMProvider {
         };
       }
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const wrapped = new Error(
+        message.includes("404")
+          ? `${message}\n\n💡 提示：如果你用的是非 Anthropic 官方的 API（如 DeepSeek），请设置环境变量：\n   export ANTHROPIC_BASE_URL="https://your-api-endpoint"\n   当前模型：${req.model}`
+          : message
+      );
       yield {
         type: "error",
-        error: err instanceof Error ? err : new Error(String(err)),
+        error: wrapped,
       };
     }
   }
@@ -117,6 +177,15 @@ export class AnthropicProvider implements LLMProvider {
       }
     }
 
+    // Phase 2: pass tool definitions to LLM
+    if (req.tools && req.tools.length > 0) {
+      (params as Record<string, unknown>)["tools"] = req.tools.map((t) => ({
+        name: t.name,
+        description: t.description,
+        input_schema: t.input_schema,
+      }));
+    }
+
     return params;
   }
 
@@ -134,9 +203,34 @@ export class AnthropicProvider implements LLMProvider {
       .filter((m) => m.role !== "system")
       .map((m) => {
         if (m.role === "user") {
+          if (Array.isArray(m.content)) {
+            // ToolResultMessage: content is ToolResultBlock[]
+            return {
+              role: "user" as const,
+              content: m.content.map((block: ToolResultBlock) => ({
+                type: "tool_result" as const,
+                tool_use_id: block.tool_use_id,
+                content: block.content,
+                ...(block.is_error ? { is_error: true } : {}),
+              })),
+            };
+          }
           return {
             role: "user" as const,
             content: m.content,
+          };
+        }
+        // role === "assistant"
+        if (Array.isArray(m.content)) {
+          // ToolUseMessage: content is ToolUseBlock[]
+          return {
+            role: "assistant" as const,
+            content: m.content.map((block: ToolUseBlock) => ({
+              type: "tool_use" as const,
+              id: block.id,
+              name: block.name,
+              input: block.input,
+            })),
           };
         }
         return {

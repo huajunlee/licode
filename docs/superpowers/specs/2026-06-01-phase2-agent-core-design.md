@@ -285,8 +285,8 @@ export const bashTool: Tool<typeof BashParams> = {
 |------|------|------------------|
 | `Bash` | 执行 Shell 命令 | true |
 | `Read` | 读取文件内容（返回 cat -n 格式） | false |
-| `Write` | 创建或覆盖文件 | false |
-| `Edit` | 精确字符串替换编辑 | false |
+| `Write` | 创建或覆盖文件 | true |
+| `Edit` | 精确字符串替换编辑 | true |
 | `Glob` | 按模式搜索文件路径 | false |
 | `Grep` | 按关键词搜索文件内容 | false |
 

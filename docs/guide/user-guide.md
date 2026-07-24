@@ -44,7 +44,7 @@ pnpm build
 export ANTHROPIC_API_KEY="sk-your-api-key-here"
 
 # 可选：指定 API 地址（使用第三方兼容 API 时）
-export ANTHROPIC_BASE_URL="https://api.deepseek.com"
+export ANTHROPIC_BASE_URL="https://api.deepseek.com/anthropic"
 ```
 
 ### 第一次对话
@@ -52,6 +52,8 @@ export ANTHROPIC_BASE_URL="https://api.deepseek.com"
 ```bash
 # 启动 LICode
 pnpm start
+# 启动deepseek v4 pro（有think mode）
+pnpm start -- --model deepseek-v4-pro
 ```
 
 你会看到**欢迎页面**，显示历史会话列表。直接输入你的问题，按 Enter 开始新对话：

@@ -6,6 +6,25 @@ interface ChatViewProps {
   messages: Message[];
 }
 
+function renderContent(msg: Message): string {
+  if (typeof msg.content === "string") {
+    return msg.content;
+  }
+  // ToolUseMessage or ToolResultMessage
+  if (msg.role === "assistant") {
+    // ToolUseMessage: content is ToolUseBlock[]
+    const names = msg.content.map((b: { name: string }) => b.name).join(", ");
+    return `[调用工具: ${names}]`;
+  }
+  // ToolResultMessage: content is ToolResultBlock[]
+  return msg.content
+    .map(
+      (b: { content: string; is_error?: boolean }) =>
+        `${b.is_error ? "✗" : "✓"} ${b.content.slice(0, 100)}`
+    )
+    .join("\n");
+}
+
 export function ChatView({ messages }: ChatViewProps) {
   if (messages.length === 0) {
     return (
@@ -23,7 +42,7 @@ export function ChatView({ messages }: ChatViewProps) {
           <Box key={i} flexDirection="column" marginY={1}>
             <Text color={msg.role === "user" ? "green" : undefined}>
               {msg.role === "user" ? "> " : ""}
-              {msg.content}
+              {renderContent(msg)}
             </Text>
           </Box>
         ))}

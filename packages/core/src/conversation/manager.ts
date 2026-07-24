@@ -1,7 +1,8 @@
 import { v4 as uuidv4 } from "uuid";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { Message, TokenUsage } from "../llm/provider.js";
+import type { Message, TokenUsage, ToolUseBlock, AssistantMessage } from "../llm/provider.js";
+import type { ToolResult } from "../tools/types.js";
 import { SystemPrompt } from "./system-prompt.js";
 import { TokenCounter } from "../llm/token-counter.js";
 
@@ -59,6 +60,43 @@ export class ConversationManager {
     this.metadata.updatedAt = new Date().toISOString();
   }
 
+  /** Phase 2: add tool_use + tool_result message pair to history */
+  addToolMessages(
+    toolUses: ToolUseBlock[],
+    results: ToolResult[]
+  ): void {
+    const now = new Date().toISOString();
+
+    this.messages.push({
+      role: "assistant",
+      content: toolUses,
+      timestamp: now,
+    });
+
+    this.messages.push({
+      role: "user",
+      content: results.map((r, i) => ({
+        tool_use_id: toolUses[i].id,
+        content: r.status === "success" ? r.content : r.error,
+        is_error: r.status === "error",
+      })),
+      timestamp: now,
+    });
+
+    this.metadata.updatedAt = now;
+  }
+
+  /** Phase 2: find the most recent assistant-or-tool-use message */
+  getLastAssistantMessage(): Message | undefined {
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      const msg = this.messages[i];
+      if (msg.role === "assistant") {
+        return msg;
+      }
+    }
+    return undefined;
+  }
+
   appendToAssistantMessage(token: string): void {
     const last = this.messages[this.messages.length - 1];
     if (last && last.role === "assistant") {
@@ -74,8 +112,8 @@ export class ConversationManager {
 
   finalizeAssistantMessage(usage: TokenUsage): void {
     const last = this.messages[this.messages.length - 1];
-    if (last && last.role === "assistant") {
-      last.usage = usage;
+    if (last && last.role === "assistant" && typeof last.content === "string") {
+      (last as AssistantMessage).usage = usage;
     }
     this.metadata.updatedAt = new Date().toISOString();
   }
@@ -118,9 +156,9 @@ export class ConversationManager {
     for (let i = pairs.length - 1; i >= 0; i--) {
       const pair = pairs[i];
       const pairTokens =
-        this.tokenCounter.estimate(pair.user.content) +
+        this.tokenCounter.estimateMessages([pair.user]) +
         (pair.assistant
-          ? this.tokenCounter.estimate(pair.assistant.content)
+          ? this.tokenCounter.estimateMessages([pair.assistant])
           : 0);
 
       if (tokens + pairTokens <= maxTokens) {
@@ -256,5 +294,31 @@ export class ConversationManager {
 
   getMessages(): ReadonlyArray<Message> {
     return this.messages;
+  }
+
+  replaceMessages(messages: Message[]): void {
+    this.messages = [...messages];
+    this.metadata.updatedAt = new Date().toISOString();
+  }
+
+  /** Phase 3: clear all messages (for /clear command) */
+  clear(): void {
+    this.messages = [];
+    this.metadata.updatedAt = new Date().toISOString();
+  }
+
+  /** Phase 3: return session summary (for /context command) */
+  getStats(): {
+    tokenCount: number;
+    messageCount: number;
+    model: string;
+    sessionId: string;
+  } {
+    return {
+      tokenCount: this.getTokenCount(),
+      messageCount: this.getMessageCount(),
+      model: this.metadata.model,
+      sessionId: this.id,
+    };
   }
 }

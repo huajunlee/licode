@@ -1,11 +1,28 @@
 import type { PipelineEvent, Middleware } from "./types.js";
 
-export class EventPipeline {
-  private middlewares: Middleware[] = [];
+export interface MiddlewareEntry {
+  name: string;
+  mw: Middleware;
+}
 
-  use(mw: Middleware): this {
-    this.middlewares.push(mw);
+let anonymousCounter = 0;
+
+export class EventPipeline {
+  private entries: MiddlewareEntry[] = [];
+
+  use(mw: Middleware): this;
+  use(name: string, mw: Middleware): this;
+  use(nameOrMw: string | Middleware, mw?: Middleware): this {
+    if (typeof nameOrMw === "string" && mw) {
+      this.entries.push({ name: nameOrMw, mw });
+    } else if (typeof nameOrMw === "function") {
+      this.entries.push({ name: `anon_${++anonymousCounter}`, mw: nameOrMw });
+    }
     return this;
+  }
+
+  listMiddleware(): MiddlewareEntry[] {
+    return this.entries;
   }
 
   async run(events: AsyncIterable<PipelineEvent>): Promise<void> {
@@ -22,9 +39,9 @@ export class EventPipeline {
     event: PipelineEvent,
     index: number
   ): Promise<void> {
-    if (index >= this.middlewares.length) return;
+    if (index >= this.entries.length) return;
 
-    const middleware = this.middlewares[index];
+    const { mw: middleware } = this.entries[index];
     // next() 闭包捕获 index + 1，递归触发链中下一个中间件。
     await middleware(event, async () => {
       await this.executeChain(event, index + 1);
