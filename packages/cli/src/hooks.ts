@@ -270,6 +270,22 @@ export function useConversation(
       }));
       setSlashCommands([...cmds, ...skillItems]);
 
+      // Register skills as prompt-pass-through commands so /skill-name
+      // is recognized by the router and forwarded to the LLM
+      for (const skill of extensions.skills) {
+        commandRouterRef.current.register({
+          name: skill.name,
+          description: skill.description.slice(0, 80),
+          async execute(args: string[], _ctx): Promise<{
+            type: "prompt";
+            content: string;
+          }> {
+            const fullInput = [skill.name, ...args].join(" ");
+            return { type: "prompt", content: fullInput };
+          },
+        });
+      }
+
       managerRef.current = manager;
       setSessionId(manager.id);
       setMessages([...manager.getMessages()]);
