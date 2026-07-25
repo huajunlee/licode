@@ -63,9 +63,9 @@ describe("context command", () => {
 });
 
 describe("memory command", () => {
-  it("returns placeholder message", async () => {
+  it("returns empty memory message when no memories exist", async () => {
     const result = await memoryCommand.execute([], mockContext());
     expect(result.type).toBe("action");
-    expect((result as { message: string }).message).toContain("future update");
+    expect((result as { message: string }).message).toContain("没有存储的记忆");
   });
 });

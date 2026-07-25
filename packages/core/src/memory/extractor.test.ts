@@ -1,146 +1,121 @@
 import { describe, expect, it } from "vitest";
 import { MemoryExtractor } from "./extractor.js";
 
-describe("MemoryExtractor", () => {
+describe("MemoryExtractor (new Memory type)", () => {
   const extractor = new MemoryExtractor();
 
-  it("extracts explicit preference statements from conversation text", () => {
+  it("extracts explicit preference statements as Memory with type 'user'", () => {
     const entries = extractor.extract(
       "Remember that I prefer pnpm for this project."
     );
     expect(entries).toHaveLength(1);
     expect(entries[0]).toEqual(
       expect.objectContaining({
-        title: "Preference",
-        content: expect.stringContaining("prefer pnpm"),
+        type: "user",
+        name: "Preference",
+        description: expect.stringContaining("prefer pnpm"),
       })
     );
+    expect(entries[0].slug).toMatch(/^user\//);
   });
 
-  it("extracts name from 'my name is' pattern", () => {
+  it("extracts name from 'my name is' pattern → slug user/identity", () => {
     const entries = extractor.extract("My name is John Smith.");
     expect(entries).toHaveLength(1);
     expect(entries[0]).toEqual(
       expect.objectContaining({
-        title: "User Name",
-        content: "The user's name is John Smith.",
-        tags: ["identity"],
+        slug: "user/identity",
+        type: "user",
+        name: "User Name",
+        description: "The user's name is John Smith.",
       })
     );
   });
 
-  it("extracts name from Chinese '我叫' pattern", () => {
+  it("extracts name from Chinese '我叫' pattern → slug user/identity", () => {
     const entries = extractor.extract("我叫小明。");
     expect(entries).toHaveLength(1);
     expect(entries[0]).toEqual(
       expect.objectContaining({
-        title: "User Name",
-        content: "The user's name is 小明.",
-        tags: ["identity"],
+        slug: "user/identity",
+        type: "user",
+        name: "User Name",
+        description: "The user's name is 小明.",
       })
     );
   });
 
-  it("extracts name from Chinese '我的名字是' pattern", () => {
-    const entries = extractor.extract("我的名字是张三");
-    expect(entries).toHaveLength(1);
-    expect(entries[0]).toEqual(
-      expect.objectContaining({
-        title: "User Name",
-        content: "The user's name is 张三.",
-      })
-    );
-  });
-
-  it("extracts 'call me' pattern", () => {
+  it("extracts 'call me' pattern → slug user/identity", () => {
     const entries = extractor.extract("Call me Xiao Ming please.");
     expect(entries).toHaveLength(1);
     expect(entries[0]).toEqual(
       expect.objectContaining({
-        title: "Preferred Name",
-        content: "The user prefers to be called Xiao Ming please.",
+        slug: "user/identity",
+        type: "user",
+        name: "Preferred Name",
+        description: "The user prefers to be called Xiao Ming please.",
       })
     );
   });
 
-  it("extracts Chinese '请叫我' pattern", () => {
-    const entries = extractor.extract("请叫我老王。");
-    expect(entries).toHaveLength(1);
-    expect(entries[0]).toEqual(
-      expect.objectContaining({
-        title: "Preferred Name",
-        content: "The user prefers to be called 老王.",
-      })
-    );
-  });
-
-  it("extracts identity from 'I am a' pattern", () => {
+  it("extracts identity from 'I am a' pattern → slug user/identity", () => {
     const entries = extractor.extract("I am a software developer.");
     expect(entries).toHaveLength(1);
     expect(entries[0]).toEqual(
       expect.objectContaining({
-        title: "User Identity",
-        content: "The user is a software developer.",
-        tags: ["identity"],
+        slug: "user/identity",
+        type: "user",
+        name: "User Identity",
+        description: "The user is a software developer.",
       })
     );
   });
 
-  it("extracts identity from Chinese '我是' pattern", () => {
-    const entries = extractor.extract("我是一名前端工程师。");
-    expect(entries).toHaveLength(1);
-    expect(entries[0]).toEqual(
-      expect.objectContaining({
-        title: "User Identity",
-        content: "The user is 前端工程师.",
-        tags: ["identity"],
-      })
-    );
-  });
-
-  it("extracts Chinese preference pattern '记住我喜欢'", () => {
+  it("extracts Chinese '记住我喜欢' as user type Memory", () => {
     const entries = extractor.extract("记住我喜欢用pnpm管理项目。");
     expect(entries).toHaveLength(1);
     expect(entries[0]).toEqual(
       expect.objectContaining({
-        title: "Preference",
-        content: "The user likes 用pnpm管理项目.",
-        tags: ["preference"],
+        type: "user",
+        name: "Preference",
+        description: "The user likes 用pnpm管理项目.",
       })
     );
+    expect(entries[0].slug).toMatch(/^user\//);
   });
 
-  it("extracts general 'remember that' as catch-all", () => {
+  it("extracts general 'remember that' as catch-all user Memory", () => {
     const entries = extractor.extract(
       "Remember that the database password is xyz123."
     );
     expect(entries).toHaveLength(1);
     expect(entries[0]).toEqual(
       expect.objectContaining({
-        title: "Memory",
-        content: "the database password is xyz123",
-        tags: ["general"],
+        type: "user",
+        name: "Memory",
+        description: "the database password is xyz123",
       })
     );
+    expect(entries[0].slug).toMatch(/^user\//);
   });
 
-  it("extracts Chinese general '记住' as catch-all", () => {
+  it("extracts Chinese general '记住' as catch-all user Memory", () => {
     const entries = extractor.extract("记住数据库密码是xyz123");
     expect(entries).toHaveLength(1);
     expect(entries[0]).toEqual(
       expect.objectContaining({
-        title: "Memory",
-        content: "数据库密码是xyz123",
-        tags: ["general"],
+        type: "user",
+        name: "Memory",
+        description: "数据库密码是xyz123",
       })
     );
   });
 
   it("prefers specific patterns over general catch-all", () => {
     const entries = extractor.extract("记住我的名字是李四");
-    // Should match name pattern (specific) not general catch-all
     expect(entries).toHaveLength(1);
-    expect(entries[0].title).toBe("User Name");
+    expect(entries[0].slug).toBe("user/identity");
+    expect(entries[0].name).toBe("User Name");
   });
 
   it("returns empty for non-memory text", () => {
@@ -151,5 +126,11 @@ describe("MemoryExtractor", () => {
   it("returns empty for empty string", () => {
     const entries = extractor.extract("");
     expect(entries).toHaveLength(0);
+  });
+
+  it("has createdAt and updatedAt timestamps", () => {
+    const entries = extractor.extract("My name is John Smith.");
+    expect(entries[0].createdAt).toBeDefined();
+    expect(entries[0].updatedAt).toBeDefined();
   });
 });

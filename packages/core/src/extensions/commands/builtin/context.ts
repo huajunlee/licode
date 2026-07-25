@@ -15,7 +15,7 @@ export const contextCommand: SlashCommand = {
 
     // Show memory stats
     const store = new MemoryStore(`${context.workingDirectory}/.licode/memory`);
-    const entries = await store.list();
+    const entries = await store.listAll();
     if (entries.length > 0) {
       info.push(`Memory: ${entries.length} entries`);
     }

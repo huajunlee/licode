@@ -5,18 +5,14 @@ export class MemoryLoader {
   constructor(private store: MemoryStore) {}
 
   async loadInto(systemPrompt: SystemPrompt): Promise<void> {
-    const entries = await this.store.list();
-    if (entries.length === 0) return;
-
-    const content = entries
-      .map((entry) => `## ${entry.title}\n${entry.content}`)
-      .join("\n\n");
+    const indexContent = await this.store.loadIndex();
+    if (!indexContent || indexContent.trim().length === 0) return;
 
     systemPrompt.addLayer({
       name: "memory",
-      priority: 8,
+      priority: 5,
       always: false,
-      content: `# Memory\n\n${content}`,
+      content: indexContent.trim(),
     });
   }
 }

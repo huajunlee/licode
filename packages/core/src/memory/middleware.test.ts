@@ -18,7 +18,7 @@ describe("memoryMiddleware", () => {
     }
   });
 
-  it("extracts explicit preferences from user messages and stores them", async () => {
+  it("extracts preferences from user messages and stores as Memory files", async () => {
     dir = mkdtempSync(path.join(tmpdir(), "licode-memory-mw-"));
     const store = new MemoryStore(path.join(dir, ".licode", "memory"));
     const pipeline = new EventPipeline();
@@ -33,8 +33,31 @@ describe("memoryMiddleware", () => {
 
     await pipeline.run(events());
 
-    const entries = await store.list();
+    // New API: listAll returns Memory[]
+    const entries = await store.listAll();
     expect(entries).toHaveLength(1);
+    expect(entries[0].type).toBe("user");
     expect(entries[0].content).toContain("prefer pnpm");
+    expect(entries[0].slug).toMatch(/^user\//);
+  });
+
+  it("creates MEMORY.md index when memories are saved via middleware", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-memory-mw-"));
+    const store = new MemoryStore(path.join(dir, ".licode", "memory"));
+    const pipeline = new EventPipeline();
+    pipeline.use(memoryMiddleware(new MemoryExtractor(), store));
+
+    async function* events(): AsyncIterable<PipelineEvent> {
+      yield {
+        type: "user-message",
+        content: "My name is Alice.",
+      };
+    }
+
+    await pipeline.run(events());
+
+    const indexContent = await store.loadIndex();
+    expect(indexContent).toContain("user/identity");
+    expect(indexContent).toContain("Alice");
   });
 });

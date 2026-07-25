@@ -1,11 +1,11 @@
-import type { MemoryEntry } from "./types.js";
+import type { Memory, MemoryType } from "./types.js";
 
 export class MemoryExtractor {
-  extract(text: string): MemoryEntry[] {
+  extract(text: string): Memory[] {
     const normalized = text.trim();
     if (!normalized) return [];
 
-    const entries: MemoryEntry[] = [];
+    const now = new Date().toISOString();
 
     // Pattern: "my name is X" / "我叫X" / "我的名字是X"
     {
@@ -16,12 +16,15 @@ export class MemoryExtractor {
         normalized.match(/我的名字叫\s*(.+)/);
       if (m) {
         const name = m[1].replace(/[.。！!]\s*$/, "").trim();
-        entries.push({
-          id: `memory-${this.hash(`name:${name}`)}`,
-          title: "User Name",
+        return [{
+          slug: "user/identity",
+          type: "user" as MemoryType,
+          name: "User Name",
+          description: `The user's name is ${name}.`,
           content: `The user's name is ${name}.`,
-          tags: ["identity"],
-        });
+          createdAt: now,
+          updatedAt: now,
+        }];
       }
     }
 
@@ -34,28 +37,34 @@ export class MemoryExtractor {
         normalized.match(/称呼我\s*(.+)/);
       if (m) {
         const name = m[1].replace(/[.。！!]\s*$/, "").trim();
-        entries.push({
-          id: `memory-${this.hash(`callme:${name}`)}`,
-          title: "Preferred Name",
+        return [{
+          slug: "user/identity",
+          type: "user" as MemoryType,
+          name: "Preferred Name",
+          description: `The user prefers to be called ${name}.`,
           content: `The user prefers to be called ${name}.`,
-          tags: ["identity"],
-        });
+          createdAt: now,
+          updatedAt: now,
+        }];
       }
     }
 
-    // Pattern: "I am a X" / "I'm a X" / "我是X" / "我是一名X"
+    // Pattern: "I am a X" / "I'm a X" / "我是X"
     {
       const m =
         normalized.match(/\bi(?:'m| am)\s+(a\s+.+)/i) ??
         normalized.match(/我是(?:一名|一个)?\s*(.+)/);
       if (m) {
         const identity = m[1].replace(/[.。！!]\s*$/, "").trim();
-        entries.push({
-          id: `memory-${this.hash(`iam:${identity}`)}`,
-          title: "User Identity",
+        return [{
+          slug: "user/identity",
+          type: "user" as MemoryType,
+          name: "User Identity",
+          description: `The user is ${identity}.`,
           content: `The user is ${identity}.`,
-          tags: ["identity"],
-        });
+          createdAt: now,
+          updatedAt: now,
+        }];
       }
     }
 
@@ -71,33 +80,41 @@ export class MemoryExtractor {
       if (m) {
         const verb = this.mapChineseVerb(m[1]);
         const detail = m[2].replace(/[.。！!]\s*$/, "").trim();
-        const content = `The user ${verb} ${detail}.`;
-        entries.push({
-          id: `memory-${this.hash(content)}`,
-          title: "Preference",
-          content,
-          tags: ["preference"],
-        });
+        const description = `The user ${verb} ${detail}.`;
+        const slug = "user/" + this.hash(description);
+        return [{
+          slug,
+          type: "user" as MemoryType,
+          name: "Preference",
+          description,
+          content: description,
+          createdAt: now,
+          updatedAt: now,
+        }];
       }
     }
 
     // Pattern: General "remember that X" / "记住X" (catch-all)
-    if (entries.length === 0) {
+    {
       const m =
         normalized.match(/\b(?:remember that|note that)\s+(.+)/i) ??
         normalized.match(/(?:记住|请注意)\s*(.+)/);
       if (m) {
         const content = m[1].replace(/[.。！!]\s*$/, "").trim();
-        entries.push({
-          id: `memory-${this.hash(content)}`,
-          title: "Memory",
+        const slug = "user/" + this.hash(content);
+        return [{
+          slug,
+          type: "user" as MemoryType,
+          name: "Memory",
+          description: content,
           content,
-          tags: ["general"],
-        });
+          createdAt: now,
+          updatedAt: now,
+        }];
       }
     }
 
-    return entries;
+    return [];
   }
 
   private mapChineseVerb(verb: string): string {
