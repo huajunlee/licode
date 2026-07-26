@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useReducer } from "react";
 import { Box, Text, useInput } from "ink";
+import { ConversationManager } from "@licode/core";
 import { ChatView } from "./components/chat-view.js";
 import { StreamRenderer } from "./components/stream-renderer.js";
 import { WaitingIndicator } from "./components/waiting-indicator.js";
@@ -37,8 +38,16 @@ function App({ apiKey, model, sessionId: initialSessionId, baseUrl, existingSess
   );
   const [activeSessionId, setActiveSessionId] = useState<string | undefined>(initialSessionId);
   const [welcomeError, setWelcomeError] = useState<string | null>(null);
+  const [sessions, setSessions] = useState(existingSessions ?? []);
 
-  const sessions = existingSessions ?? [];
+  const refreshSessions = useCallback(async () => {
+    try {
+      const updated = await ConversationManager.listSessions();
+      setSessions(updated);
+    } catch {
+      // silently ignore refresh errors
+    }
+  }, []);
   const {
     cursorIndex,
     moveDown,
@@ -65,7 +74,8 @@ function App({ apiKey, model, sessionId: initialSessionId, baseUrl, existingSess
   const goBack = useCallback(() => {
     setActiveSessionId(undefined);
     dispatch("go-back");
-  }, []);
+    refreshSessions();
+  }, [refreshSessions]);
 
   const handleWelcomeSubmit = useCallback(
     (input: string) => {
@@ -159,7 +169,7 @@ function App({ apiKey, model, sessionId: initialSessionId, baseUrl, existingSess
       model={model}
       sessionId={activeSessionId}
       baseUrl={baseUrl}
-      existingSessions={existingSessions}
+      existingSessions={sessions}
       onGoBack={goBack}
     />
   );
