@@ -415,4 +415,73 @@ describe("HookManager function hooks", () => {
     expect(hooks[0].fn).toBeUndefined();
     expect(hooks[0].command).toBeUndefined();
   });
+
+  it("BUG repro: hook listening for agent-loop-complete does NOT fire when pipeline passes user-message event", async () => {
+    // This test documents the bug found in hooks.ts (CLI):
+    // The hook:after:agentLoop middleware passes the original pipeline event
+    // (which is "user-message") to onEvent(), but memory extraction hooks
+    // listen for "agent-loop-complete".  The fix: construct a synthetic
+    // agent-loop-complete event before calling onEvent().
+    const manager = new HookManager();
+    let hookCalled = false;
+
+    manager.register({
+      name: "memory-extract",
+      events: ["agent-loop-complete"],
+      fn: async () => { hookCalled = true; },
+      resolvedPosition: "after:agentLoop",
+    });
+
+    const pipeline = new EventPipeline();
+
+    // Simulate the BUGGY pattern from CLI hooks.ts:
+    // Pass the original event (user-message) directly to onEvent()
+    pipeline.use("hook:after:agentLoop", async (event, next) => {
+      await manager.onEvent(event, manager.getHooksAt("after:agentLoop"));
+      await next();
+    });
+
+    async function* events(): AsyncIterable<PipelineEvent> {
+      yield { type: "user-message", content: "我叫小明" };
+    }
+
+    await pipeline.run(events());
+
+    // BUG: hookCalled is false because onEvent received "user-message",
+    // but the hook only matches "agent-loop-complete"
+    expect(hookCalled).toBe(false);
+  });
+
+  it("FIX: construct agent-loop-complete event so after:agentLoop hooks fire correctly", async () => {
+    const manager = new HookManager();
+    let hookCalled = false;
+
+    manager.register({
+      name: "memory-extract",
+      events: ["agent-loop-complete"],
+      fn: async () => { hookCalled = true; },
+      resolvedPosition: "after:agentLoop",
+    });
+
+    const pipeline = new EventPipeline();
+
+    // CORRECT pattern: construct a synthetic agent-loop-complete event
+    pipeline.use("hook:after:agentLoop", async (_event, next) => {
+      await next();
+      const completeEvent: PipelineEvent = {
+        type: "agent-loop-complete",
+        message: "",
+        usage: { input: 0, output: 0 },
+      };
+      await manager.onEvent(completeEvent, manager.getHooksAt("after:agentLoop"));
+    });
+
+    async function* events(): AsyncIterable<PipelineEvent> {
+      yield { type: "user-message", content: "我叫小明" };
+    }
+
+    await pipeline.run(events());
+
+    expect(hookCalled).toBe(true);
+  });
 });

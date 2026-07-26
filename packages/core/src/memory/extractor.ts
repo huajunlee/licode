@@ -119,8 +119,12 @@ export class MemoryExtractor {
         };
         await store.save(memory);
       }
-    } catch {
-      // Extraction is best-effort — never propagate errors
+    } catch (err) {
+      // Extraction is best-effort — never propagate errors, but log for debugging
+      console.error(
+        "[MemoryExtractor] Extraction failed:",
+        err instanceof Error ? err.message : String(err)
+      );
     }
   }
 

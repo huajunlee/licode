@@ -366,14 +366,23 @@ export function useConversation(
               )
               // after:agentLoop fires shell hooks + in-process function hooks (e.g. memory extraction)
               .use("hook:after:agentLoop", async (event, next) => {
+                await next();
                 const extensions = extensionsRef.current;
                 if (extensions) {
+                  // Construct a synthetic agent-loop-complete event so that
+                  // hooks listening for "agent-loop-complete" (e.g. memory
+                  // extraction) match correctly.  The original pipeline event
+                  // is still "user-message" at this point.
+                  const completeEvent: PipelineEvent = {
+                    type: "agent-loop-complete",
+                    message: "",
+                    usage: { input: 0, output: 0 },
+                  };
                   await extensions.hooks.onEvent(
-                    event,
+                    completeEvent,
                     extensions.hooks.getHooksAt("after:agentLoop")
                   );
                 }
-                await next();
               })
               .use(async (event: PipelineEvent, next) => {
                 if (event.type === "error") {
@@ -422,14 +431,23 @@ export function useConversation(
           )
           // after:agentLoop fires shell hooks + in-process function hooks (e.g. memory extraction)
           .use("hook:after:agentLoop", async (event, next) => {
+            await next();
             const extensions = extensionsRef.current;
             if (extensions) {
+              // Construct a synthetic agent-loop-complete event so that
+              // hooks listening for "agent-loop-complete" (e.g. memory
+              // extraction) match correctly.  The original pipeline event
+              // is still "user-message" at this point.
+              const completeEvent: PipelineEvent = {
+                type: "agent-loop-complete",
+                message: "",
+                usage: { input: 0, output: 0 },
+              };
               await extensions.hooks.onEvent(
-                event,
+                completeEvent,
                 extensions.hooks.getHooksAt("after:agentLoop")
               );
             }
-            await next();
           })
           .use(async (event: PipelineEvent, next) => {
             if (event.type === "error") {
