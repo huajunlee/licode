@@ -60,7 +60,7 @@ export class MemoryExtractor {
    * Returns `false` → skip extraction entirely (zero token cost).
    * Returns `true` → proceed to {@link extract} (LLM makes the final call).
    */
-  shouldExtract(messages: Message[]): boolean {
+  shouldExtract(messages: readonly Message[]): boolean {
     if (!messages || messages.length === 0) return false;
 
     // Check only user messages for trigger keywords
@@ -91,7 +91,7 @@ export class MemoryExtractor {
    * Errors are silently caught — extraction is best-effort and never
    * blocks the user.
    */
-  async extract(messages: Message[], store: MemoryStore): Promise<void> {
+  async extract(messages: readonly Message[], store: MemoryStore): Promise<void> {
     try {
       const indexContent = await store.loadIndex();
       const conversationText = this.formatMessages(messages);
@@ -157,7 +157,7 @@ export class MemoryExtractor {
   /**
    * Format conversation messages into a readable text block.
    */
-  private formatMessages(messages: Message[]): string {
+  private formatMessages(messages: readonly Message[]): string {
     return messages
       .filter((m) => m.role !== "system")
       .map((m) => {
