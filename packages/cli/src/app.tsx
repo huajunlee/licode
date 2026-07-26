@@ -56,7 +56,13 @@ function App({ apiKey, model, sessionId: initialSessionId, baseUrl, existingSess
     []
   );
 
+  const newSession = useCallback(() => {
+    setActiveSessionId(undefined);
+    dispatch("enter-chat");
+  }, []);
+
   const goBack = useCallback(() => {
+    setActiveSessionId(undefined);
     dispatch("go-back");
   }, []);
 
@@ -80,15 +86,15 @@ function App({ apiKey, model, sessionId: initialSessionId, baseUrl, existingSess
       } else if (trimmed === "") {
         // Empty Enter: create new if on new-session, else enter selected session
         if (selectedId === null) {
-          dispatch("enter-chat");
+          newSession();
         } else {
           enterSession(selectedId);
         }
       } else {
-        dispatch("enter-chat");
+        newSession();
       }
     },
-    [sessions, selectedId, enterSession]
+    [sessions, selectedId, enterSession, newSession]
   );
 
   const isWelcome = state.view === "welcome";
@@ -99,7 +105,7 @@ function App({ apiKey, model, sessionId: initialSessionId, baseUrl, existingSess
       if (!isWelcome) return;
       if (key.upArrow) moveUp();
       else if (key.downArrow) moveDown();
-      else if (key.ctrl && (input === "n" || input === "\x0e")) dispatch("enter-chat");
+      else if (key.ctrl && (input === "n" || input === "\x0e")) newSession();
     },
     { isActive: isWelcome }
   );
