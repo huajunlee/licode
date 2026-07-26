@@ -131,14 +131,20 @@ export class MemoryExtractor {
       const detail = err instanceof Error ? (err as Error).stack ?? message : message;
       console.error("[MemoryExtractor] Extraction failed:", message);
 
-      // Also write to .licode/memory/extraction-errors.log so errors are
+      // Also write to .licode/logs/extraction-errors.log so errors are
       // visible even when the TUI captures console output.
+      // (Not inside .licode/memory/ — wouldn't affect memory reads,
+      // but it's cleaner to keep logs separate.)
       try {
         // Access the store's private dir field via type coercion —
         // TypeScript private is compile-time only.
         const storeDir: string = (store as unknown as Record<string, unknown>).dir as string;
         if (storeDir) {
-          const logPath = path.join(storeDir, "extraction-errors.log");
+          // storeDir is e.g. /project/.licode/memory, derive logs dir from it
+          const licodeDir = path.dirname(storeDir); // → /project/.licode
+          const logDir = path.join(licodeDir, "logs");
+          fs.mkdirSync(logDir, { recursive: true });
+          const logPath = path.join(logDir, "extraction-errors.log");
           const timestamp = new Date().toISOString();
           const entry = `[${timestamp}] ${detail}\n`;
           fs.appendFileSync(logPath, entry, "utf-8");
