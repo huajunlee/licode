@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Text } from "ink";
-
-const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+import { ICONS } from "../theme.js";
 
 export function formatElapsed(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -28,7 +27,7 @@ export function WaitingIndicator({ isActive }: WaitingIndicatorProps) {
     }
     startRef.current = Date.now();
     const timer = setInterval(() => {
-      setFrame((prev) => (prev + 1) % SPINNER.length);
+      setFrame((prev) => (prev + 1) % ICONS.spinnerFrames.length);
       setElapsed(Math.floor((Date.now() - startRef.current) / 1000));
     }, 100);
     return () => clearInterval(timer);
@@ -38,7 +37,7 @@ export function WaitingIndicator({ isActive }: WaitingIndicatorProps) {
 
   return (
     <Text dimColor>
-      {SPINNER[frame]} 等待中 · {formatElapsed(elapsed)}
+      {ICONS.spinnerFrames[frame]} 等待中 · {formatElapsed(elapsed)}
     </Text>
   );
 }

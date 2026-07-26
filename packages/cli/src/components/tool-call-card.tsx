@@ -1,5 +1,6 @@
 import React from "react";
 import { Box, Text } from "ink";
+import { COLORS, BORDERS, ICONS } from "../theme.js";
 
 export type ToolCallStatus = "pending" | "running" | "done" | "error";
 
@@ -23,17 +24,17 @@ function truncate(text: string, maxLen: number): string {
 }
 
 const STATUS_ICONS: Record<ToolCallStatus, string> = {
-  pending: "⏳",
-  running: "⚙",
-  done: "✓",
-  error: "✗",
+  pending: ICONS.pending,
+  running: ICONS.running,
+  done: ICONS.success,
+  error: ICONS.error,
 };
 
 const STATUS_COLORS: Record<ToolCallStatus, string | undefined> = {
-  pending: "yellow",
-  running: "cyan",
-  done: "green",
-  error: "red",
+  pending: COLORS.toolPending,
+  running: COLORS.toolRunning,
+  done: COLORS.toolDone,
+  error: COLORS.toolError,
 };
 
 export function ToolCallCard({
@@ -44,12 +45,12 @@ export function ToolCallCard({
 }: ToolCallCardProps) {
   const icon = STATUS_ICONS[status];
   const color = STATUS_COLORS[status];
-  const borderColor = status === "error" ? "red" : "blue";
+  const borderColor = status === "error" ? COLORS.toolCardBorderError : COLORS.toolCardBorder;
 
   return (
     <Box
       flexDirection="column"
-      borderStyle="round"
+      borderStyle={BORDERS.card}
       borderColor={borderColor}
       paddingX={1}
       marginBottom={1}
@@ -67,7 +68,7 @@ export function ToolCallCard({
       )}
       {status === "error" && result && (
         <Box marginTop={1}>
-          <Text color="red">{truncate(result, 200)}</Text>
+          <Text color={COLORS.error}>{truncate(result, 200)}</Text>
         </Box>
       )}
     </Box>

@@ -1,6 +1,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import type { Message } from "@licode/core";
+import { COLORS } from "../theme.js";
 
 interface ChatViewProps {
   messages: Message[];
@@ -40,7 +41,7 @@ export function ChatView({ messages }: ChatViewProps) {
         .filter((m) => m.role !== "system")
         .map((msg, i) => (
           <Box key={i} flexDirection="column" marginY={1}>
-            <Text color={msg.role === "user" ? "green" : undefined}>
+            <Text color={msg.role === "user" ? COLORS.primary : undefined}>
               {msg.role === "user" ? "> " : ""}
               {renderContent(msg)}
             </Text>

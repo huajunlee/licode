@@ -1,5 +1,6 @@
 import React from "react";
 import { Box, Text } from "ink";
+import { COLORS } from "../theme.js";
 
 // ---- Purpose inference (pure function, testable) ----
 
@@ -51,11 +52,11 @@ export function ThinkingAccordion({ blocks, focusedIndex }: ThinkingAccordionPro
         return (
           <Box key={block.id} flexDirection="column">
             <Box>
-              <Text color={isFocused ? "cyan" : undefined} dimColor={!isFocused}>
+              <Text color={isFocused ? COLORS.info : undefined} dimColor={!isFocused}>
                 {isFocused ? "▸ " : "  "}
                 {block.isStreaming ? "🤔 正在推理中..." : block.purpose}
                 {block.isStreaming && (
-                  <Text color="yellow"> ⏳</Text>
+                  <Text color={COLORS.warning}> ⏳</Text>
                 )}
               </Text>
             </Box>

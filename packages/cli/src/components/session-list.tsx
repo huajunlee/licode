@@ -2,6 +2,7 @@ import React from "react";
 import { Box, Text } from "ink";
 import type { VisibleItem } from "./use-session-selector.js";
 import type { SessionInfo } from "./use-session-selector.js";
+import { COLORS } from "../theme.js";
 
 interface SessionListProps {
   visibleItems: VisibleItem<SessionInfo>[];
@@ -31,7 +32,7 @@ export function SessionList({
       {showCreateNew && (
         <>
           <Box marginLeft={2}>
-            <Text color={isOnNewSession ? "green" : undefined}>
+            <Text color={isOnNewSession ? COLORS.primary : undefined}>
               {isOnNewSession ? "> " : "  "}
               🆕 新建会话
             </Text>
@@ -49,7 +50,7 @@ export function SessionList({
       )}
       {visibleItems.map(({ item: s, isCursor }) => (
         <Box key={s.id} marginLeft={2}>
-          <Text color={isCursor ? "green" : undefined}>
+          <Text color={isCursor ? COLORS.primary : undefined}>
             {isCursor ? "> " : "  "}
             {s.id} · {s.model} · {s.messageCount} 条消息 ·{" "}
             {new Date(s.updatedAt).toLocaleDateString()}

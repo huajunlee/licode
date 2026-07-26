@@ -2,6 +2,7 @@ import React, { useState, useRef, useMemo } from "react";
 import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
 import { navigateHistory, pushHistory } from "./history-navigator.js";
+import { COLORS, BORDERS } from "../theme.js";
 
 interface InputBoxProps {
   onSubmit: (input: string) => Promise<void>;
@@ -102,7 +103,7 @@ export function InputBox({
         <Box
           flexDirection="column"
           marginBottom={1}
-          borderStyle="single"
+          borderStyle={BORDERS.popup}
           borderColor="dim"
           paddingX={1}
         >
@@ -110,7 +111,7 @@ export function InputBox({
             const isSelected = i === selectedIndex;
             return (
               <Box key={cmd.name}>
-                <Text color={isSelected ? "cyan" : undefined}>
+                <Text color={isSelected ? COLORS.info : undefined}>
                   {isSelected ? "❯ " : "  "}
                   <Text bold={isSelected}>{cmd.name}</Text>
                   {"  "}
@@ -126,7 +127,11 @@ export function InputBox({
         </Box>
       )}
       <Box>
-        <Text color={disabled ? "dim" : "green"}>{"> "}</Text>
+        {disabled ? (
+          <Text dimColor>{"> "}</Text>
+        ) : (
+          <Text color={COLORS.primary}>{"> "}</Text>
+        )}
         <TextInput
           value={value}
           onChange={(v) => {
@@ -145,7 +150,7 @@ export function InputBox({
           }}
           onSubmit={handleSubmit}
         />
-        {loading && <Text color="yellow"> ⏳</Text>}
+        {loading && <Text color={COLORS.warning}> ⏳</Text>}
       </Box>
       <Box>
         <Text dimColor>

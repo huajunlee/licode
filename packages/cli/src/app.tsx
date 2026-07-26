@@ -12,6 +12,7 @@ import { ToolCallCards } from "./components/tool-call-card.js";
 import { useConversation } from "./hooks.js";
 import { useSessionSelector } from "./components/use-session-selector.js";
 import { createAppViewState, appViewReducer } from "./app-view.js";
+import { COLORS } from "./theme.js";
 
 export interface AppProps {
   apiKey: string;
@@ -144,7 +145,7 @@ function App({ apiKey, model, sessionId: initialSessionId, baseUrl, existingSess
         </Box>
         {welcomeError && (
           <Box marginTop={1}>
-            <Text color="red">{welcomeError}</Text>
+            <Text color={COLORS.error}>{welcomeError}</Text>
           </Box>
         )}
         <WelcomeInput onSubmit={handleWelcomeSubmit} />
@@ -236,12 +237,12 @@ function ChatApp({
       <StreamRenderer text={streaming} />
       {error && (
         <Box marginY={1}>
-          <Text color="red">Error: {error}</Text>
+          <Text color={COLORS.error}>Error: {error}</Text>
         </Box>
       )}
       {commandMessage && (
         <Box marginY={1}>
-          <Text color="yellow">{commandMessage}</Text>
+          <Text color={COLORS.warning}>{commandMessage}</Text>
         </Box>
       )}
       <InputBox onSubmit={handleSubmit} loading={isLoading} disabled={focusedIndex >= 0} slashCommands={slashCommands} />

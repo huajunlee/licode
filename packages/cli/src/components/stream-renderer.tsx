@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Box, Text } from "ink";
+import { COLORS } from "../theme.js";
 
 interface StreamRendererProps {
   text: string;
@@ -21,7 +22,7 @@ export function StreamRenderer({ text }: StreamRendererProps) {
     <Box marginBottom={1}>
       <Text>
         {text}
-        {showCursor && <Text color="blue">█</Text>}
+        {showCursor && <Text color={COLORS.accent}>█</Text>}
       </Text>
     </Box>
   );
