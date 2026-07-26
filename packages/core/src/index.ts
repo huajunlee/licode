@@ -79,6 +79,7 @@ export { memoryCommand, memoryListCommand, memoryAddCommand, memoryDeleteCommand
 
 // Phase 3: Hook
 export { HookManager, hookMiddleware, resolvePosition } from "./extensions/hooks/manager.js";
+export { emitAfterAgentLoop } from "./extensions/hooks/emit-event.js";
 export type { HookConfig, HookPosition, RegisteredHook, HookFunction } from "./extensions/hooks/types.js";
 export { initializeExtensions, registerExtensionMiddleware } from "./extensions/startup.js";
 export type {

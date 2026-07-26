@@ -20,6 +20,7 @@ import {
   MemoryLoader,
   MemoryExtractor,
   createMemoryExtractionHook,
+  emitAfterAgentLoop,
 } from "@licode/core";
 import type {
   Message,
@@ -365,23 +366,11 @@ export function useConversation(
                 })
               )
               // after:agentLoop fires shell hooks + in-process function hooks (e.g. memory extraction)
-              .use("hook:after:agentLoop", async (event, next) => {
+              .use("hook:after:agentLoop", async (_event, next) => {
                 await next();
                 const extensions = extensionsRef.current;
                 if (extensions) {
-                  // Construct a synthetic agent-loop-complete event so that
-                  // hooks listening for "agent-loop-complete" (e.g. memory
-                  // extraction) match correctly.  The original pipeline event
-                  // is still "user-message" at this point.
-                  const completeEvent: PipelineEvent = {
-                    type: "agent-loop-complete",
-                    message: "",
-                    usage: { input: 0, output: 0 },
-                  };
-                  await extensions.hooks.onEvent(
-                    completeEvent,
-                    extensions.hooks.getHooksAt("after:agentLoop")
-                  );
+                  await emitAfterAgentLoop(extensions.hooks);
                 }
               })
               .use(async (event: PipelineEvent, next) => {
@@ -430,23 +419,11 @@ export function useConversation(
             })
           )
           // after:agentLoop fires shell hooks + in-process function hooks (e.g. memory extraction)
-          .use("hook:after:agentLoop", async (event, next) => {
+          .use("hook:after:agentLoop", async (_event, next) => {
             await next();
             const extensions = extensionsRef.current;
             if (extensions) {
-              // Construct a synthetic agent-loop-complete event so that
-              // hooks listening for "agent-loop-complete" (e.g. memory
-              // extraction) match correctly.  The original pipeline event
-              // is still "user-message" at this point.
-              const completeEvent: PipelineEvent = {
-                type: "agent-loop-complete",
-                message: "",
-                usage: { input: 0, output: 0 },
-              };
-              await extensions.hooks.onEvent(
-                completeEvent,
-                extensions.hooks.getHooksAt("after:agentLoop")
-              );
+              await emitAfterAgentLoop(extensions.hooks);
             }
           })
           .use(async (event: PipelineEvent, next) => {
