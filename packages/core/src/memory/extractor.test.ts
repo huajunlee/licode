@@ -133,4 +133,53 @@ describe("MemoryExtractor (new Memory type)", () => {
     expect(entries[0].createdAt).toBeDefined();
     expect(entries[0].updatedAt).toBeDefined();
   });
+
+  // ── question / invalid-input rejection ──────────────────────────
+
+  it("rejects '我叫什么名字？' as a question, not a name statement", () => {
+    const entries = extractor.extract("我叫什么名字？");
+    expect(entries).toHaveLength(0);
+  });
+
+  it("rejects '我的名字是什么' as a question", () => {
+    const entries = extractor.extract("我的名字是什么");
+    expect(entries).toHaveLength(0);
+  });
+
+  it("rejects '我是谁' as a question", () => {
+    const entries = extractor.extract("我是谁");
+    expect(entries).toHaveLength(0);
+  });
+
+  it("rejects '你是谁' as a question", () => {
+    const entries = extractor.extract("你是谁？");
+    expect(entries).toHaveLength(0);
+  });
+
+  it("rejects '我怎么称呼你' as a question", () => {
+    const entries = extractor.extract("我怎么称呼你？");
+    expect(entries).toHaveLength(0);
+  });
+
+  it("rejects 'what is my name' as a question", () => {
+    const entries = extractor.extract("what is my name?");
+    expect(entries).toHaveLength(0);
+  });
+
+  it("rejects 'who am I' as a question", () => {
+    const entries = extractor.extract("who am I");
+    expect(entries).toHaveLength(0);
+  });
+
+  it("still extracts real names like '我叫小明'", () => {
+    const entries = extractor.extract("我叫小明");
+    expect(entries).toHaveLength(1);
+    expect(entries[0].slug).toBe("user/identity");
+  });
+
+  it("still extracts real preferences like '记住我喜欢吃辣'", () => {
+    const entries = extractor.extract("记住我喜欢吃辣");
+    expect(entries).toHaveLength(1);
+    expect(entries[0].type).toBe("user");
+  });
 });

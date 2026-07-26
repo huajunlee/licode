@@ -6,8 +6,8 @@ import type { ToolRegistry } from "../tools/registry.js";
 import { CommandRouter } from "./commands/router.js";
 import { clearCommand } from "./commands/builtin/clear.js";
 import { contextCommand } from "./commands/builtin/context.js";
-import { helpCommand } from "./commands/builtin/help.js";
-import { memoryCommand } from "./commands/builtin/memory.js";
+import { helpCommand, helpRecipesCommand, helpShortcutsCommand, helpToolsCommand } from "./commands/builtin/help.js";
+import { memoryCommand, memoryListCommand, memoryAddCommand, memoryDeleteCommand } from "./commands/builtin/memory.js";
 import { HookManager, hookMiddleware } from "./hooks/manager.js";
 import type { HookConfig, HookPosition } from "./hooks/types.js";
 import { MCPClientManager } from "./mcp/client.js";
@@ -39,9 +39,15 @@ export interface InitializedExtensions {
 
 const BUILTIN_COMMANDS = [
   helpCommand,
+  helpRecipesCommand,
+  helpShortcutsCommand,
+  helpToolsCommand,
   clearCommand,
   contextCommand,
   memoryCommand,
+  memoryListCommand,
+  memoryAddCommand,
+  memoryDeleteCommand,
   subagentCommand(new SubAgentSettings()),
 ];
 

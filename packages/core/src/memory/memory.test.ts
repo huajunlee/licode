@@ -149,7 +149,8 @@ describe("MemoryStore (new API)", () => {
 
     const indexContent = require("node:fs").readFileSync(indexPath, "utf-8");
     expect(indexContent).toContain("# User Memory");
-    expect(indexContent).toContain("[测试偏好](user/test-preference.md)");
+    expect(indexContent).toContain("[测试偏好](");
+    expect(indexContent).toContain("/user/test-preference.md)");
     expect(indexContent).toContain("用户偏好测试记忆");
   });
 
@@ -203,7 +204,8 @@ describe("MemoryLoader (new behaviour)", () => {
     expect(memoryLayer).toBeDefined();
     expect(memoryLayer?.priority).toBe(5);
     // Should contain index line (description), not the full memory body
-    expect(memoryLayer?.content).toContain("[身份信息](user/identity.md)");
+    expect(memoryLayer?.content).toContain("[身份信息](");
+    expect(memoryLayer?.content).toContain("/user/identity.md)");
     expect(memoryLayer?.content).toContain("用户名和角色");
     // Should NOT contain the full content body
     expect(memoryLayer?.content).not.toContain("full-stack developer");

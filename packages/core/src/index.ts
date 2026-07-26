@@ -72,10 +72,10 @@ export { parseYamlFrontmatter, skillParamsToZod } from "./extensions/skills/pars
 // Phase 3: Command
 export { CommandRouter } from "./extensions/commands/router.js";
 export type { SlashCommand, CommandContext, CommandResult } from "./extensions/commands/registry.js";
-export { helpCommand } from "./extensions/commands/builtin/help.js";
+export { helpCommand, helpRecipesCommand, helpShortcutsCommand, helpToolsCommand } from "./extensions/commands/builtin/help.js";
 export { clearCommand } from "./extensions/commands/builtin/clear.js";
 export { contextCommand } from "./extensions/commands/builtin/context.js";
-export { memoryCommand } from "./extensions/commands/builtin/memory.js";
+export { memoryCommand, memoryListCommand, memoryAddCommand, memoryDeleteCommand } from "./extensions/commands/builtin/memory.js";
 
 // Phase 3: Hook
 export { HookManager, hookMiddleware, resolvePosition } from "./extensions/hooks/manager.js";

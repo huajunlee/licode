@@ -6,16 +6,16 @@ const HELP_MAIN = [
   "📖 用户指南: docs/guide/user-guide.md",
   "",
   "Slash 命令:",
-  "  /help            — 显示此帮助",
-  "  /help recipes    — 列出场景 Recipes",
-  "  /help shortcuts  — 快捷键速查",
-  "  /help tools      — 内置工具速查",
-  "  /clear           — 清空对话历史",
-  "  /context         — 显示 token 用量和会话信息",
-  "  /memory list              — 列出所有记忆",
-  "  /memory add <内容>         — 手动添加记忆",
-  "  /memory delete <slug>      — 删除指定记忆",
-  "  /subagent        — 开关子 Agent 功能",
+  "  /help               — 显示此帮助",
+  "  /help-recipes       — 列出场景 Recipes",
+  "  /help-shortcuts     — 快捷键速查",
+  "  /help-tools         — 内置工具速查",
+  "  /clear              — 清空对话历史",
+  "  /context            — 显示 token 用量和会话信息",
+  "  /memory-list        — 列出所有记忆",
+  "  /memory-add <内容>   — 手动添加记忆",
+  "  /memory-delete <slug> — 删除指定记忆",
+  "  /subagent           — 开关子 Agent 功能",
   "",
   "CLI 启动参数:",
   "  licode --session <id>  恢复会话",
@@ -23,7 +23,7 @@ const HELP_MAIN = [
   "  licode --base-url <url> LLM API 地址",
   "  licode spec init|list|status|validate",
   "",
-  '键入 /help recipes 查看场景示例',
+  '键入 /help-recipes 查看场景示例',
 ].join("\n");
 
 const HELP_RECIPES = [
@@ -72,6 +72,8 @@ const HELP_TOOLS = [
   "Skill 工具:  skill__{toolName}",
 ].join("\n");
 
+// ── /help ── (backward compat: supports sub-commands via args) ──────
+
 export const helpCommand: SlashCommand = {
   name: "help",
   description: "List all available commands and guides",
@@ -87,5 +89,35 @@ export const helpCommand: SlashCommand = {
       return { type: "action", message: HELP_TOOLS };
     }
     return { type: "action", message: HELP_MAIN };
+  },
+};
+
+// ── /help-recipes ──────────────────────────────────────────────────
+
+export const helpRecipesCommand: SlashCommand = {
+  name: "help-recipes",
+  description: "列出场景 Recipes",
+  async execute() {
+    return { type: "action", message: HELP_RECIPES };
+  },
+};
+
+// ── /help-shortcuts ────────────────────────────────────────────────
+
+export const helpShortcutsCommand: SlashCommand = {
+  name: "help-shortcuts",
+  description: "快捷键速查",
+  async execute() {
+    return { type: "action", message: HELP_SHORTCUTS };
+  },
+};
+
+// ── /help-tools ────────────────────────────────────────────────────
+
+export const helpToolsCommand: SlashCommand = {
+  name: "help-tools",
+  description: "内置工具速查",
+  async execute() {
+    return { type: "action", message: HELP_TOOLS };
   },
 };

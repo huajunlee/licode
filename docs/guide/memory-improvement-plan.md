@@ -139,9 +139,9 @@ systemPrompt.addLayer({
 
 | 命令 | 说明 |
 |------|------|
-| `/memory list` | 按类型分组显示所有记忆 |
-| `/memory add <内容>` | 手动添加记忆 |
-| `/memory delete <slug>` | 删除指定记忆 |
+| `/memory-list` | 按类型分组显示所有记忆 |
+| `/memory-add <内容>` | 手动添加记忆 |
+| `/memory-delete <slug>` | 删除指定记忆 |
 
 ### 未改动部分
 
@@ -157,8 +157,8 @@ systemPrompt.addLayer({
 - [x] 启动后 `.licode/memory/` 目录结构正确
 - [x] 正则触发 "记住我..." → 新结构文件生成 + MEMORY.md 更新
 - [x] 同 slug 追加不产生新文件
-- [x] `/memory list` 按类型分组显示
-- [x] `/memory delete <slug>` 正确删除并更新索引
+- [x] `/memory-list` 按类型分组显示
+- [x] `/memory-delete <slug>` 正确删除并更新索引
 - [x] System Prompt 注入 MEMORY.md 索引（非全量正文）
 
 ### 相关文件

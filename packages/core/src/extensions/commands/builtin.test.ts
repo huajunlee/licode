@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { helpCommand } from "./builtin/help.js";
+import { helpCommand, helpRecipesCommand, helpShortcutsCommand, helpToolsCommand } from "./builtin/help.js";
 import { clearCommand } from "./builtin/clear.js";
 import { contextCommand } from "./builtin/context.js";
-import { memoryCommand } from "./builtin/memory.js";
+import { memoryCommand, memoryListCommand, memoryAddCommand, memoryDeleteCommand } from "./builtin/memory.js";
 import type { CommandContext } from "./registry.js";
 
 function mockContext(overrides?: Partial<CommandContext>): CommandContext {
@@ -37,7 +37,40 @@ describe("help command", () => {
     expect((result as { message: string }).message).toContain("/help");
     expect((result as { message: string }).message).toContain("/clear");
     expect((result as { message: string }).message).toContain("/context");
-    expect((result as { message: string }).message).toContain("/memory");
+    expect((result as { message: string }).message).toContain("/memory-list");
+    expect((result as { message: string }).message).toContain("/memory-add");
+    expect((result as { message: string }).message).toContain("/memory-delete");
+  });
+
+  it("shows recipes with sub-command arg", async () => {
+    const result = await helpCommand.execute(["recipes"], mockContext());
+    expect(result.type).toBe("action");
+    expect((result as { message: string }).message).toContain("场景 Recipes");
+  });
+});
+
+describe("help-recipes command", () => {
+  it("returns recipes list", async () => {
+    const result = await helpRecipesCommand.execute([], mockContext());
+    expect(result.type).toBe("action");
+    expect((result as { message: string }).message).toContain("场景 Recipes");
+    expect((result as { message: string }).message).toContain("code-review");
+  });
+});
+
+describe("help-shortcuts command", () => {
+  it("returns shortcuts list", async () => {
+    const result = await helpShortcutsCommand.execute([], mockContext());
+    expect(result.type).toBe("action");
+    expect((result as { message: string }).message).toContain("快捷键速查");
+  });
+});
+
+describe("help-tools command", () => {
+  it("returns tools list", async () => {
+    const result = await helpToolsCommand.execute([], mockContext());
+    expect(result.type).toBe("action");
+    expect((result as { message: string }).message).toContain("内置工具速查");
   });
 });
 
@@ -67,5 +100,34 @@ describe("memory command", () => {
     const result = await memoryCommand.execute([], mockContext());
     expect(result.type).toBe("action");
     expect((result as { message: string }).message).toContain("没有存储的记忆");
+  });
+
+  it("returns error for unknown sub-command", async () => {
+    const result = await memoryCommand.execute(["unknown"], mockContext());
+    expect(result.type).toBe("error");
+  });
+});
+
+describe("memory-list command", () => {
+  it("lists memories (empty)", async () => {
+    const result = await memoryListCommand.execute([], mockContext());
+    expect(result.type).toBe("action");
+    expect((result as { message: string }).message).toContain("没有存储的记忆");
+  });
+});
+
+describe("memory-add command", () => {
+  it("errors when no content provided", async () => {
+    const result = await memoryAddCommand.execute([], mockContext());
+    expect(result.type).toBe("error");
+    expect((result as { message: string }).message).toContain("使用方式");
+  });
+});
+
+describe("memory-delete command", () => {
+  it("errors when no slug provided", async () => {
+    const result = await memoryDeleteCommand.execute([], mockContext());
+    expect(result.type).toBe("error");
+    expect((result as { message: string }).message).toContain("使用方式");
   });
 });

@@ -1,5 +1,21 @@
 import type { Memory, MemoryType } from "./types.js";
 
+/** Question words / patterns that indicate the user is asking, not stating. */
+const QUESTION_PATTERNS = [
+  /^什么/, /^啥/, /^谁/, /^怎么/, /^哪/, /^多少/, /^几/,
+  /^what/i, /^who/i, /^how/i, /^where/i, /^when/i, /^why/i,
+  /[？?]$/, /吗$/, /呢$/,
+];
+
+function isQuestionLike(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed.length === 0) return true;
+  for (const p of QUESTION_PATTERNS) {
+    if (p.test(trimmed)) return true;
+  }
+  return false;
+}
+
 export class MemoryExtractor {
   extract(text: string): Memory[] {
     const normalized = text.trim();
@@ -16,15 +32,17 @@ export class MemoryExtractor {
         normalized.match(/我的名字叫\s*(.+)/);
       if (m) {
         const name = m[1].replace(/[.。！!]\s*$/, "").trim();
-        return [{
-          slug: "user/identity",
-          type: "user" as MemoryType,
-          name: "User Name",
-          description: `The user's name is ${name}.`,
-          content: `The user's name is ${name}.`,
-          createdAt: now,
-          updatedAt: now,
-        }];
+        if (!isQuestionLike(name)) {
+          return [{
+            slug: "user/identity",
+            type: "user" as MemoryType,
+            name: "User Name",
+            description: `The user's name is ${name}.`,
+            content: `The user's name is ${name}.`,
+            createdAt: now,
+            updatedAt: now,
+          }];
+        }
       }
     }
 
@@ -37,15 +55,17 @@ export class MemoryExtractor {
         normalized.match(/称呼我\s*(.+)/);
       if (m) {
         const name = m[1].replace(/[.。！!]\s*$/, "").trim();
-        return [{
-          slug: "user/identity",
-          type: "user" as MemoryType,
-          name: "Preferred Name",
-          description: `The user prefers to be called ${name}.`,
-          content: `The user prefers to be called ${name}.`,
-          createdAt: now,
-          updatedAt: now,
-        }];
+        if (!isQuestionLike(name)) {
+          return [{
+            slug: "user/identity",
+            type: "user" as MemoryType,
+            name: "Preferred Name",
+            description: `The user prefers to be called ${name}.`,
+            content: `The user prefers to be called ${name}.`,
+            createdAt: now,
+            updatedAt: now,
+          }];
+        }
       }
     }
 
@@ -56,15 +76,17 @@ export class MemoryExtractor {
         normalized.match(/我是(?:一名|一个)?\s*(.+)/);
       if (m) {
         const identity = m[1].replace(/[.。！!]\s*$/, "").trim();
-        return [{
-          slug: "user/identity",
-          type: "user" as MemoryType,
-          name: "User Identity",
-          description: `The user is ${identity}.`,
-          content: `The user is ${identity}.`,
-          createdAt: now,
-          updatedAt: now,
-        }];
+        if (!isQuestionLike(identity)) {
+          return [{
+            slug: "user/identity",
+            type: "user" as MemoryType,
+            name: "User Identity",
+            description: `The user is ${identity}.`,
+            content: `The user is ${identity}.`,
+            createdAt: now,
+            updatedAt: now,
+          }];
+        }
       }
     }
 

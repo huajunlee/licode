@@ -120,7 +120,7 @@ export class MemoryStore {
     }
 
     const lines = all.map(
-      (m) => `- [${m.name}](${m.slug}.md) — ${m.description}`
+      (m) => `- [${m.name}](${path.join(this.dir, m.slug)}.md) — ${m.description}`
     );
 
     const content = INDEX_HEADER + lines.join("\n") + "\n";
