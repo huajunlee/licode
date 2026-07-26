@@ -209,7 +209,9 @@ export function useConversation(
   const memoryStoreRef = useRef<MemoryStore>(
     new MemoryStore(path.join(process.cwd(), ".licode", "memory"))
   );
-  const memoryExtractorRef = useRef<MemoryExtractor>(new MemoryExtractor());
+  const memoryExtractorRef = useRef<MemoryExtractor>(
+    new MemoryExtractor({ apiKey, baseUrl })
+  );
 
   useEffect(() => {
     if (!apiKey) return;

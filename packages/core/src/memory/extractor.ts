@@ -1,3 +1,5 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { AnthropicProvider } from "../llm/anthropic.js";
 import type { LLMProvider, Message } from "../llm/provider.js";
 import type { MemoryStore } from "./store.js";
@@ -120,11 +122,28 @@ export class MemoryExtractor {
         await store.save(memory);
       }
     } catch (err) {
-      // Extraction is best-effort — never propagate errors, but log for debugging
-      console.error(
-        "[MemoryExtractor] Extraction failed:",
-        err instanceof Error ? err.message : String(err)
-      );
+      // Extraction is best-effort — never propagate errors.
+      // Log to stderr AND write to a file so the error is visible even
+      // when the TUI captures console output.
+      const message = err instanceof Error ? err.message : String(err);
+      const detail = err instanceof Error ? (err as Error).stack ?? message : message;
+      console.error("[MemoryExtractor] Extraction failed:", message);
+
+      // Also write to .licode/memory/extraction-errors.log so errors are
+      // visible even when the TUI captures console output.
+      try {
+        // Access the store's private dir field via type coercion —
+        // TypeScript private is compile-time only.
+        const storeDir: string = (store as unknown as Record<string, unknown>).dir as string;
+        if (storeDir) {
+          const logPath = path.join(storeDir, "extraction-errors.log");
+          const timestamp = new Date().toISOString();
+          const entry = `[${timestamp}] ${detail}\n`;
+          fs.appendFileSync(logPath, entry, "utf-8");
+        }
+      } catch {
+        // If we can't write the log, at least we tried
+      }
     }
   }
 
