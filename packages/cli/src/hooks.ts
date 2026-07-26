@@ -19,7 +19,7 @@ import {
   MemoryStore,
   MemoryLoader,
   MemoryExtractor,
-  memoryMiddleware,
+  createMemoryExtractionHook,
 } from "@licode/core";
 import type {
   Message,
@@ -259,6 +259,20 @@ export function useConversation(
       const memoryLoader = new MemoryLoader(memoryStoreRef.current);
       await memoryLoader.loadInto(systemPrompt);
 
+      // Register in-process memory extraction hook (Step 2)
+      // Fires after each agent loop, fire-and-forget (non-blocking)
+      extensions.hooks.register({
+        name: "memory-extraction",
+        events: ["agent-loop-complete"],
+        fn: createMemoryExtractionHook(
+          memoryExtractorRef.current,
+          memoryStoreRef.current,
+          manager
+        ),
+        resolvedPosition: "after:agentLoop",
+        blocking: false,
+      });
+
       // Populate slash commands for autocomplete (commands + skills)
       const cmds = extensions.commands.list().map((c) => ({
         name: `/${c.name}`,
@@ -341,7 +355,6 @@ export function useConversation(
             registerExtensionMiddleware(pipeline, extensionsRef.current!, "before:agentLoop");
 
             pipeline
-              .use(memoryMiddleware(memoryExtractorRef.current, memoryStoreRef.current))
               .use(tokenCountingMiddleware((total) => setTokenCount(total)))
               .use(
                 createAgentLoopMiddleware({
@@ -351,6 +364,7 @@ export function useConversation(
                   eventBus,
                 })
               )
+              // after:agentLoop fires shell hooks + in-process function hooks (e.g. memory extraction)
               .use("hook:after:agentLoop", async (event, next) => {
                 const extensions = extensionsRef.current;
                 if (extensions) {
@@ -397,7 +411,6 @@ export function useConversation(
         registerExtensionMiddleware(pipeline, extensionsRef.current!, "before:agentLoop");
 
         pipeline
-          .use(memoryMiddleware(memoryExtractorRef.current, memoryStoreRef.current))
           .use(tokenCountingMiddleware((total) => setTokenCount(total)))
           .use(
             createAgentLoopMiddleware({
@@ -407,6 +420,7 @@ export function useConversation(
               eventBus,
             })
           )
+          // after:agentLoop fires shell hooks + in-process function hooks (e.g. memory extraction)
           .use("hook:after:agentLoop", async (event, next) => {
             const extensions = extensionsRef.current;
             if (extensions) {

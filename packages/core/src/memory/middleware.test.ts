@@ -4,11 +4,11 @@ import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { EventPipeline } from "../events/pipeline.js";
 import type { PipelineEvent } from "../events/types.js";
-import { MemoryExtractor } from "./extractor.js";
+import { RegexMemoryExtractor } from "./extractor-regex.js";
 import { memoryMiddleware } from "./middleware.js";
 import { MemoryStore } from "./store.js";
 
-describe("memoryMiddleware", () => {
+describe("memoryMiddleware (deprecated)", () => {
   let dir: string | null = null;
 
   afterEach(() => {
@@ -22,7 +22,7 @@ describe("memoryMiddleware", () => {
     dir = mkdtempSync(path.join(tmpdir(), "licode-memory-mw-"));
     const store = new MemoryStore(path.join(dir, ".licode", "memory"));
     const pipeline = new EventPipeline();
-    pipeline.use(memoryMiddleware(new MemoryExtractor(), store));
+    pipeline.use(memoryMiddleware(new RegexMemoryExtractor(), store));
 
     async function* events(): AsyncIterable<PipelineEvent> {
       yield {
@@ -45,7 +45,7 @@ describe("memoryMiddleware", () => {
     dir = mkdtempSync(path.join(tmpdir(), "licode-memory-mw-"));
     const store = new MemoryStore(path.join(dir, ".licode", "memory"));
     const pipeline = new EventPipeline();
-    pipeline.use(memoryMiddleware(new MemoryExtractor(), store));
+    pipeline.use(memoryMiddleware(new RegexMemoryExtractor(), store));
 
     async function* events(): AsyncIterable<PipelineEvent> {
       yield {

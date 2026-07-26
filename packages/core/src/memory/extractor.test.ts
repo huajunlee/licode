@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { MemoryExtractor } from "./extractor.js";
+import { RegexMemoryExtractor } from "./extractor-regex.js";
 
-describe("MemoryExtractor (new Memory type)", () => {
-  const extractor = new MemoryExtractor();
+describe("RegexMemoryExtractor (deprecated, regex-based)", () => {
+  const extractor = new RegexMemoryExtractor();
 
   it("extracts explicit preference statements as Memory with type 'user'", () => {
     const entries = extractor.extract(
