@@ -45,8 +45,9 @@ function isQuestionLike(text: string): boolean {
  */
 export class MemoryExtractor {
   private llm: AnthropicProvider;
+  private model: string;
 
-  constructor(config?: { apiKey?: string; baseUrl?: string }) {
+  constructor(config?: { apiKey?: string; baseUrl?: string; model?: string }) {
     const apiKey = config?.apiKey
       ?? process.env.ANTHROPIC_API_KEY
       ?? process.env.OPENAI_API_KEY
@@ -54,6 +55,7 @@ export class MemoryExtractor {
     const baseUrl = config?.baseUrl
       ?? process.env.ANTHROPIC_BASE_URL
       ?? process.env.OPENAI_BASE_URL;
+    this.model = config?.model ?? "deepseek-chat";
     this.llm = new AnthropicProvider({ apiKey, baseUrl });
   }
 
@@ -102,7 +104,7 @@ export class MemoryExtractor {
 
       const response = await this.llm.chat({
         messages: [{ role: "user", content: prompt, timestamp: new Date().toISOString() }],
-        model: "deepseek-chat",
+        model: this.model,
         maxTokens: 1024,
         temperature: 0,
       });
