@@ -7,83 +7,74 @@
  */
 
 // ---- Semantic Color Palette ----
-// All colors use Ink v5 named color strings.
-// No hex values are used to ensure maximum terminal compatibility.
+// Truecolor hex values. chalk (used by Ink) degrades automatically
+// to 256/16-color terminals — no manual fallback needed.
 
 export const COLORS = {
-  /** User messages, selected items, prompt arrow, success states */
-  primary: "green",
-  /** Success status */
-  success: "green",
-  /** Warning, pending status, loading spinner, command messages */
-  warning: "yellow",
-  /** Error messages, failed tools */
-  error: "red",
-  /** Focused accordion items, running tools, selected suggestions */
-  info: "cyan",
-  /** Stream cursor, tool card neutral border, emphasis */
-  accent: "blue",
+  /** Warm amber: prompt ❯, selection, inline code, running state, banner */
+  accent: "#E5A567",
+  /** Primary body text */
+  text: "#C8CCD8",
+  /** Secondary text: labels, tool details, summaries */
+  muted: "#8A8F9E",
+  /** Weakest: help lines, separators, session ids, status bar */
+  faint: "#565B68",
+  /** Tool done ●, inline ✓ */
+  success: "#9ECE6A",
+  /** Command messages */
+  warning: "#E0AF68",
+  /** Errors, failed tools ✗ */
+  error: "#F7768E",
 
-  /** ToolCallCard status-specific colors */
-  toolPending: "yellow",
-  toolRunning: "cyan",
-  toolDone: "green",
-  toolError: "red",
-  toolCardBorder: "blue",
-  toolCardBorderError: "red",
-} as const;
-
-// ---- Border Styles ----
-// Standardized border types by usage context.
-
-export const BORDERS = {
-  /** Popups, dropdowns, suggestion panels, status bar */
-  popup: "single",
-  /** Cards, tool call displays */
-  card: "round",
-} as const;
-
-// ---- Spacing ----
-// Consistent spacing values for Ink Box props.
-
-export const SPACING = {
-  /** Tight gap: icon-to-text, inline padding */
-  xs: 1,
-  /** Section marginBottom, card padding */
-  sm: 1,
-  /** Element gap between items in a row, marginY */
-  md: 2,
-  /** Deep indent for expanded content */
-  lg: 4,
+  // ---- Legacy aliases (transitional — removed in final cleanup task) ----
+  /** @deprecated use accent */ primary: "#E5A567",
+  /** @deprecated use accent */ info: "#E5A567",
+  /** @deprecated use muted */ toolPending: "#8A8F9E",
+  /** @deprecated use accent */ toolRunning: "#E5A567",
+  /** @deprecated use success */ toolDone: "#9ECE6A",
+  /** @deprecated use error */ toolError: "#F7768E",
+  /** @deprecated use faint */ toolCardBorder: "#565B68",
+  /** @deprecated use error */ toolCardBorderError: "#F7768E",
 } as const;
 
 // ---- Icons ----
-// Central registry of emoji/unicode icons.
-// Change them here to update everywhere.
+// Geometric unicode only — no emoji. Width-stable across terminals.
 
 export const ICONS = {
-  prompt: "> ",
-  selected: "❯ ",
-  expand: "▸ ",
-  success: "✓",
-  error: "✗",
-  pending: "⏳",
-  running: "⚙",
-  newSession: "🆕",
-  spinner: "⏳",
-  thinking: "🤔",
+  /** Input prompt, selection cursor, user message prefix */
+  prompt: "❯",
+  /** Assistant turn marker */
+  assistant: "◆",
+  toolDone: "●",
+  toolRunning: "◐",
+  toolPending: "○",
+  toolError: "✗",
+  inlineOk: "✓",
+  /** Focused thinking-accordion item */
+  expand: "▸",
+  /** Fullwidth plus — aligns with CJK text */
+  newSession: "＋",
+  /** Code block / quote left border */
+  codeBorder: "│",
+  /** Separator line unit */
+  separator: "─",
 
   /** Braille spinner animation frames (10 frames) */
   spinnerFrames: [
-    "⠋",
-    "⠙",
-    "⠹",
-    "⠸",
-    "⠼",
-    "⠴",
-    "⠦",
-    "⠧",
-    "⠇",
-    "⠏",
+    "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏",
   ] as readonly string[],
+
+  // ---- Legacy aliases (transitional — removed in final cleanup task) ----
+  /** @deprecated use toolPending */ pending: "○",
+  /** @deprecated use toolRunning */ running: "◐",
+  /** @deprecated use toolDone */ success: "●",
+  /** @deprecated use toolError */ error: "✗",
 } as const;
+
+// ---- Legacy exports (transitional — removed in final cleanup task) ----
+
+/** @deprecated borders are being removed from the design */
+export const BORDERS = { popup: "single", card: "round" } as const;
+
+/** @deprecated use inline spacing values */
+export const SPACING = { xs: 1, sm: 1, md: 2, lg: 4 } as const;

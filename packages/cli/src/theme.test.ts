@@ -1,90 +1,51 @@
 import { describe, it, expect } from "vitest";
-import { COLORS, BORDERS, SPACING, ICONS } from "./theme.js";
+import { COLORS, ICONS } from "./theme.js";
+
+const REMOVED_EMOJI = ["⏳", "🤔", "🆕", "📖", "🔍", "✏", "⚙"];
 
 describe("theme tokens", () => {
   describe("COLORS", () => {
-    it("all color values are non-empty strings", () => {
+    it("matches the minimal-modern palette", () => {
+      expect(COLORS).toMatchObject({
+        accent: "#E5A567",
+        text: "#C8CCD8",
+        muted: "#8A8F9E",
+        faint: "#565B68",
+        success: "#9ECE6A",
+        warning: "#E0AF68",
+        error: "#F7768E",
+      });
+    });
+
+    it("all color values are hex truecolor strings", () => {
       for (const [key, value] of Object.entries(COLORS)) {
-        expect(value, `COLORS.${key} should be a non-empty string`).toBeTruthy();
-        expect(typeof value, `COLORS.${key} should be a string`).toBe("string");
-      }
-    });
-
-    it("semantic groups use their designated base colors", () => {
-      expect(COLORS.primary).toBe("green");
-      expect(COLORS.success).toBe("green");
-      expect(COLORS.toolDone).toBe("green");
-
-      expect(COLORS.warning).toBe("yellow");
-      expect(COLORS.toolPending).toBe("yellow");
-
-      expect(COLORS.error).toBe("red");
-      expect(COLORS.toolError).toBe("red");
-      expect(COLORS.toolCardBorderError).toBe("red");
-
-      expect(COLORS.info).toBe("cyan");
-      expect(COLORS.toolRunning).toBe("cyan");
-
-      expect(COLORS.accent).toBe("blue");
-      expect(COLORS.toolCardBorder).toBe("blue");
-    });
-
-    it("all color values are valid Ink v5 named colors", () => {
-      const validColors = new Set([
-        "green", "yellow", "red", "cyan", "blue",
-      ]);
-      for (const [key, value] of Object.entries(COLORS)) {
-        expect(
-          validColors.has(value),
-          `COLORS.${key} = "${value}" is not a valid Ink named color`
-        ).toBe(true);
-      }
-    });
-  });
-
-  describe("BORDERS", () => {
-    it("popup and card have distinct styles", () => {
-      expect(BORDERS.popup).toBe("single");
-      expect(BORDERS.card).toBe("round");
-      expect(BORDERS.popup).not.toBe(BORDERS.card);
-    });
-  });
-
-  describe("SPACING", () => {
-    it("all spacing values are positive integers", () => {
-      for (const [key, value] of Object.entries(SPACING)) {
-        expect(Number.isInteger(value), `SPACING.${key} should be an integer`).toBe(true);
-        expect(value, `SPACING.${key} should be positive`).toBeGreaterThan(0);
-      }
-    });
-
-    it("spacing values are in ascending order", () => {
-      const values = Object.values(SPACING);
-      for (let i = 1; i < values.length; i++) {
-        expect(values[i], `${i} should be >= ${i - 1}`).toBeGreaterThanOrEqual(values[i - 1]);
+        expect(value, `COLORS.${key}`).toMatch(/^#[0-9A-Fa-f]{6}$/);
       }
     });
   });
 
   describe("ICONS", () => {
-    it("spinnerFrames has exactly 10 frames", () => {
+    it("spinnerFrames has exactly 10 unique frames", () => {
       expect(ICONS.spinnerFrames).toHaveLength(10);
+      expect(new Set(ICONS.spinnerFrames).size).toBe(10);
     });
 
-    it("spinnerFrames contains unique characters", () => {
-      const unique = new Set(ICONS.spinnerFrames);
-      expect(unique.size).toBe(ICONS.spinnerFrames.length);
+    it("no icon contains removed emoji", () => {
+      for (const [key, value] of Object.entries(ICONS)) {
+        if (typeof value !== "string") continue;
+        for (const emoji of REMOVED_EMOJI) {
+          expect(value.includes(emoji), `ICONS.${key} contains ${emoji}`).toBe(false);
+        }
+      }
     });
 
-    it("all string icon fields are non-empty", () => {
-      const stringFields: Array<keyof typeof ICONS> = [
-        "prompt", "selected", "expand", "success", "error",
-        "pending", "running", "newSession", "spinner", "thinking",
-      ];
-      for (const field of stringFields) {
-        const value = ICONS[field];
-        expect(typeof value, `ICONS.${field} should be a string`).toBe("string");
-        expect(value, `ICONS.${field} should be non-empty`).toBeTruthy();
+    it("no icon contains emoji-range codepoints or variation selectors", () => {
+      for (const [key, value] of Object.entries(ICONS)) {
+        if (typeof value !== "string") continue;
+        expect(
+          /[\u{1F000}-\u{1FAFF}\u{FE0F}]/u.test(value),
+          `ICONS.${key} has emoji-range codepoint`
+        ).toBe(false);
       }
     });
   });
