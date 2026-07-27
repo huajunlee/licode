@@ -29,7 +29,7 @@
 
 ## 1. 架构与改动范围
 
-改动**全部在 `packages/cli`**，`@licode/core` 零改动。
+改动集中在 `packages/cli`。`@licode/core` 唯一改动是**纯增量**的：`ConversationManager.listSessions()` 返回值新增可选 `summary` 字段（会话首条 string 类型 user 消息的摘要，供会话列表在标题缺失时展示；不改变任何现有行为）。
 
 ```
 packages/cli/src/
@@ -49,6 +49,10 @@ packages/cli/src/
 │   ├── input-box.tsx           # 提示行压缩，样式统一
 │   └── welcome-input.tsx       # 提示符/占位符统一
 └── app.tsx                     # 欢迎屏布局重排（接入 banner）
+```
+
+```
+packages/core/src/conversation/manager.ts   # listSessions 返回新增 summary?: string（增量）
 ```
 
 **新增依赖：** `marked`（仅 `packages/cli`）。只用其 `lexer()` 做 Markdown 解析，渲染层自研（Ink 原生元素，不走 ANSI 字符串）。
@@ -284,7 +288,8 @@ deepseek-v4-pro · 1,234 tok · a3f9c21e
 | `banner.test.ts`（新增） | 5 行；每行等宽且 ≤ 60 列；全部字符码点 ≤ 127 |
 | `markdown.test.ts`（新增） | `#`/`##`/`###` 标题层级；无序/有序/嵌套列表缩进；内联代码 → accent 段；代码块 → `│` 前缀行 + 语言标签；**未闭合代码块**仍渲染为代码块；`**bold**`；`[t](u)` → 文本 + url 段；`> 引用`；`---`；表格按原文透传；空串/纯文本透传 |
 | `relative-time.test.ts`（新增） | 刚刚 / N 分钟前 / N 小时前 / N 天前 / 绝对日期 的边界值 |
-| `session-row.test.ts`（新增） | 有标题用标题；无标题取首条 user 消息摘要并截断；无消息显示"（无消息）"；行总宽 == 终端列宽 - 边距；右列右对齐 |
+| `session-row.test.ts`（新增） | 有标题用标题；无标题用 summary 并截断；无标题且无 summary 显示"（无消息）"；行总宽 == 终端列宽 - 边距；右列右对齐 |
+| `manager.test.ts`（core，更新） | `listSessions` 返回的 `summary` 取首条 string 内容的 user 消息（去换行、截断）；无 user 消息时 `summary` 为 `undefined` |
 | `status-bar` 纯函数测试（新增） | 宽格式 `model · N tok · id`；窄格式（< 60 列）`model · tok`；`formatTokens` 千分位（沿用） |
 | `tool-call-card` 纯函数测试（更新） | 单行格式按状态组合（图标 + 名称 + 截断详情 + 结果摘要） |
 
