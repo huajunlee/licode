@@ -4,21 +4,13 @@ import { AnthropicProvider } from "../llm/anthropic.js";
 import type { LLMProvider, Message } from "../llm/provider.js";
 import type { MemoryStore } from "./store.js";
 import type { Memory, MemoryType } from "./types.js";
+import type { MemoryAction } from "./store.js";
 
 /**
- * Keyword triggers for the lightweight `shouldExtract()` pre-check.
- * These run BEFORE any LLM call — returning false means zero token cost.
+ * Explicit user instructions that always trigger extraction immediately,
+ * bypassing the cooldown window.
  */
-const TRIGGER_KEYWORDS_CN = [
-  "记住", "我叫", "我是", "我喜欢", "我偏好", "我爱", "我习惯",
-  "我想", "我使用", "我用", "我的", "我在", "我最近", "我以后",
-];
-
-const TRIGGER_KEYWORDS_EN = [
-  "remember", "my name is", "i am a", "i am an", "i prefer",
-  "i like", "i love", "i use", "i work", "i want", "i need",
-  "call me", "i'm a", "i'm an",
-];
+const EXPLICIT_INSTRUCTIONS = ["记住", "记一下", "不要忘记", "别忘了", "remember"];
 
 /** Question patterns that should NOT trigger extraction. */
 const QUESTION_PATTERNS = [
@@ -26,6 +18,12 @@ const QUESTION_PATTERNS = [
   /^what/i, /^who/i, /^how/i, /^where/i, /^when/i, /^why/i,
   /[？?]$/, /吗$/, /呢$/,
 ];
+
+const MEMORY_TYPES: readonly string[] = ["user", "feedback", "project", "reference"];
+const MEMORY_ACTIONS: readonly string[] = ["create", "update", "append"];
+
+const DEFAULT_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_MESSAGES = 50;
 
 function isQuestionLike(text: string): boolean {
   const trimmed = text.trim();
@@ -36,18 +34,50 @@ function isQuestionLike(text: string): boolean {
   return false;
 }
 
+function containsExplicitInstruction(text: string): boolean {
+  const lower = text.toLowerCase();
+  for (const kw of EXPLICIT_INSTRUCTIONS) {
+    if (lower.includes(kw.toLowerCase())) return true;
+  }
+  return false;
+}
+
+export interface MemoryExtractorConfig {
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+  /** Minimum interval between two extractions. Default 5 minutes. */
+  cooldownMs?: number;
+}
+
+export interface ShouldExtractOptions {
+  /** Epoch ms of the last extraction attempt. 0 = never extracted. */
+  lastExtractedAt: number;
+  /** Current time in epoch ms (defaults to Date.now(), injectable for tests). */
+  now?: number;
+}
+
+export interface ExtractOptions {
+  /** Only include messages with timestamp > sinceMs in the prompt. */
+  sinceMs?: number;
+  /** Cap on how many recent messages are sent to the LLM. Default 50. */
+  maxMessages?: number;
+}
+
 /**
- * LLM-based memory extractor (Step 2).
+ * LLM-based memory extractor.
  *
- * Replaces the old regex-based {@link RegexMemoryExtractor}.
- * Uses a small LLM call AFTER each agent loop to analyze the full
- * conversation and identify information worth remembering.
+ * After each agent loop, a lightweight pre-check ({@link shouldExtract})
+ * decides whether an LLM call is warranted; {@link extract} then asks the
+ * LLM to create/update/append memory files based on the recent conversation
+ * and the full content of existing memories.
  */
 export class MemoryExtractor {
   private llm: AnthropicProvider;
   private model: string;
+  private cooldownMs: number;
 
-  constructor(config?: { apiKey?: string; baseUrl?: string; model?: string }) {
+  constructor(config?: MemoryExtractorConfig) {
     const apiKey = config?.apiKey
       ?? process.env.ANTHROPIC_API_KEY
       ?? process.env.OPENAI_API_KEY
@@ -56,6 +86,7 @@ export class MemoryExtractor {
       ?? process.env.ANTHROPIC_BASE_URL
       ?? process.env.OPENAI_BASE_URL;
     this.model = config?.model ?? "deepseek-chat";
+    this.cooldownMs = config?.cooldownMs ?? DEFAULT_COOLDOWN_MS;
     this.llm = new AnthropicProvider({ apiKey, baseUrl });
   }
 
@@ -63,49 +94,73 @@ export class MemoryExtractor {
    * Lightweight pre-check that does NOT call any LLM.
    * Returns `false` → skip extraction entirely (zero token cost).
    * Returns `true` → proceed to {@link extract} (LLM makes the final call).
+   *
+   * Gate rules (in order):
+   * 1. No new user messages since `lastExtractedAt` → false
+   * 2. Any new message contains an explicit instruction ("记住" etc.) → true (bypasses cooldown)
+   * 3. All new user messages look like questions → false
+   * 4. Inside the cooldown window → false
+   * 5. Otherwise → true
    */
-  shouldExtract(messages: readonly Message[]): boolean {
+  shouldExtract(
+    messages: readonly Message[],
+    options: ShouldExtractOptions
+  ): boolean {
     if (!messages || messages.length === 0) return false;
 
-    // Check only user messages for trigger keywords
-    for (const msg of messages) {
-      if (msg.role !== "user") continue;
-      const content = msg.content;
-      if (typeof content !== "string") continue;
+    const { lastExtractedAt } = options;
+    const now = options.now ?? Date.now();
 
-      // Exclude questions
-      if (isQuestionLike(content)) continue;
+    const newUserMessages = messages.filter(
+      (m) =>
+        m.role === "user" &&
+        typeof m.content === "string" &&
+        Date.parse(m.timestamp) > lastExtractedAt
+    );
+    if (newUserMessages.length === 0) return false;
 
-      const lower = content.toLowerCase();
-      for (const kw of TRIGGER_KEYWORDS_CN) {
-        if (content.includes(kw)) return true;
-      }
-      for (const kw of TRIGGER_KEYWORDS_EN) {
-        if (lower.includes(kw)) return true;
-      }
+    // Explicit instructions always trigger immediately
+    for (const msg of newUserMessages) {
+      if (containsExplicitInstruction(msg.content as string)) return true;
     }
 
-    return false;
+    // All new user messages are questions → nothing worth remembering
+    if (newUserMessages.every((m) => isQuestionLike(m.content as string))) {
+      return false;
+    }
+
+    // Cooldown window
+    if (now - lastExtractedAt < this.cooldownMs) return false;
+
+    return true;
   }
 
   /**
    * Call the LLM to analyze conversation messages and extract memories.
-   * Results are persisted via the given {@link MemoryStore}.
+   * Results are persisted via the given {@link MemoryStore}, honouring the
+   * LLM's per-item action (create / update / append).
    *
    * Errors are silently caught — extraction is best-effort and never
    * blocks the user.
    */
-  async extract(messages: readonly Message[], store: MemoryStore): Promise<void> {
+  async extract(
+    messages: readonly Message[],
+    store: MemoryStore,
+    options?: ExtractOptions
+  ): Promise<void> {
     try {
+      const existingMemories = await store.listAll();
       const indexContent = await store.loadIndex();
-      const conversationText = this.formatMessages(messages);
 
-      const prompt = this.buildPrompt(indexContent, conversationText);
+      const recent = this.selectMessages(messages, options);
+      const conversationText = this.formatMessages(recent);
+
+      const prompt = this.buildPrompt(indexContent, existingMemories, conversationText);
 
       const response = await this.llm.chat({
         messages: [{ role: "user", content: prompt, timestamp: new Date().toISOString() }],
         model: this.model,
-        maxTokens: 1024,
+        maxTokens: 2048,
         temperature: 0,
       });
 
@@ -121,7 +176,7 @@ export class MemoryExtractor {
           createdAt: now,
           updatedAt: now,
         };
-        await store.save(memory);
+        await store.save(memory, item.action);
       }
     } catch (err) {
       // Extraction is best-effort — never propagate errors.
@@ -156,32 +211,70 @@ export class MemoryExtractor {
   }
 
   /**
-   * Build the LLM prompt for memory extraction.
+   * Select messages for the prompt: only those newer than `sinceMs`
+   * (all messages when omitted), capped at the most recent `maxMessages`.
    */
-  private buildPrompt(indexContent: string, conversationText: string): string {
-    const indexSection = indexContent
-      ? `## Existing memories (match slug if updating an existing topic)\n${indexContent}\n`
-      : "(No existing memories yet.)\n";
+  private selectMessages(
+    messages: readonly Message[],
+    options?: ExtractOptions
+  ): readonly Message[] {
+    let selected = messages;
+    if (options?.sinceMs !== undefined) {
+      const sinceMs = options.sinceMs;
+      selected = selected.filter(
+        (m) => "timestamp" in m && Date.parse(m.timestamp) > sinceMs
+      );
+    }
+    const cap = options?.maxMessages ?? MAX_MESSAGES;
+    return selected.slice(-cap);
+  }
+
+  /**
+   * Build the LLM prompt for memory extraction.
+   * Carries the full content of all existing memories so the LLM can
+   * decide to update them (single tool-less call — the LLM cannot Read).
+   */
+  private buildPrompt(
+    indexContent: string,
+    existingMemories: readonly Memory[],
+    conversationText: string
+  ): string {
+    let existingSection: string;
+    if (existingMemories.length === 0) {
+      existingSection = "(No existing memories yet.)";
+    } else {
+      const parts: string[] = [];
+      if (indexContent) parts.push(indexContent.trim());
+      for (const m of existingMemories) {
+        parts.push(
+          `### ${m.slug}\nname: ${m.name}\ndescription: ${m.description}\ncontent:\n${m.content}`
+        );
+      }
+      existingSection = parts.join("\n\n");
+    }
 
     return [
-      "Analyze this conversation and extract information worth remembering.",
+      "Analyze the most recent conversation messages and update the persistent memory system.",
       "",
-      indexSection,
+      "## Existing memories (index + full content)",
+      existingSection,
+      "",
       "## Recent conversation",
       conversationText,
-      "## Instructions",
-      "Identify facts about the user (preferences, identity, role, habits, knowledge)",
-      "or project decisions that should be persisted across sessions.",
       "",
-      "Output ONLY a JSON array (empty if nothing new):",
-      '[{"action":"create|update|append","slug":"user/food-preferences","type":"user","name":"Food Preferences","description":"one-line summary","content":"full detail"}]',
+      "## Instructions",
+      "",
+      "从对话中识别值得跨会话保存的信息，输出 JSON 数组（无新信息则输出 []）：",
+      '[{"action":"create|update|append","slug":"<type>/<kebab-case>","type":"user|feedback|project|reference","name":"简短名称","description":"一句话描述","content":"完整正文"}]',
       "",
       "Rules:",
-      "- Use 'create' for new topics, 'update' to replace, 'append' to add to existing",
-      "- Match existing slugs when updating the same topic",
-      "- Don't extract trivial chitchat or one-off questions",
-      "- If the user is asking a question (not stating a fact), skip it",
-      "- Types: user (personal info/preferences), feedback, project, reference",
+      "- create：新主题；update：改写已有文件正文（slug 必须匹配现有文件）；append：向已有文件补充新段落",
+      "- 新信息与现有记忆矛盾时，必须用 update 重写，以最新信息为准——禁止让矛盾并存",
+      "- feedback 类型只记录用户明确纠正过的行为或确认过的非显然做法，content 中必须包含规则、原因（Why:）和适用范围（How to apply:）",
+      "- 不要保存：代码模式与架构、git 历史、调试方案、当前任务进度、一次性问答、琐碎闲聊",
+      "- 用户在提问而非陈述事实时，跳过",
+      "- 把相对日期（\"昨天\"\"上周\"）转换为绝对日期",
+      "- 只使用上述最近对话中的内容；不要臆测或补充对话中不存在的信息",
     ].join("\n");
   }
 
@@ -203,10 +296,11 @@ export class MemoryExtractor {
 
   /**
    * Parse LLM response into structured memory items.
-   * Returns empty array on any parse failure.
+   * Returns empty array on any parse failure; individual items with an
+   * invalid action/type/slug are dropped while the rest are kept.
    */
   private parseResponse(raw: string): Array<{
-    action: string;
+    action: MemoryAction;
     slug: string;
     type: string;
     name: string;
@@ -227,7 +321,13 @@ export class MemoryExtractor {
         (item: any) =>
           item &&
           typeof item.action === "string" &&
+          MEMORY_ACTIONS.includes(item.action) &&
+          typeof item.type === "string" &&
+          MEMORY_TYPES.includes(item.type) &&
           typeof item.slug === "string" &&
+          item.slug.startsWith(`${item.type}/`) &&
+          typeof item.name === "string" &&
+          typeof item.description === "string" &&
           typeof item.content === "string"
       );
     } catch {

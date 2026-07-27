@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, utimesSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -150,7 +150,7 @@ describe("MemoryStore (new API)", () => {
     const indexContent = require("node:fs").readFileSync(indexPath, "utf-8");
     expect(indexContent).toContain("# User Memory");
     expect(indexContent).toContain("[测试偏好](");
-    expect(indexContent).toContain("/user/test-preference.md)");
+    expect(indexContent).toContain("](user/test-preference.md)");
     expect(indexContent).toContain("用户偏好测试记忆");
   });
 
@@ -169,6 +169,181 @@ describe("MemoryStore (new API)", () => {
     const store = new MemoryStore(dir);
     const content = await store.loadIndex();
     expect(content).toBe("");
+  });
+});
+
+describe("MemoryStore actions", () => {
+  let dir: string | null = null;
+
+  afterEach(() => {
+    if (dir) {
+      rmSync(dir, { recursive: true, force: true });
+      dir = null;
+    }
+  });
+
+  // --- update ---
+
+  it("update replaces content, preserves createdAt, refreshes updatedAt", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-memory-"));
+    const store = new MemoryStore(dir);
+    await store.save(makeMemory({
+      content: "用户喜欢红烧排骨。",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    }));
+
+    await store.save(makeMemory({
+      content: "用户不再吃红烧排骨了。",
+      updatedAt: "2026-06-01T00:00:00.000Z",
+    }), "update");
+
+    const loaded = await store.load("user/test-preference");
+    expect(loaded?.content).toBe("用户不再吃红烧排骨了。");
+    expect(loaded?.content).not.toContain("喜欢红烧排骨");
+    expect(loaded?.createdAt).toBe("2026-01-01T00:00:00.000Z");
+    // updatedAt must be refreshed by the store, not taken from the input
+    expect(loaded?.updatedAt).not.toBe("2026-01-01T00:00:00.000Z");
+    expect(loaded?.updatedAt).not.toBe("2026-06-01T00:00:00.000Z");
+  });
+
+  it("update on a non-existent slug creates the file", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-memory-"));
+    const store = new MemoryStore(dir);
+
+    await store.save(makeMemory(), "update");
+
+    const loaded = await store.load("user/test-preference");
+    expect(loaded).not.toBeNull();
+    expect(loaded?.content).toContain("vitest");
+  });
+
+  // --- append ---
+
+  it("append adds new paragraphs and skips duplicate paragraphs", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-memory-"));
+    const store = new MemoryStore(dir);
+    await store.save(makeMemory({ content: "段落一。\n\n段落二。" }));
+
+    await store.save(makeMemory({ content: "段落二。\n\n段落三。" }), "append");
+
+    const loaded = await store.load("user/test-preference");
+    expect(loaded?.content).toBe("段落一。\n\n段落二。\n\n段落三。");
+  });
+
+  // --- create fallback ---
+
+  it("create on an existing slug falls back to append (keeps old content)", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-memory-"));
+    const store = new MemoryStore(dir);
+    await store.save(makeMemory({ content: "旧内容。" }));
+
+    await store.save(makeMemory({ content: "新内容。" }), "create");
+
+    const loaded = await store.load("user/test-preference");
+    expect(loaded?.content).toContain("旧内容。");
+    expect(loaded?.content).toContain("新内容。");
+  });
+
+  it("save without action defaults to create semantics (legacy append-merge)", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-memory-"));
+    const store = new MemoryStore(dir);
+    await store.save(makeMemory({ content: "第一段。" }));
+
+    await store.save(makeMemory({ content: "第二段。" }));
+
+    const loaded = await store.load("user/test-preference");
+    expect(loaded?.content).toContain("第一段。");
+    expect(loaded?.content).toContain("第二段。");
+  });
+
+  // --- rebuildIndex ---
+
+  it("rebuildIndex picks up files written directly to disk (bypassing save)", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-memory-"));
+    const store = new MemoryStore(dir);
+    mkdirSync(path.join(dir, "user"), { recursive: true });
+    writeFileSync(path.join(dir, "user", "direct-write.md"), [
+      "---",
+      "name: 直接写入",
+      "description: 绕过 save 的文件",
+      "type: user",
+      "createdAt: 2026-01-01T00:00:00.000Z",
+      "updatedAt: 2026-01-01T00:00:00.000Z",
+      "---",
+      "",
+      "正文",
+      "",
+    ].join("\n"));
+
+    await store.rebuildIndex();
+
+    const index = await store.loadIndex();
+    expect(index).toContain("[直接写入](user/direct-write.md)");
+    expect(index).toContain("绕过 save 的文件");
+  });
+
+  it("rebuildIndex tolerates files with broken frontmatter", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-memory-"));
+    const store = new MemoryStore(dir);
+    mkdirSync(path.join(dir, "project"), { recursive: true });
+    writeFileSync(path.join(dir, "project", "no-frontmatter.md"), "没有 frontmatter 的正文\n");
+
+    await expect(store.rebuildIndex()).resolves.toBeUndefined();
+
+    const index = await store.loadIndex();
+    expect(index).toContain("no-frontmatter");
+  });
+
+  it("generates index with relative paths", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-memory-"));
+    const store = new MemoryStore(dir);
+    await store.save(makeMemory());
+
+    const index = await store.loadIndex();
+    expect(index).toContain("- [测试偏好](user/test-preference.md) — 用户偏好测试记忆");
+    expect(index).not.toContain(dir);
+  });
+
+  // --- hasChangesSince ---
+
+  it("hasChangesSince returns true only when a memory file mtime >= threshold", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-memory-"));
+    const store = new MemoryStore(dir);
+    await store.save(makeMemory());
+    const filePath = path.join(dir, "user", "test-preference.md");
+
+    const threshold = Date.now() + 60_000;
+    // All memory files are older than the threshold
+    const past = new Date(threshold - 120_000);
+    utimesSync(filePath, past, past);
+    expect(await store.hasChangesSince(threshold)).toBe(false);
+
+    // Move one file's mtime beyond the threshold
+    const future = new Date(threshold + 1_000);
+    utimesSync(filePath, future, future);
+    expect(await store.hasChangesSince(threshold)).toBe(true);
+  });
+
+  it("hasChangesSince ignores the MEMORY.md index file", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-memory-"));
+    const store = new MemoryStore(dir);
+    await store.save(makeMemory());
+
+    const threshold = Date.now() + 60_000;
+    const past = new Date(threshold - 120_000);
+    utimesSync(path.join(dir, "user", "test-preference.md"), past, past);
+    // MEMORY.md is newer than the threshold — must not affect the result
+    const future = new Date(threshold + 60_000);
+    utimesSync(path.join(dir, "MEMORY.md"), future, future);
+
+    expect(await store.hasChangesSince(threshold)).toBe(false);
+  });
+
+  it("hasChangesSince returns false when the memory directory does not exist", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-memory-"));
+    const store = new MemoryStore(path.join(dir, "nonexistent"));
+    expect(await store.hasChangesSince(Date.now())).toBe(false);
   });
 });
 
@@ -205,7 +380,7 @@ describe("MemoryLoader (new behaviour)", () => {
     expect(memoryLayer?.priority).toBe(5);
     // Should contain index line (description), not the full memory body
     expect(memoryLayer?.content).toContain("[身份信息](");
-    expect(memoryLayer?.content).toContain("/user/identity.md)");
+    expect(memoryLayer?.content).toContain("](user/identity.md)");
     expect(memoryLayer?.content).toContain("用户名和角色");
     // Should NOT contain the full content body
     expect(memoryLayer?.content).not.toContain("full-stack developer");

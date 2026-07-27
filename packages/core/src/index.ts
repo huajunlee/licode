@@ -112,12 +112,13 @@ export type {
   CompressionResult,
 } from "./context/compressor.js";
 export { MemoryStore } from "./memory/store.js";
+export type { MemoryAction } from "./memory/store.js";
 export { MemoryLoader } from "./memory/loader.js";
 export { MemoryExtractor } from "./memory/extractor.js";               // Step 2: LLM-based
 export { RegexMemoryExtractor } from "./memory/extractor-regex.js";    // @deprecated
 export { memoryMiddleware } from "./memory/middleware.js";             // @deprecated
-export { createMemoryExtractionHook } from "./memory/hook.js";         // Step 2: in-process hook
-export type { MemoryExtractionHookFn } from "./memory/hook.js";
+export { createMemoryExtractionHook, createMemoryExtractionState } from "./memory/hook.js"; // in-process hook
+export type { MemoryExtractionHookFn, MemoryExtractionState } from "./memory/hook.js";
 export type { Memory, MemoryType, MemoryEntry } from "./memory/types.js";
 export { toSlug } from "./memory/types.js";
 export { SessionManager } from "./session/manager.js";

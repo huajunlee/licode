@@ -4,21 +4,70 @@ import type { Memory, MemoryType } from "./types.js";
 
 const INDEX_HEADER = "# User Memory\n\nThe following memories are from previous conversations:\n\n";
 
+const MEMORY_TYPES: MemoryType[] = ["user", "feedback", "project", "reference"];
+
+/**
+ * Write semantics for {@link MemoryStore.save}.
+ *
+ * - `create`：新建文件；若目标已存在则**防御性降级为 append**（LLM 误标时不丢旧内容）
+ * - `update`：正文整体替换；保留现有 `createdAt`，刷新 `updatedAt`
+ * - `append`：段落级去重追加（按空行分段，已有相同段落则跳过）
+ */
+export type MemoryAction = "create" | "update" | "append";
+
+/**
+ * Merge `addition` into `existing` paragraph by paragraph.
+ * Paragraphs are split on blank lines; paragraphs already present in
+ * `existing` are skipped. Returns `existing` unchanged when every
+ * paragraph of `addition` is already present.
+ */
+function mergeAppend(existing: string, addition: string): string {
+  const existingParagraphs = existing
+    .split(/\n\n+/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const additionParagraphs = addition
+    .split(/\n\n+/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  const seen = new Set(existingParagraphs);
+  const fresh = additionParagraphs.filter((p) => !seen.has(p));
+
+  if (fresh.length === 0) return existing;
+  if (existingParagraphs.length === 0) return fresh.join("\n\n");
+  return [...existingParagraphs, ...fresh].join("\n\n");
+}
+
 export class MemoryStore {
   constructor(private dir: string) {}
 
-  async save(memory: Memory): Promise<void> {
+  async save(memory: Memory, action: MemoryAction = "create"): Promise<void> {
     const typeDir = path.join(this.dir, memory.type);
     await fs.promises.mkdir(typeDir, { recursive: true });
 
     const filePath = path.join(typeDir, `${path.basename(memory.slug)}.md`);
+    const exists = fs.existsSync(filePath);
 
-    // Append-merge: if target file exists, append content
+    // create on an existing file degrades to append — never lose old content
+    const effectiveAction: MemoryAction =
+      action === "create" && exists ? "append" : action;
+
     let finalContent = memory.content;
-    if (fs.existsSync(filePath)) {
+    let createdAt = memory.createdAt;
+    let updatedAt = memory.updatedAt;
+
+    if (effectiveAction === "update") {
+      // Replace content wholesale; keep the original createdAt, refresh updatedAt
+      if (exists) {
+        const existing = await this.load(memory.slug);
+        if (existing) createdAt = existing.createdAt;
+      }
+      updatedAt = new Date().toISOString();
+    } else if (effectiveAction === "append" && exists) {
       const existing = await this.load(memory.slug);
-      if (existing && !existing.content.includes(memory.content)) {
-        finalContent = existing.content + "\n\n" + memory.content;
+      if (existing) {
+        finalContent = mergeAppend(existing.content, memory.content);
       }
     }
 
@@ -27,8 +76,8 @@ export class MemoryStore {
       `name: ${memory.name}`,
       `description: ${memory.description}`,
       `type: ${memory.type}`,
-      `createdAt: ${memory.createdAt}`,
-      `updatedAt: ${memory.updatedAt}`,
+      `createdAt: ${createdAt}`,
+      `updatedAt: ${updatedAt}`,
       "---",
       "",
       finalContent,
@@ -36,13 +85,12 @@ export class MemoryStore {
     ].join("\n");
 
     await fs.promises.writeFile(filePath, frontmatter, "utf-8");
-    await this.updateIndex();
+    await this.rebuildIndex();
   }
 
   async load(slug: string): Promise<Memory | null> {
     // Search all type directories for the slug
-    const types: MemoryType[] = ["user", "feedback", "project", "reference"];
-    for (const type of types) {
+    for (const type of MEMORY_TYPES) {
       const filePath = path.join(this.dir, type, `${path.basename(slug)}.md`);
       if (fs.existsSync(filePath)) {
         const raw = await fs.promises.readFile(filePath, "utf-8");
@@ -53,17 +101,11 @@ export class MemoryStore {
   }
 
   async delete(slug: string): Promise<void> {
-    const types: MemoryType[] = ["user", "feedback", "project", "reference"];
-    for (const type of types) {
+    for (const type of MEMORY_TYPES) {
       const filePath = path.join(this.dir, type, `${path.basename(slug)}.md`);
       if (fs.existsSync(filePath)) {
         await fs.promises.unlink(filePath);
-        // Clean up empty type directory
-        const remaining = await fs.promises.readdir(path.join(this.dir, type));
-        if (remaining.length === 0) {
-          // Don't remove the dir, just leave it empty
-        }
-        await this.updateIndex();
+        await this.rebuildIndex();
         return;
       }
     }
@@ -72,10 +114,9 @@ export class MemoryStore {
   async listAll(): Promise<Memory[]> {
     if (!fs.existsSync(this.dir)) return [];
 
-    const types: MemoryType[] = ["user", "feedback", "project", "reference"];
     const memories: Memory[] = [];
 
-    for (const type of types) {
+    for (const type of MEMORY_TYPES) {
       const typeDir = path.join(this.dir, type);
       if (!fs.existsSync(typeDir)) continue;
 
@@ -111,7 +152,14 @@ export class MemoryStore {
     return await fs.promises.readFile(indexPath, "utf-8");
   }
 
-  private async updateIndex(): Promise<void> {
+  /**
+   * Rebuild MEMORY.md from the current on-disk memory files.
+   *
+   * Public so callers can pick up memory files written directly to disk
+   * (e.g. the main agent using the Write tool, bypassing {@link save}).
+   * Index lines use paths relative to the memory directory.
+   */
+  async rebuildIndex(): Promise<void> {
     const all = await this.listAllRaw();
     if (all.length === 0) {
       const indexPath = path.join(this.dir, "MEMORY.md");
@@ -120,7 +168,7 @@ export class MemoryStore {
     }
 
     const lines = all.map(
-      (m) => `- [${m.name}](${path.join(this.dir, m.slug)}.md) — ${m.description}`
+      (m) => `- [${m.name}](${m.slug}.md) — ${m.description}`
     );
 
     const content = INDEX_HEADER + lines.join("\n") + "\n";
@@ -130,16 +178,36 @@ export class MemoryStore {
   }
 
   /**
+   * Returns true when any memory file (in the type subdirectories) has been
+   * modified at or after `tsMs`. MEMORY.md itself is excluded — only actual
+   * memory files count, so index rebuilds don't register as "changes".
+   */
+  async hasChangesSince(tsMs: number): Promise<boolean> {
+    for (const type of MEMORY_TYPES) {
+      const typeDir = path.join(this.dir, type);
+      if (!fs.existsSync(typeDir)) continue;
+
+      const files = (await fs.promises.readdir(typeDir))
+        .filter((f) => f.endsWith(".md"));
+
+      for (const file of files) {
+        const stat = await fs.promises.stat(path.join(typeDir, file));
+        if (stat.mtimeMs >= tsMs) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Read all markdown memory files directly without going through parse().
-   * Used internally by updateIndex() to avoid double-parsing.
+   * Used internally by rebuildIndex() to avoid double-parsing.
    */
   private async listAllRaw(): Promise<Array<{ slug: string; name: string; description: string }>> {
     if (!fs.existsSync(this.dir)) return [];
 
-    const types: MemoryType[] = ["user", "feedback", "project", "reference"];
     const items: Array<{ slug: string; name: string; description: string }> = [];
 
-    for (const type of types) {
+    for (const type of MEMORY_TYPES) {
       const typeDir = path.join(this.dir, type);
       if (!fs.existsSync(typeDir)) continue;
 

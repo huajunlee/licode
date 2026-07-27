@@ -20,6 +20,7 @@ import {
   MemoryLoader,
   MemoryExtractor,
   createMemoryExtractionHook,
+  createMemoryExtractionState,
   emitAfterAgentLoop,
 } from "@licode/core";
 import type {
@@ -28,6 +29,7 @@ import type {
   AgentConfig,
   EventBus,
   InitializedExtensions,
+  MemoryExtractionState,
 } from "@licode/core";
 import type { ThinkingBlock } from "./components/thinking-accordion.js";
 import { inferPurpose } from "./components/thinking-accordion.js";
@@ -212,6 +214,11 @@ export function useConversation(
   const memoryExtractorRef = useRef<MemoryExtractor>(
     new MemoryExtractor({ apiKey, baseUrl, model })
   );
+  // Shared with the memory extraction hook (registered once) — must be a
+  // stable object identity, so the ref's .current is passed by reference.
+  const memoryExtractionStateRef = useRef<MemoryExtractionState>(
+    createMemoryExtractionState()
+  );
 
   useEffect(() => {
     if (!apiKey) return;
@@ -270,7 +277,8 @@ export function useConversation(
         fn: createMemoryExtractionHook(
           memoryExtractorRef.current,
           memoryStoreRef.current,
-          manager
+          manager,
+          memoryExtractionStateRef.current
         ),
         resolvedPosition: "after:agentLoop",
         blocking: false,
@@ -318,6 +326,10 @@ export function useConversation(
       const tools = toolsRef.current;
       const router = commandRouterRef.current;
       if (!provider || !manager || !input.trim()) return;
+
+      // Mark the start of this agent loop so the memory extraction hook
+      // can detect memory files written by the main agent mid-loop.
+      memoryExtractionStateRef.current.loopStartedAt = Date.now();
 
       setIsLoading(true);
       setStreaming("");

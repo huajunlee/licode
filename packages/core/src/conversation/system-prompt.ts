@@ -22,6 +22,7 @@ const LAYER_DEFINITIONS: Array<{
 }> = [
   { name: "role", priority: 0, always: true, file: "role.md" },
   { name: "safety", priority: 1, always: true, file: "safety.md" },
+  { name: "memory-guide", priority: 4, always: false, file: "memory-guide.md" },
   { name: "tool-use", priority: 10, always: false, file: "tool-use.md" },
 ];
 

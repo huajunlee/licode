@@ -47,80 +47,102 @@ describe("MemoryExtractor (LLM-based)", () => {
   // ── shouldExtract ────────────────────────────────────────────────
 
   describe("shouldExtract", () => {
-    it("returns true when message starts with '记住'", () => {
+    const NOW = Date.parse("2026-07-27T12:00:00.000Z");
+
+    function userMsgAt(content: string, offsetMs: number): Message {
+      return { role: "user", content, timestamp: new Date(NOW + offsetMs).toISOString() };
+    }
+
+    it("returns true for correction-style message without any trigger keyword", () => {
       const extractor = new MemoryExtractor();
-      const result = extractor.shouldExtract([makeUserMsg("记住我喜欢吃辣的东西")]);
+      const result = extractor.shouldExtract(
+        [userMsgAt("不对，我以后都用 pnpm 装依赖", -1000)],
+        { lastExtractedAt: 0, now: NOW }
+      );
       expect(result).toBe(true);
     });
 
-    it("returns true for '我叫' (name statement)", () => {
+    it("explicit instruction bypasses the cooldown", () => {
       const extractor = new MemoryExtractor();
-      const result = extractor.shouldExtract([makeUserMsg("我叫小明，请多关照")]);
+      const result = extractor.shouldExtract(
+        [userMsgAt("记住：我的编辑器是 Neovim", -500)],
+        { lastExtractedAt: NOW - 1000, now: NOW } // inside cooldown
+      );
       expect(result).toBe(true);
     });
 
-    it("returns true for '我是' (identity statement)", () => {
+    it("returns false when all new user messages look like questions", () => {
       const extractor = new MemoryExtractor();
-      const result = extractor.shouldExtract([makeUserMsg("我是全栈工程师")]);
-      expect(result).toBe(true);
-    });
-
-    it("returns true for '我喜欢' (preference statement)", () => {
-      const extractor = new MemoryExtractor();
-      const result = extractor.shouldExtract([makeUserMsg("我喜欢用 Rust 写后端")]);
-      expect(result).toBe(true);
-    });
-
-    it("returns true for 'remember' pattern (English)", () => {
-      const extractor = new MemoryExtractor();
-      const result = extractor.shouldExtract([
-        makeUserMsg("Please remember that I use vim as my editor"),
-      ]);
-      expect(result).toBe(true);
-    });
-
-    it("returns true for 'I prefer' pattern (English)", () => {
-      const extractor = new MemoryExtractor();
-      const result = extractor.shouldExtract([
-        makeUserMsg("I prefer dark mode in my IDE"),
-      ]);
-      expect(result).toBe(true);
-    });
-
-    it("returns false for plain conversation", () => {
-      const extractor = new MemoryExtractor();
-      const result = extractor.shouldExtract([
-        makeUserMsg("今天天气真不错啊"),
-        makeAsstMsg("是的，阳光很好！"),
-      ]);
+      const result = extractor.shouldExtract(
+        [userMsgAt("现在几点了？", -500)],
+        { lastExtractedAt: 0, now: NOW }
+      );
       expect(result).toBe(false);
     });
 
-    it("returns false for question '我叫什么名字？'", () => {
+    it("returns false when there are no new user messages since lastExtractedAt", () => {
       const extractor = new MemoryExtractor();
-      const result = extractor.shouldExtract([makeUserMsg("我叫什么名字？")]);
+      const result = extractor.shouldExtract(
+        [userMsgAt("我喜欢红烧排骨", -60_000)],
+        { lastExtractedAt: NOW - 1000, now: NOW }
+      );
       expect(result).toBe(false);
     });
 
-    it("returns false for '你是谁' (asking about the AI)", () => {
+    it("returns false inside the cooldown window", () => {
       const extractor = new MemoryExtractor();
-      const result = extractor.shouldExtract([makeUserMsg("你是谁？")]);
+      const result = extractor.shouldExtract(
+        [userMsgAt("今天加班到很晚", -500)],
+        { lastExtractedAt: NOW - 60_000, now: NOW } // 1 min ago, cooldown is 5 min
+      );
+      expect(result).toBe(false);
+    });
+
+    it("returns true for a plain statement outside the cooldown (semantic reversal)", () => {
+      const extractor = new MemoryExtractor();
+      const result = extractor.shouldExtract(
+        [
+          userMsgAt("今天天气真不错啊", -500),
+          { role: "assistant", content: "是的，阳光很好！", timestamp: new Date(NOW - 400).toISOString() },
+        ],
+        { lastExtractedAt: 0, now: NOW }
+      );
+      expect(result).toBe(true);
+    });
+
+    it("returns true when new messages mix a question and a statement", () => {
+      const extractor = new MemoryExtractor();
+      const result = extractor.shouldExtract(
+        [
+          userMsgAt("你是谁？", -500),
+          userMsgAt("我决定以后用 pnpm", -400),
+        ],
+        { lastExtractedAt: 0, now: NOW }
+      );
+      expect(result).toBe(true);
+    });
+
+    it("an old message containing '记住' does not bypass anything", () => {
+      const extractor = new MemoryExtractor();
+      const result = extractor.shouldExtract(
+        [userMsgAt("记住我喜欢红烧排骨", -60_000)],
+        { lastExtractedAt: NOW - 1000, now: NOW }
+      );
       expect(result).toBe(false);
     });
 
     it("returns false for empty messages array", () => {
       const extractor = new MemoryExtractor();
-      const result = extractor.shouldExtract([]);
+      const result = extractor.shouldExtract([], { lastExtractedAt: 0, now: NOW });
       expect(result).toBe(false);
     });
 
-    it("returns true when keywords are in any user message, not just the last", () => {
-      const extractor = new MemoryExtractor();
-      const result = extractor.shouldExtract([
-        makeUserMsg("hello"),
-        makeAsstMsg("hi there"),
-        makeUserMsg("哦对了，我想起来一件事"),
-      ]);
+    it("honours a custom cooldownMs", () => {
+      const extractor = new MemoryExtractor({ cooldownMs: 1000 });
+      const result = extractor.shouldExtract(
+        [userMsgAt("随便聊聊", -100)],
+        { lastExtractedAt: NOW - 5000, now: NOW } // 5s ago > 1s cooldown
+      );
       expect(result).toBe(true);
     });
   });
@@ -221,6 +243,145 @@ describe("MemoryExtractor (LLM-based)", () => {
 
       const all = await store.listAll();
       expect(all).toHaveLength(2);
+    });
+
+    it("includes full existing memory content in the prompt", async () => {
+      dir = mkdtempSync(path.join(tmpdir(), "licode-llm-mem-"));
+      const store = new MemoryStore(path.join(dir, ".licode", "memory"));
+      const now = new Date().toISOString();
+      await store.save({
+        slug: "user/food-preferences",
+        type: "user",
+        name: "食物偏好",
+        description: "用户喜欢红烧排骨",
+        content: "用户喜欢红烧排骨，尤其是家常做法。",
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const extractor = new MemoryExtractor();
+      const mockChat = vi.fn().mockResolvedValue({
+        content: "[]",
+        usage: { input: 50, output: 5 },
+      });
+      (extractor as any).llm.chat = mockChat;
+
+      await extractor.extract([makeUserMsg("随便聊聊")], store);
+
+      const prompt = mockChat.mock.calls[0][0].messages[0].content as string;
+      expect(prompt).toContain("用户喜欢红烧排骨，尤其是家常做法。");
+    });
+
+    it("update action replaces the existing memory file content (contradiction handling)", async () => {
+      dir = mkdtempSync(path.join(tmpdir(), "licode-llm-mem-"));
+      const store = new MemoryStore(path.join(dir, ".licode", "memory"));
+      const now = new Date().toISOString();
+      await store.save({
+        slug: "user/food-preferences",
+        type: "user",
+        name: "食物偏好",
+        description: "用户喜欢红烧排骨",
+        content: "用户喜欢红烧排骨。",
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const extractor = new MemoryExtractor();
+      const mockChat = vi.fn().mockResolvedValue({
+        content: JSON.stringify([
+          {
+            action: "update",
+            slug: "user/food-preferences",
+            type: "user",
+            name: "食物偏好",
+            description: "用户不再吃红烧排骨",
+            content: "用户曾经喜欢红烧排骨，2026-07 起不再吃了。",
+          },
+        ]),
+        usage: { input: 100, output: 50 },
+      });
+      (extractor as any).llm.chat = mockChat;
+
+      await extractor.extract([makeUserMsg("我其实不喜欢吃红烧排骨了")], store);
+
+      const loaded = await store.load("user/food-preferences");
+      expect(loaded?.content).toBe("用户曾经喜欢红烧排骨，2026-07 起不再吃了。");
+      expect(loaded?.content).not.toContain("用户喜欢红烧排骨。");
+    });
+
+    it("calls the LLM with maxTokens 2048", async () => {
+      dir = mkdtempSync(path.join(tmpdir(), "licode-llm-mem-"));
+      const store = new MemoryStore(path.join(dir, ".licode", "memory"));
+
+      const extractor = new MemoryExtractor();
+      const mockChat = vi.fn().mockResolvedValue({
+        content: "[]",
+        usage: { input: 50, output: 5 },
+      });
+      (extractor as any).llm.chat = mockChat;
+
+      await extractor.extract([makeUserMsg("hello")], store);
+
+      expect(mockChat.mock.calls[0][0].maxTokens).toBe(2048);
+    });
+
+    it("drops invalid items and persists the valid ones", async () => {
+      dir = mkdtempSync(path.join(tmpdir(), "licode-llm-mem-"));
+      const store = new MemoryStore(path.join(dir, ".licode", "memory"));
+
+      const extractor = new MemoryExtractor();
+      const mockChat = vi.fn().mockResolvedValue({
+        content: JSON.stringify([
+          {
+            action: "create",
+            slug: "user/valid",
+            type: "user",
+            name: "Valid",
+            description: "a valid memory",
+            content: "valid content",
+          },
+          // invalid action
+          { action: "delete", slug: "user/x", type: "user", name: "X", description: "x", content: "x" },
+          // invalid type
+          { action: "create", slug: "user/bad-type", type: "invalid", name: "X", description: "x", content: "x" },
+          // slug does not start with "<type>/"
+          { action: "create", slug: "wrong/prefix", type: "user", name: "X", description: "x", content: "x" },
+        ]),
+        usage: { input: 100, output: 80 },
+      });
+      (extractor as any).llm.chat = mockChat;
+
+      await extractor.extract([makeUserMsg("一些对话")], store);
+
+      const all = await store.listAll();
+      expect(all).toHaveLength(1);
+      expect(all[0].slug).toBe("user/valid");
+    });
+
+    it("only includes messages newer than sinceMs in the prompt", async () => {
+      dir = mkdtempSync(path.join(tmpdir(), "licode-llm-mem-"));
+      const store = new MemoryStore(path.join(dir, ".licode", "memory"));
+
+      const extractor = new MemoryExtractor();
+      const mockChat = vi.fn().mockResolvedValue({
+        content: "[]",
+        usage: { input: 50, output: 5 },
+      });
+      (extractor as any).llm.chat = mockChat;
+
+      const messages: Message[] = [
+        { role: "user", content: "旧消息：我喜欢红烧排骨", timestamp: "2026-07-27T10:00:00.000Z" },
+        { role: "assistant", content: "好的，记住了", timestamp: "2026-07-27T10:00:05.000Z" },
+        { role: "user", content: "新消息：我以后都用 pnpm", timestamp: "2026-07-27T12:00:00.000Z" },
+      ];
+
+      await extractor.extract(messages, store, {
+        sinceMs: Date.parse("2026-07-27T11:00:00.000Z"),
+      });
+
+      const prompt = mockChat.mock.calls[0][0].messages[0].content as string;
+      expect(prompt).toContain("新消息：我以后都用 pnpm");
+      expect(prompt).not.toContain("旧消息：我喜欢红烧排骨");
     });
 
     it("does not throw when LLM call fails", async () => {

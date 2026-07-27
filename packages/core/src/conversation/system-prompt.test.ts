@@ -168,4 +168,20 @@ describe("loadDefaultLayers", () => {
     const layers = loadDefaultLayers(tmpDir);
     expect(layers).toEqual([]);
   });
+
+  it("loads memory-guide.md as the memory-guide layer (priority 4, optional)", () => {
+    fs.writeFileSync(
+      path.join(tmpDir, "memory-guide.md"),
+      "Memory guidance.",
+      "utf-8"
+    );
+
+    const layers = loadDefaultLayers(tmpDir);
+    const layer = layers.find((l) => l.name === "memory-guide");
+
+    expect(layer).toBeDefined();
+    expect(layer?.priority).toBe(4);
+    expect(layer?.always).toBe(false);
+    expect(layer?.content).toBe("Memory guidance.");
+  });
 });
