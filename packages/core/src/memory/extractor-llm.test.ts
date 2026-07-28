@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { MemoryExtractor } from "./extractor.js";
+import { buildRecallPair } from "./recall.js";
 import { MemoryStore } from "./store.js";
 import type { Message } from "../llm/provider.js";
 import { AnthropicProvider } from "../llm/anthropic.js";
@@ -150,6 +151,39 @@ describe("MemoryExtractor (LLM-based)", () => {
   // ── extract ──────────────────────────────────────────────────────
 
   describe("extract", () => {
+    it("excludes synthetic memory_recall messages from the extraction prompt", async () => {
+      const extractor = new MemoryExtractor();
+      const mockChat = vi.fn().mockResolvedValue({
+        content: "[]",
+        usage: { input: 1, output: 1 },
+        model: "mock",
+        stopReason: "end_turn",
+      });
+      (extractor as any).llm.chat = mockChat;
+
+      dir = mkdtempSync(path.join(tmpdir(), "extract-filter-"));
+      const store = new MemoryStore(dir);
+
+      const [tu, tr] = buildRecallPair("今晚吃什么", [
+        {
+          slug: "user/food", type: "user", name: "食物偏好",
+          description: "d", content: "c",
+          createdAt: "2026-07-28T00:00:00.000Z", updatedAt: "2026-07-28T00:00:00.000Z",
+        },
+      ]);
+      const messages: Message[] = [
+        { role: "user", content: "我喜欢吃辣的", timestamp: new Date().toISOString() },
+        tu,
+        tr,
+      ];
+      await extractor.extract(messages, store);
+
+      const prompt = mockChat.mock.calls[0][0].messages[0].content as string;
+      expect(prompt).toContain("我喜欢吃辣的");
+      expect(prompt).not.toContain("memory_recall");
+      expect(prompt).not.toContain("Recalled Memories");
+    });
+
     it("calls LLM with conversation messages and saves extracted memories", async () => {
       dir = mkdtempSync(path.join(tmpdir(), "licode-llm-mem-"));
       const store = new MemoryStore(path.join(dir, ".licode", "memory"));

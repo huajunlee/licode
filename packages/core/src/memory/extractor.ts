@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { AnthropicProvider } from "../llm/anthropic.js";
+import { pruneRecallMessages } from "./recall.js";
 import type { LLMProvider, Message } from "../llm/provider.js";
 import type { MemoryStore } from "./store.js";
 import type { Memory, MemoryType } from "./types.js";
@@ -153,7 +154,7 @@ export class MemoryExtractor {
       const indexContent = await store.loadIndex();
 
       const recent = this.selectMessages(messages, options);
-      const conversationText = this.formatMessages(recent);
+      const conversationText = this.formatMessages(pruneRecallMessages([...recent]));
 
       const prompt = this.buildPrompt(indexContent, existingMemories, conversationText);
 
