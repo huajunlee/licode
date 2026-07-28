@@ -86,3 +86,114 @@ export function buildRecallPair(
     },
   ];
 }
+
+export interface MemoryRecallConfig {
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+  /** Max memories injected per turn. Default 5. */
+  maxResults?: number;
+  /** Side-query timeout; on expiry the turn degrades to index-only. Default 10s. */
+  timeoutMs?: number;
+}
+
+const DEFAULT_MAX_RESULTS = 5;
+const DEFAULT_TIMEOUT_MS = 10_000;
+
+/**
+ * Side-query engine: given the current user message, a small model picks
+ * the most relevant memories from the on-disk MEMORY.md index. Never throws -
+ * every failure mode degrades to an empty selection (index-only recall).
+ */
+export class MemoryRecall {
+  private llm: AnthropicProvider;
+  private model: string;
+  private maxResults: number;
+  private timeoutMs: number;
+
+  constructor(config?: MemoryRecallConfig) {
+    const apiKey =
+      config?.apiKey ?? process.env.ANTHROPIC_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
+    const baseUrl =
+      config?.baseUrl ?? process.env.ANTHROPIC_BASE_URL ?? process.env.OPENAI_BASE_URL;
+    this.model = config?.model ?? "deepseek-chat";
+    this.maxResults = config?.maxResults ?? DEFAULT_MAX_RESULTS;
+    this.timeoutMs = config?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.llm = new AnthropicProvider({ apiKey, baseUrl });
+  }
+
+  async select(userQuery: string, store: MemoryStore): Promise<Memory[]> {
+    const indexContent = await store.loadIndex();
+    if (!indexContent || indexContent.trim().length === 0) return [];
+
+    const all = await store.listAll();
+    const knownSlugs = new Set(all.map((m) => m.slug));
+
+    try {
+      const response = await this.withTimeout(
+        this.llm.chat({
+          messages: [
+            { role: "user", content: this.buildPrompt(indexContent, userQuery), timestamp: new Date().toISOString() },
+          ],
+          model: this.model,
+          maxTokens: 512,
+          temperature: 0,
+        })
+      );
+      const slugs = this.parseResponse(response.content, knownSlugs).slice(0, this.maxResults);
+      const bySlug = new Map(all.map((m) => [m.slug, m]));
+      return slugs.map((s) => bySlug.get(s)!);
+    } catch {
+      return []; // LLM error or timeout -> degrade to index-only
+    }
+  }
+
+  /** Provider has no abort signal - race a timer and drop the loser. */
+  private withTimeout<T>(promise: Promise<T>): Promise<T> {
+    return Promise.race([
+      promise,
+      new Promise<T>((_, reject) =>
+        setTimeout(() => reject(new Error("memory recall timeout")), this.timeoutMs)
+      ),
+    ]);
+  }
+
+  private buildPrompt(indexContent: string, userQuery: string): string {
+    return [
+      "Given the user's current message and the memory index below,",
+      "select the memories most relevant to the message.",
+      "",
+      "## Memory index",
+      indexContent.trim(),
+      "",
+      "## User message",
+      userQuery,
+      "",
+      "## Instructions",
+      `- 输出 JSON 数组，最多 ${this.maxResults} 个 slug：["user/food-preferences", ...]`,
+      "- 只选与当前消息直接相关的记忆；无相关则输出 []",
+      "- slug 必须来自上面的索引，禁止编造",
+      "- 只输出 JSON，不要解释",
+    ].join("\n");
+  }
+
+  /** Keep only strings that name real index entries; dedupe, preserve order. */
+  private parseResponse(raw: string, knownSlugs: Set<string>): string[] {
+    try {
+      let json = raw.trim();
+      const fenceMatch = json.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+      if (fenceMatch) json = fenceMatch[1].trim();
+      const parsed = JSON.parse(json);
+      if (!Array.isArray(parsed)) return [];
+      const out: string[] = [];
+      for (const item of parsed) {
+        if (typeof item === "string" && knownSlugs.has(item) && !out.includes(item)) {
+          out.push(item);
+        }
+      }
+      return out;
+    } catch {
+      return [];
+    }
+  }
+}
