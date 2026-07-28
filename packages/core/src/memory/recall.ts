@@ -123,13 +123,13 @@ export class MemoryRecall {
   }
 
   async select(userQuery: string, store: MemoryStore): Promise<Memory[]> {
-    const indexContent = await store.loadIndex();
-    if (!indexContent || indexContent.trim().length === 0) return [];
-
-    const all = await store.listAll();
-    const knownSlugs = new Set(all.map((m) => m.slug));
-
     try {
+      const indexContent = await store.loadIndex();
+      if (!indexContent || indexContent.trim().length === 0) return [];
+
+      const all = await store.listAll();
+      const knownSlugs = new Set(all.map((m) => m.slug));
+
       const response = await this.withTimeout(
         this.llm.chat({
           messages: [
@@ -144,7 +144,7 @@ export class MemoryRecall {
       const bySlug = new Map(all.map((m) => [m.slug, m]));
       return slugs.map((s) => bySlug.get(s)!);
     } catch {
-      return []; // LLM error or timeout -> degrade to index-only
+      return []; // store read error, LLM error, or timeout -> degrade to []
     }
   }
 
