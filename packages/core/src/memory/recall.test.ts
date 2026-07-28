@@ -4,8 +4,10 @@ import {
   buildRecallPair,
   pruneRecallMessages,
   MemoryRecall,
+  createMemoryRecallHandler,
 } from "./recall.js";
 import { MemoryStore } from "./store.js";
+import { ConversationManager } from "../conversation/manager.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
@@ -173,5 +175,97 @@ describe("MemoryRecall.select", () => {
     } finally {
       rmSync(emptyDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("createMemoryRecallHandler", () => {
+  let dir: string | null = null;
+  let store: MemoryStore;
+
+  beforeEach(async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "recall-handler-"));
+    store = new MemoryStore(dir);
+    await store.save(makeMemory("user/food", "食物偏好"));
+  });
+
+  afterEach(() => {
+    if (dir) { rmSync(dir, { recursive: true, force: true }); dir = null; }
+  });
+
+  function makeManager(): ConversationManager {
+    return new ConversationManager({ model: "test-model" });
+  }
+
+  function fakeRecall(slugs: string[]) {
+    return {
+      select: vi.fn(async (_q: string, s: MemoryStore) => {
+        const all = await s.listAll();
+        return all.filter((m) => slugs.includes(m.slug));
+      }),
+    } as unknown as MemoryRecall;
+  }
+
+  it("appends the pair after the current user message", async () => {
+    const mgr = makeManager();
+    mgr.addUserMessage("今晚吃什么好？");
+    const handler = createMemoryRecallHandler({ recall: fakeRecall(["user/food"]), store });
+    await handler(mgr);
+    const msgs = mgr.getMessages();
+    expect(msgs).toHaveLength(3);
+    expect(msgs[1].role).toBe("assistant");
+    expect(Array.isArray(msgs[1].content)).toBe(true);
+    expect(msgs[2].role).toBe("user");
+    expect(Array.isArray(msgs[2].content)).toBe(true);
+  });
+
+  it("prunes the previous pair and injects the new one (at most one pair)", async () => {
+    const mgr = makeManager();
+    const handler = createMemoryRecallHandler({ recall: fakeRecall(["user/food"]), store });
+    mgr.addUserMessage("第一问");
+    await handler(mgr);                       // [U1, A1, R1]
+    mgr.addUserMessage("第二问");             // [U1, A1, R1, U2]
+    await handler(mgr);                       // prune -> [U1, U2] -> inject -> [U1, U2, A2, R2]
+    const msgs = mgr.getMessages();
+    expect(msgs).toHaveLength(4);
+    expect(msgs[0].content).toBe("第一问");
+    expect(msgs[1].content).toBe("第二问");
+    // exactly one recall pair remains: one assistant array + one user array
+    const arrayMsgs = msgs.filter((m) => Array.isArray(m.content));
+    expect(arrayMsgs).toHaveLength(2);
+    expect(arrayMsgs[0].role).toBe("assistant");
+    expect(arrayMsgs[1].role).toBe("user");
+  });
+
+  it("only prunes when selection is empty", async () => {
+    const mgr = makeManager();
+    const seeded = buildRecallPair("old", [makeMemory("user/food")]);
+    mgr.replaceMessages([...seeded]);
+    mgr.addUserMessage("无关问题");
+    const handler = createMemoryRecallHandler({ recall: fakeRecall([]), store });
+    await handler(mgr);
+    const msgs = mgr.getMessages();
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0].content).toBe("无关问题");
+  });
+
+  it("refreshes the memory index layer only when content changed", async () => {
+    const mgr = makeManager();
+    const addLayerSpy = vi.spyOn(mgr.systemPrompt, "addLayer");
+    const handler = createMemoryRecallHandler({ recall: fakeRecall([]), store });
+    mgr.addUserMessage("q1");
+    await handler(mgr);
+    expect(addLayerSpy).toHaveBeenCalledTimes(1);
+    expect(addLayerSpy.mock.calls[0][0]).toMatchObject({ name: "memory", priority: 5 });
+    mgr.addUserMessage("q2");
+    await handler(mgr);
+    expect(addLayerSpy).toHaveBeenCalledTimes(1); // unchanged -> not called again
+  });
+
+  it("never throws even when select rejects", async () => {
+    const mgr = makeManager();
+    mgr.addUserMessage("q");
+    const broken = { select: vi.fn().mockRejectedValue(new Error("boom")) } as unknown as MemoryRecall;
+    const handler = createMemoryRecallHandler({ recall: broken, store });
+    await expect(handler(mgr)).resolves.toBeUndefined();
   });
 });

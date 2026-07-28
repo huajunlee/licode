@@ -197,3 +197,63 @@ export class MemoryRecall {
     }
   }
 }
+
+/**
+ * Build the AgentConfig.onTurnStart callback for memory recall.
+ * Per turn: refresh the index layer (content-changed only) -> prune the
+ * previous recall pair -> select -> append the new pair after the current
+ * user message. Best-effort: never throws.
+ */
+export function createMemoryRecallHandler(deps: {
+  recall: MemoryRecall;
+  store: MemoryStore;
+}): (conversation: ConversationManager) => Promise<void> {
+  const { recall, store } = deps;
+  let lastIndexContent: string | null = null;
+
+  return async (conversation: ConversationManager) => {
+    try {
+      // 1. Refresh the index layer so memories written this session become
+      //    visible in the system prompt from the next turn.
+      try {
+        const indexContent = (await store.loadIndex()).trim();
+        if (indexContent && indexContent !== lastIndexContent) {
+          conversation.systemPrompt.addLayer({
+            name: "memory",
+            priority: 5,
+            always: false,
+            content: indexContent,
+          });
+          lastIndexContent = indexContent;
+        }
+      } catch {
+        // keep the previous layer content
+      }
+
+      // 2. Prune the previous recall pair (at most one pair in history).
+      const before = conversation.getMessages();
+      const pruned = pruneRecallMessages([...before]);
+      if (pruned.length !== before.length) {
+        conversation.replaceMessages(pruned);
+      }
+
+      // 3. Select against the current user message (the one addUserMessage
+      //    just appended) and append the fresh pair after it.
+      const messages = conversation.getMessages();
+      const last = messages[messages.length - 1];
+      const query =
+        last && last.role === "user" && typeof last.content === "string"
+          ? last.content
+          : "";
+      if (!query) return;
+
+      const memories = await recall.select(query, store);
+      if (memories.length === 0) return;
+
+      const [toolUse, toolResult] = buildRecallPair(query, memories);
+      conversation.replaceMessages([...conversation.getMessages(), toolUse, toolResult]);
+    } catch {
+      // recall is best-effort - never break the agent loop
+    }
+  };
+}
