@@ -160,8 +160,8 @@ export class MemoryRecall {
 
   private buildPrompt(indexContent: string, userQuery: string): string {
     return [
-      "Given the user's current message and the memory index below,",
-      "select the memories most relevant to the message.",
+      "You are a STRICT memory-recall filter. Given the user's current message and the memory index,",
+      "decide which memories to recall. 默认不召回任何记忆；不满足下列相关性条件的一律输出 []。",
       "",
       "## Memory index",
       indexContent.trim(),
@@ -169,11 +169,23 @@ export class MemoryRecall {
       "## User message",
       userQuery,
       "",
-      "## Instructions",
-      `- 输出 JSON 数组，最多 ${this.maxResults} 个 slug：["user/food-preferences", ...]`,
-      "- 只选与当前消息直接相关的记忆；无相关则输出 []",
-      "- slug 必须来自上面的索引，禁止编造",
-      "- 只输出 JSON，不要解释",
+      "## 满足以下任意一条，该记忆才算相关",
+      "1. 该记忆包含当前请求明确需要使用的用户信息：用户明确表达的偏好、用户明确提出的约束、用户过去已确定的方案/选择/决策。",
+      "2. 用户主动要求回忆已存在的记忆，且缺少该记忆会导致回答出现明显偏差、无法满足用户真实需求（如按之前约定的技术方案继续、基于个人偏好推荐、遵守之前声明的限制条件）。",
+      '3. 当前请求明确是在继续该记忆对应的历史任务/讨论/上下文，例如"继续之前的设计"、"按照上次的方案修改"、"刚才那个问题继续"。',
+      "",
+      "## 以下情况不算相关（不要召回）",
+      "- 仅关键词或主题相似",
+      "- 仅属于同一技术领域",
+      "- 该记忆只能提供额外背景，但删除后当前回答仍然成立",
+      "",
+      "## Output",
+      `- 输出 JSON 数组，0 到 ${this.maxResults} 个 slug，如 ["user/food-preferences"]；无相关则输出 []。`,
+      "- slug 必须来自上面的索引，禁止编造；只输出 JSON，不要解释。",
+      "",
+      "## Examples",
+      '用户消息"帮我查一下天气" -> []（仅关键词相似，记忆并非关于天气）',
+      '用户消息"今晚吃什么好？"（索引含食物偏好记忆）-> ["user/food-preferences"]（明确需要用户偏好）',
     ].join("\n");
   }
 

@@ -132,6 +132,16 @@ describe("MemoryRecall.select", () => {
     expect(prompt).toContain("今晚吃什么好？");
   });
 
+  it("prompt encodes explicit relevance criteria and exclusion cases", async () => {
+    const { recall, mockChat } = mockChatReturning("[]");
+    await recall.select("q", store);
+    const prompt = mockChat.mock.calls[0][0].messages[0].content as string;
+    expect(prompt).toContain("满足以下任意一条");    // positive criteria header
+    expect(prompt).toContain("不算相关");             // exclusion header
+    expect(prompt).toContain("仅关键词或主题相似");   // a concrete exclusion
+    expect(prompt).toContain("默认");                 // default-empty bias
+  });
+
   it("filters hallucinated slugs and tolerates code fences", async () => {
     const { recall } = mockChatReturning('```json\n["user/food", "user/ghost"]\n```');
     const result = await recall.select("q", store);
