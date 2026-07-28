@@ -353,6 +353,28 @@ describe("MemoryRecall.select", () => {
       rmSync(emptyDir, { recursive: true, force: true });
     }
   });
+
+  // Contract: select() never rejects - every failure mode degrades to [].
+  // loadIndex()/listAll() read the filesystem and can throw on a race or
+  // EACCES; they must be covered by the never-rejects guard, not just the
+  // LLM/timeout path. (Phase 4 usage-counting will hang off this return.)
+  it("never rejects when store.loadIndex() throws (file race / EACCES)", async () => {
+    const failingStore = {
+      loadIndex: vi.fn().mockRejectedValue(new Error("EACCES")),
+      listAll: vi.fn().mockResolvedValue([]),
+    } as unknown as MemoryStore;
+    const recall = new MemoryRecall();
+    await expect(recall.select("q", failingStore)).resolves.toEqual([]);
+  });
+
+  it("never rejects when store.listAll() throws (file race / EACCES)", async () => {
+    const failingStore = {
+      loadIndex: vi.fn().mockResolvedValue("# index"),
+      listAll: vi.fn().mockRejectedValue(new Error("EACCES")),
+    } as unknown as MemoryStore;
+    const recall = new MemoryRecall();
+    await expect(recall.select("q", failingStore)).resolves.toEqual([]);
+  });
 });
 ```
 
@@ -402,13 +424,13 @@ export class MemoryRecall {
   }
 
   async select(userQuery: string, store: MemoryStore): Promise<Memory[]> {
-    const indexContent = await store.loadIndex();
-    if (!indexContent || indexContent.trim().length === 0) return [];
-
-    const all = await store.listAll();
-    const knownSlugs = new Set(all.map((m) => m.slug));
-
     try {
+      const indexContent = await store.loadIndex();
+      if (!indexContent || indexContent.trim().length === 0) return [];
+
+      const all = await store.listAll();
+      const knownSlugs = new Set(all.map((m) => m.slug));
+
       const response = await this.withTimeout(
         this.llm.chat({
           messages: [
@@ -423,7 +445,7 @@ export class MemoryRecall {
       const bySlug = new Map(all.map((m) => [m.slug, m]));
       return slugs.map((s) => bySlug.get(s)!);
     } catch {
-      return []; // LLM error or timeout → degrade to index-only
+      return []; // store read error, LLM error, or timeout -> degrade to []
     }
   }
 
