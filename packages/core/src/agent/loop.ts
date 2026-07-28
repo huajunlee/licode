@@ -19,6 +19,13 @@ export interface AgentConfig {
   tools: ToolRegistry;
   termination?: TerminationConfig;
   eventBus?: EventBus;
+  /**
+   * Optional per-turn hook: fires once in run() after the user message is
+   * appended and before the first LLM call. Errors are swallowed - the
+   * loop must never break because of it. (Phase 2 memory recall injects
+   * here.)
+   */
+  onTurnStart?: (conversation: ConversationManager) => Promise<void>;
 }
 
 export class AgentLoop {
@@ -28,6 +35,7 @@ export class AgentLoop {
   private executor: ToolExecutor;
   private termination: TerminationPolicy;
   private eventBus?: EventBus;
+  private onTurnStart?: (conversation: ConversationManager) => Promise<void>;
 
   constructor(config: AgentConfig) {
     this.llm = config.llm;
@@ -36,10 +44,18 @@ export class AgentLoop {
     this.executor = new ToolExecutor(config.tools);
     this.termination = new TerminationPolicy(config.termination ?? {});
     this.eventBus = config.eventBus;
+    this.onTurnStart = config.onTurnStart;
   }
 
   async run(userInput: string): Promise<PipelineEvent> {
     this.conversation.addUserMessage(userInput);
+    if (this.onTurnStart) {
+      try {
+        await this.onTurnStart(this.conversation);
+      } catch {
+        // best-effort hook - never break the loop
+      }
+    }
     this.eventBus?.emit({ type: "agent-loop-start" });
 
     let stepIndex = 0;
