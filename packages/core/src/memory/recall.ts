@@ -160,8 +160,8 @@ export class MemoryRecall {
 
   private buildPrompt(indexContent: string, userQuery: string): string {
     return [
-      "Given the user's current message and the memory index below,",
-      "select the memories most relevant to the message.",
+      "You are a STRICT memory-recall filter. Given the user's current message and the memory index,",
+      "decide which memories DIRECTLY help answer THIS message.",
       "",
       "## Memory index",
       indexContent.trim(),
@@ -169,11 +169,17 @@ export class MemoryRecall {
       "## User message",
       userQuery,
       "",
-      "## Instructions",
-      `- 输出 JSON 数组，最多 ${this.maxResults} 个 slug：["user/food-preferences", ...]`,
-      "- 只选与当前消息直接相关的记忆；无相关则输出 []",
-      "- slug 必须来自上面的索引，禁止编造",
-      "- 只输出 JSON，不要解释",
+      "## Rules",
+      "- 只选出与当前消息【直接相关】的记忆：该记忆能直接回答、或为当前请求提供必要上下文。",
+      "- 仅话题或关键词重合不算相关。例：消息问天气，某记忆内容恰好提到天气冷，但该记忆本身并非关于天气（如食物偏好），则不选。",
+      "- 询问外部/实时信息（天气、新闻、时间、股价、查文件、事实查询）时，除非某条记忆直接回答了该问题，否则输出 []。",
+      "- 宁可漏选，不可错选；不确定时一律输出 []。",
+      `- 输出 JSON 数组，0 到 ${this.maxResults} 个 slug，如 ["user/food-preferences"]；无相关则输出 []。`,
+      "- slug 必须来自上面的索引，禁止编造；只输出 JSON，不要解释。",
+      "",
+      "## Examples",
+      '用户消息"帮我查一下天气" -> []',
+      '用户消息"今晚吃什么好？"（索引含食物偏好记忆）-> ["user/food-preferences"]',
     ].join("\n");
   }
 
