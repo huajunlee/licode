@@ -19,6 +19,8 @@ import {
   MemoryStore,
   MemoryLoader,
   MemoryExtractor,
+  MemoryRecall,
+  createMemoryRecallHandler,
   createMemoryExtractionHook,
   createMemoryExtractionState,
   emitAfterAgentLoop,
@@ -219,6 +221,14 @@ export function useConversation(
   const memoryExtractionStateRef = useRef<MemoryExtractionState>(
     createMemoryExtractionState()
   );
+  // Phase 2: per-turn memory recall (side query -> synthetic tool_call pair).
+  // Same model tier as extraction; disabled via LICODE_MEMORY_RECALL=off.
+  const memoryRecallHandlerRef = useRef(
+    createMemoryRecallHandler({
+      recall: new MemoryRecall({ apiKey, baseUrl, model }),
+      store: memoryStoreRef.current,
+    })
+  );
 
   useEffect(() => {
     if (!apiKey) return;
@@ -377,6 +387,9 @@ export function useConversation(
                   conversation: manager,
                   tools,
                   eventBus,
+                  ...(process.env.LICODE_MEMORY_RECALL === "off"
+                    ? {}
+                    : { onTurnStart: memoryRecallHandlerRef.current }),
                 })
               )
               // after:agentLoop fires shell hooks + in-process function hooks (e.g. memory extraction)
@@ -430,6 +443,9 @@ export function useConversation(
               conversation: manager,
               tools,
               eventBus,
+              ...(process.env.LICODE_MEMORY_RECALL === "off"
+                ? {}
+                : { onTurnStart: memoryRecallHandlerRef.current }),
             })
           )
           // after:agentLoop fires shell hooks + in-process function hooks (e.g. memory extraction)

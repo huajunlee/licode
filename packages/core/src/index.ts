@@ -119,6 +119,8 @@ export { RegexMemoryExtractor } from "./memory/extractor-regex.js";    // @depre
 export { memoryMiddleware } from "./memory/middleware.js";             // @deprecated
 export { createMemoryExtractionHook, createMemoryExtractionState } from "./memory/hook.js"; // in-process hook
 export type { MemoryExtractionHookFn, MemoryExtractionState } from "./memory/hook.js";
+export { MemoryRecall, MEMORY_RECALL_TOOL_NAME, pruneRecallMessages, buildRecallPair, createMemoryRecallHandler } from "./memory/recall.js"; // Phase 2: side-query recall
+export type { MemoryRecallConfig } from "./memory/recall.js";
 export type { Memory, MemoryType, MemoryEntry } from "./memory/types.js";
 export { toSlug } from "./memory/types.js";
 export { SessionManager } from "./session/manager.js";
