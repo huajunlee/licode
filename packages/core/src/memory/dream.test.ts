@@ -10,6 +10,8 @@ import {
   readState,
   writeState,
 } from "./dream.js";
+import { MemoryStore } from "./store.js";
+import type { Memory } from "./types.js";
 
 vi.mock("../llm/anthropic.js", () => ({
   AnthropicProvider: vi.fn().mockImplementation(() => ({
@@ -20,6 +22,18 @@ vi.mock("../llm/anthropic.js", () => ({
     countTokens: vi.fn(() => 0),
   })),
 }));
+
+function makeMemory(slug: string): Memory {
+  return {
+    slug,
+    type: slug.split("/")[0] as Memory["type"],
+    name: slug,
+    description: `${slug} desc`,
+    content: `${slug} 正文`,
+    createdAt: "2026-07-01T00:00:00Z",
+    updatedAt: "2026-07-01T00:00:00Z",
+  };
+}
 
 describe("lock & state files", () => {
   let dir: string;
@@ -130,5 +144,119 @@ describe("MemoryDream.shouldDream", () => {
     const dream = new MemoryDream({ minIntervalMs: 1000, minNewSessions: 1 });
     await writeState(path.join(memoryDir, ".dream.state"), Date.now() - 2000);
     expect(await dream.shouldDream(sessionsDir, memoryDir)).toBe(false);
+  });
+});
+
+describe("MemoryDream.orient", () => {
+  it("parses suspicions and includes existing memory content in the prompt", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "dream-orient-"));
+    try {
+      const store = new MemoryStore(dir);
+      await store.save(makeMemory("user/food"));
+      const dream = new MemoryDream();
+      (dream as any).llm.chat = vi.fn().mockResolvedValue({
+        content: '```json\n[{"slug":"user/food","keywords":["红烧排骨","喜欢"],"reason":"可能漂移"}]\n```',
+        usage: { input: 1, output: 1 },
+        model: "mock",
+        stopReason: "end_turn",
+      });
+      const suspicions = await (dream as any).orient(store);
+      expect(suspicions).toEqual([
+        { slug: "user/food", keywords: ["红烧排骨", "喜欢"], reason: "可能漂移" },
+      ]);
+      const prompt = (dream as any).llm.chat.mock.calls[0][0].messages[0].content as string;
+      expect(prompt).toContain("user/food 正文");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("drops suspicions with hallucinated slugs", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "dream-orient2-"));
+    try {
+      const store = new MemoryStore(dir);
+      await store.save(makeMemory("user/food"));
+      const dream = new MemoryDream();
+      (dream as any).llm.chat = vi.fn().mockResolvedValue({
+        content: '[{"slug":"user/ghost","keywords":["x"],"reason":"r"}]',
+        usage: { input: 1, output: 1 },
+        model: "mock",
+        stopReason: "end_turn",
+      });
+      expect(await (dream as any).orient(store)).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("MemoryDream.gather", () => {
+  it("only searches messages newer than lastConsolidatedAt and captures keyword hits + neighbor", async () => {
+    const sessionsDir = mkdtempSync(path.join(tmpdir(), "dream-gather-"));
+    try {
+      const oldTs = "2026-07-01T00:00:00Z";
+      const newTs = new Date().toISOString();
+      writeFileSync(
+        path.join(sessionsDir, "s1.json"),
+        JSON.stringify({
+          id: "s1",
+          createdAt: oldTs,
+          updatedAt: newTs,
+          model: "m",
+          totalTokens: 0,
+          messageCount: 3,
+          systemPromptLayers: [],
+          metadata: { model: "m", createdAt: oldTs, updatedAt: newTs },
+          messages: [
+            { role: "user", content: "旧消息 红烧排骨", timestamp: oldTs },
+            { role: "assistant", content: "好的", timestamp: oldTs },
+            { role: "user", content: "我现在不喜欢红烧排骨了", timestamp: newTs },
+          ],
+        })
+      );
+      const dream = new MemoryDream();
+      const evidence = await (dream as any).gather(
+        [{ slug: "user/food", keywords: ["红烧排骨"], reason: "r" }],
+        sessionsDir,
+        Date.parse("2026-07-15T00:00:00Z")
+      );
+      const snippets = evidence.get("user/food");
+      expect(snippets).toBeDefined();
+      expect(snippets.length).toBeGreaterThan(0);
+      expect(snippets[0]).toContain("不喜欢红烧排骨");
+      expect(snippets[0]).not.toContain("旧消息"); // 旧消息不进证据（除非作为相邻上下文）
+    } finally {
+      rmSync(sessionsDir, { recursive: true, force: true });
+    }
+  });
+
+  it("returns empty map when no keyword hits", async () => {
+    const sessionsDir = mkdtempSync(path.join(tmpdir(), "dream-gather2-"));
+    try {
+      const newTs = new Date().toISOString();
+      writeFileSync(
+        path.join(sessionsDir, "s1.json"),
+        JSON.stringify({
+          id: "s1",
+          createdAt: newTs,
+          updatedAt: newTs,
+          model: "m",
+          totalTokens: 0,
+          messageCount: 1,
+          systemPromptLayers: [],
+          metadata: { model: "m", createdAt: newTs, updatedAt: newTs },
+          messages: [{ role: "user", content: "无关内容", timestamp: newTs }],
+        })
+      );
+      const dream = new MemoryDream();
+      const evidence = await (dream as any).gather(
+        [{ slug: "user/food", keywords: ["红烧排骨"], reason: "r" }],
+        sessionsDir,
+        Date.now() - 2000
+      );
+      expect(evidence.size).toBe(0);
+    } finally {
+      rmSync(sessionsDir, { recursive: true, force: true });
+    }
   });
 });
