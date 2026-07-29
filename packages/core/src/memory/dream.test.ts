@@ -5,6 +5,7 @@ import * as path from "node:path";
 import {
   createMemoryDreamState,
   MemoryDream,
+  createMemoryDreamHook,
   acquireLock,
   releaseLock,
   readState,
@@ -12,6 +13,7 @@ import {
 } from "./dream.js";
 import { MemoryStore } from "./store.js";
 import type { Memory } from "./types.js";
+import type { PipelineEvent } from "../events/types.js";
 
 vi.mock("../llm/anthropic.js", () => ({
   AnthropicProvider: vi.fn().mockImplementation(() => ({
@@ -358,5 +360,123 @@ describe("MemoryDream.dream (consolidate + prune)", () => {
     (dream as any).llm.chat = vi.fn().mockRejectedValue(new Error("boom"));
     await expect(dream.dream(store, sessionsDir, memoryDir)).resolves.toBeUndefined();
     expect(await readState(path.join(memoryDir, ".dream.state"))).toBe(0);
+  });
+});
+
+describe("createMemoryDreamHook", () => {
+  let memoryDir: string;
+  let sessionsDir: string;
+  beforeEach(() => {
+    memoryDir = mkdtempSync(path.join(tmpdir(), "dream-hook-mem-"));
+    sessionsDir = mkdtempSync(path.join(tmpdir(), "dream-hook-ses-"));
+  });
+  afterEach(() => {
+    rmSync(memoryDir, { recursive: true, force: true });
+    rmSync(sessionsDir, { recursive: true, force: true });
+  });
+
+  function makeEvent(): PipelineEvent {
+    return { type: "agent-loop-complete" } as unknown as PipelineEvent;
+  }
+
+  function seedNewSession(): void {
+    const ts = new Date().toISOString();
+    writeFileSync(
+      path.join(sessionsDir, "s1.json"),
+      JSON.stringify({
+        id: "s1",
+        createdAt: ts,
+        updatedAt: ts,
+        model: "m",
+        totalTokens: 0,
+        messageCount: 0,
+        systemPromptLayers: [],
+        messages: [],
+        metadata: { model: "m", createdAt: ts, updatedAt: ts },
+      })
+    );
+  }
+
+  it("does not dream when shouldDream is false", async () => {
+    const dream = new MemoryDream({ minIntervalMs: 24 * 3600 * 1000, minNewSessions: 5 });
+    const spy = vi.spyOn(dream, "dream").mockResolvedValue(undefined);
+    const state = createMemoryDreamState();
+    const onStateChange = vi.fn();
+    const hook = createMemoryDreamHook({
+      dream,
+      store: new MemoryStore(memoryDir),
+      state,
+      sessionsDir,
+      memoryDir,
+      onStateChange,
+    });
+    await hook(makeEvent());
+    expect(spy).not.toHaveBeenCalled();
+    expect(onStateChange).not.toHaveBeenCalled();
+  });
+
+  it("fires dream fire-and-forget and signals state on start/end", async () => {
+    const dream = new MemoryDream({ minIntervalMs: 1, minNewSessions: 1 });
+    seedNewSession();
+    await writeState(path.join(memoryDir, ".dream.state"), Date.now() - 2000);
+    const spy = vi.spyOn(dream, "dream").mockImplementation(async () => {});
+    const state = createMemoryDreamState();
+    const onStateChange = vi.fn();
+    const hook = createMemoryDreamHook({
+      dream,
+      store: new MemoryStore(memoryDir),
+      state,
+      sessionsDir,
+      memoryDir,
+      onStateChange,
+    });
+    await hook(makeEvent()); // fire-and-forget: hook returns immediately
+    await new Promise((r) => setTimeout(r, 50)); // let background dream settle
+    expect(spy).toHaveBeenCalled();
+    expect(onStateChange).toHaveBeenCalledWith(true);
+    expect(onStateChange).toHaveBeenCalledWith(false);
+    expect(state.running).toBe(false);
+    expect(await acquireLock(path.join(memoryDir, ".dream.lock"), 30000)).toBe(true); // 锁已释放
+  });
+
+  it("skips when already running (mutex)", async () => {
+    const dream = new MemoryDream({ minIntervalMs: 1, minNewSessions: 1 });
+    seedNewSession();
+    await writeState(path.join(memoryDir, ".dream.state"), Date.now() - 2000);
+    let resolveDream: () => void = () => {};
+    const spy = vi.spyOn(dream, "dream").mockImplementation(
+      () => new Promise<void>((r) => {
+        resolveDream = r;
+      })
+    );
+    const state = createMemoryDreamState();
+    const hook = createMemoryDreamHook({
+      dream,
+      store: new MemoryStore(memoryDir),
+      state,
+      sessionsDir,
+      memoryDir,
+      onStateChange: () => {},
+    });
+    await hook(makeEvent());
+    await hook(makeEvent()); // 第二次：running，应跳过
+    expect(spy).toHaveBeenCalledTimes(1);
+    resolveDream();
+    await new Promise((r) => setTimeout(r, 20));
+  });
+
+  it("ignores non agent-loop-complete events", async () => {
+    const dream = new MemoryDream();
+    const spy = vi.spyOn(dream, "dream").mockResolvedValue(undefined);
+    const hook = createMemoryDreamHook({
+      dream,
+      store: new MemoryStore(memoryDir),
+      state: createMemoryDreamState(),
+      sessionsDir,
+      memoryDir,
+      onStateChange: () => {},
+    });
+    await hook({ type: "user-message" } as unknown as PipelineEvent);
+    expect(spy).not.toHaveBeenCalled();
   });
 });

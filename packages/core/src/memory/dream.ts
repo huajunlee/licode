@@ -4,6 +4,7 @@ import { AnthropicProvider } from "../llm/anthropic.js";
 import { ConversationManager } from "../conversation/manager.js";
 import type { MemoryStore, MemoryAction } from "./store.js";
 import type { Memory, MemoryType } from "./types.js";
+import type { PipelineEvent } from "../events/types.js";
 
 const DEFAULT_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
 const DEFAULT_MIN_NEW_SESSIONS = 5;
@@ -540,4 +541,41 @@ function messageText(m: { content: unknown }): string {
       .join(" ");
   }
   return "";
+}
+
+/**
+ * after:agentLoop hook: on agent-loop-complete, if shouldDream + lock acquired,
+ * fire-and-forget dream(). The hook returns immediately (does NOT await dream),
+ * so the user is never blocked. onStateChange signals the TUI indicator.
+ */
+export function createMemoryDreamHook(deps: {
+  dream: MemoryDream;
+  store: MemoryStore;
+  state: DreamState;
+  sessionsDir: string;
+  memoryDir: string;
+  onStateChange?: (running: boolean) => void;
+}): (event: PipelineEvent) => Promise<void> {
+  const { dream, store, state, sessionsDir, memoryDir, onStateChange } = deps;
+  const lockPath = path.join(memoryDir, ".dream.lock");
+  return async (event: PipelineEvent) => {
+    if (event.type !== "agent-loop-complete") return;
+    if (state.running) return;
+    if (!(await dream.shouldDream(sessionsDir, memoryDir))) return;
+    if (!(await acquireLock(lockPath))) return;
+
+    state.running = true;
+    onStateChange?.(true);
+    // fire-and-forget - do NOT await; the hook must return immediately.
+    dream
+      .dream(store, sessionsDir, memoryDir)
+      .catch(() => {
+        /* dream() never rejects, but guard anyway */
+      })
+      .finally(async () => {
+        state.running = false;
+        onStateChange?.(false);
+        await releaseLock(lockPath);
+      });
+  };
 }
