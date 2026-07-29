@@ -23,6 +23,9 @@ import {
   createMemoryRecallHandler,
   createMemoryExtractionHook,
   createMemoryExtractionState,
+  MemoryDream,
+  createMemoryDreamHook,
+  createMemoryDreamState,
   emitAfterAgentLoop,
 } from "@licode/core";
 import type {
@@ -32,6 +35,7 @@ import type {
   EventBus,
   InitializedExtensions,
   MemoryExtractionState,
+  DreamState,
 } from "@licode/core";
 import type { ThinkingBlock } from "./components/thinking-accordion.js";
 import { inferPurpose } from "./components/thinking-accordion.js";
@@ -57,6 +61,8 @@ export interface UseConversationResult {
   commandMessage: string | null;
   /** Available slash commands and skills for autocomplete */
   slashCommands: Array<{ name: string; description: string }>;
+  /** True while a memory dream consolidation is running in the background. */
+  isDreaming: boolean;
   handleSubmit: (input: string) => Promise<void>;
 }
 
@@ -208,6 +214,7 @@ export function useConversation(
   const [activeToolCalls, setActiveToolCalls] = useState<ToolCallState[]>([]);
   const [commandMessage, setCommandMessage] = useState<string | null>(null);
   const [slashCommands, setSlashCommands] = useState<Array<{ name: string; description: string }>>([]);
+  const [isDreaming, setIsDreaming] = useState(false);
 
   const commandRouterRef = useRef<CommandRouter>(new CommandRouter());
   const memoryStoreRef = useRef<MemoryStore>(
@@ -228,6 +235,23 @@ export function useConversation(
       recall: new MemoryRecall({ apiKey, baseUrl, model }),
       store: memoryStoreRef.current,
     })
+  );
+  // Phase 3: dream consolidation (after:agentLoop, fire-and-forget).
+  // Shared with the extraction hook so extraction yields while dreaming.
+  const memoryDreamStateRef = useRef<DreamState>(createMemoryDreamState());
+  const dreamMemoryDir = path.join(process.cwd(), ".licode", "memory");
+  const dreamSessionsDir = path.join(process.cwd(), ".licode", "sessions");
+  const memoryDreamHookRef = useRef(
+    process.env.LICODE_MEMORY_DREAM === "off"
+      ? null
+      : createMemoryDreamHook({
+          dream: new MemoryDream({ apiKey, baseUrl, model }),
+          store: memoryStoreRef.current,
+          state: memoryDreamStateRef.current,
+          sessionsDir: dreamSessionsDir,
+          memoryDir: dreamMemoryDir,
+          onStateChange: setIsDreaming,
+        })
   );
 
   useEffect(() => {
@@ -288,11 +312,24 @@ export function useConversation(
           memoryExtractorRef.current,
           memoryStoreRef.current,
           manager,
-          memoryExtractionStateRef.current
+          memoryExtractionStateRef.current,
+          memoryDreamStateRef.current
         ),
         resolvedPosition: "after:agentLoop",
         blocking: false,
       });
+
+      // Register in-process memory dream hook (Phase 3)
+      // Fires after each agent loop, fire-and-forget; disabled via LICODE_MEMORY_DREAM=off.
+      if (memoryDreamHookRef.current) {
+        extensions.hooks.register({
+          name: "memory-dream",
+          events: ["agent-loop-complete"],
+          fn: memoryDreamHookRef.current,
+          resolvedPosition: "after:agentLoop",
+          blocking: false,
+        });
+      }
 
       // Populate slash commands for autocomplete (commands + skills)
       const cmds = extensions.commands.list().map((c) => ({
@@ -493,6 +530,7 @@ export function useConversation(
     activeToolCalls,
     commandMessage,
     slashCommands,
+    isDreaming,
     handleSubmit,
   };
 }
