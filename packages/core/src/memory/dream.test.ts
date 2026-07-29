@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import {
@@ -258,5 +258,105 @@ describe("MemoryDream.gather", () => {
     } finally {
       rmSync(sessionsDir, { recursive: true, force: true });
     }
+  });
+});
+
+function fsExists(p: string): boolean {
+  try {
+    return existsSync(p);
+  } catch {
+    return false;
+  }
+}
+
+describe("MemoryDream.dream (consolidate + prune)", () => {
+  let memoryDir: string;
+  let sessionsDir: string;
+  beforeEach(() => {
+    memoryDir = mkdtempSync(path.join(tmpdir(), "dream-c-mem-"));
+    sessionsDir = mkdtempSync(path.join(tmpdir(), "dream-c-ses-"));
+  });
+  afterEach(() => {
+    rmSync(memoryDir, { recursive: true, force: true });
+    rmSync(sessionsDir, { recursive: true, force: true });
+  });
+
+  it("applies update from consolidate and updates state on success", async () => {
+    const store = new MemoryStore(memoryDir);
+    await store.save(makeMemory("user/food"));
+    const dream = new MemoryDream({ minIntervalMs: 1, minNewSessions: 1 });
+    (dream as any).llm.chat = vi
+      .fn()
+      .mockResolvedValueOnce({
+        content: '[{"slug":"user/food","keywords":["红烧排骨"],"reason":"r"}]',
+        usage: { input: 1, output: 1 },
+        model: "mock",
+        stopReason: "end_turn",
+      })
+      .mockResolvedValueOnce({
+        content:
+          '[{"action":"update","slug":"user/food","type":"user","name":"食物偏好","description":"d","content":"不喜欢红烧排骨"}]',
+        usage: { input: 1, output: 1 },
+        model: "mock",
+        stopReason: "end_turn",
+      });
+    await dream.dream(store, sessionsDir, memoryDir);
+    const updated = await store.load("user/food");
+    expect(updated?.content).toBe("不喜欢红烧排骨");
+    expect(await readState(path.join(memoryDir, ".dream.state"))).toBeGreaterThan(0);
+  });
+
+  it("backs up before delete and removes the file", async () => {
+    const store = new MemoryStore(memoryDir);
+    await store.save(makeMemory("user/food"));
+    const dream = new MemoryDream({ minIntervalMs: 1, minNewSessions: 1 });
+    (dream as any).llm.chat = vi
+      .fn()
+      .mockResolvedValueOnce({
+        content: '[{"slug":"user/food","keywords":["x"],"reason":"r"}]',
+        usage: { input: 1, output: 1 },
+        model: "mock",
+        stopReason: "end_turn",
+      })
+      .mockResolvedValueOnce({
+        content: '[{"action":"delete","slug":"user/food","reason":"失效"}]',
+        usage: { input: 1, output: 1 },
+        model: "mock",
+        stopReason: "end_turn",
+      });
+    await dream.dream(store, sessionsDir, memoryDir);
+    expect(await store.load("user/food")).toBeNull();
+    expect(fsExists(path.join(memoryDir, ".dream-backup", "user", "food.md"))).toBe(true);
+  });
+
+  it("drops delete ops with hallucinated slug (no backup, no delete)", async () => {
+    const store = new MemoryStore(memoryDir);
+    await store.save(makeMemory("user/food"));
+    const dream = new MemoryDream({ minIntervalMs: 1, minNewSessions: 1 });
+    (dream as any).llm.chat = vi
+      .fn()
+      .mockResolvedValueOnce({
+        content: '[{"slug":"user/food","keywords":["x"],"reason":"r"}]',
+        usage: { input: 1, output: 1 },
+        model: "mock",
+        stopReason: "end_turn",
+      })
+      .mockResolvedValueOnce({
+        content: '[{"action":"delete","slug":"user/ghost","reason":"r"}]',
+        usage: { input: 1, output: 1 },
+        model: "mock",
+        stopReason: "end_turn",
+      });
+    await dream.dream(store, sessionsDir, memoryDir);
+    expect(await store.load("user/food")).not.toBeNull();
+  });
+
+  it("never rejects when LLM throws (state not updated)", async () => {
+    const store = new MemoryStore(memoryDir);
+    await store.save(makeMemory("user/food"));
+    const dream = new MemoryDream({ minIntervalMs: 1, minNewSessions: 1, timeoutMs: 50 });
+    (dream as any).llm.chat = vi.fn().mockRejectedValue(new Error("boom"));
+    await expect(dream.dream(store, sessionsDir, memoryDir)).resolves.toBeUndefined();
+    expect(await readState(path.join(memoryDir, ".dream.state"))).toBe(0);
   });
 });

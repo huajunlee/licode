@@ -2,8 +2,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { AnthropicProvider } from "../llm/anthropic.js";
 import { ConversationManager } from "../conversation/manager.js";
-import type { MemoryStore } from "./store.js";
-import type { Memory } from "./types.js";
+import type { MemoryStore, MemoryAction } from "./store.js";
+import type { Memory, MemoryType } from "./types.js";
 
 const DEFAULT_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
 const DEFAULT_MIN_NEW_SESSIONS = 5;
@@ -133,21 +133,18 @@ export class MemoryDream {
     const all = await store.listAll();
     const index = await store.loadIndex();
     const prompt = this.buildOrientPrompt(index, all);
-    try {
-      const response = await this.withTimeout(
-        this.llm.chat({
-          messages: [
-            { role: "user", content: prompt, timestamp: new Date().toISOString() },
-          ],
-          model: this.model,
-          maxTokens: 1024,
-          temperature: 0,
-        })
-      );
-      return this.parseSuspicions(response.content, new Set(all.map((m) => m.slug)));
-    } catch {
-      return [];
-    }
+    // LLM errors bubble to dream(); only parse failures degrade to [].
+    const response = await this.withTimeout(
+      this.llm.chat({
+        messages: [
+          { role: "user", content: prompt, timestamp: new Date().toISOString() },
+        ],
+        model: this.model,
+        maxTokens: 1024,
+        temperature: 0,
+      })
+    );
+    return this.parseSuspicions(response.content, new Set(all.map((m) => m.slug)));
   }
 
   private buildOrientPrompt(indexContent: string, all: readonly Memory[]): string {
@@ -247,6 +244,282 @@ export class MemoryDream {
       if (snippets.length) evidence.set(susp.slug, snippets);
     }
     return evidence;
+  }
+
+  private static readonly MEMORY_ACTIONS = ["create", "update", "append"];
+
+  /** Phase 3 - Consolidate: LLM emits ops; program persists (backup before delete). */
+  protected async consolidate(
+    store: MemoryStore,
+    suspicions: Suspicion[],
+    evidence: Map<string, string[]>
+  ): Promise<void> {
+    const all = await store.listAll();
+    const index = await store.loadIndex();
+    const prompt = this.buildConsolidatePrompt(index, all, suspicions, evidence);
+    // LLM errors bubble to dream(); parse failures degrade to [].
+    const response = await this.withTimeout(
+      this.llm.chat({
+        messages: [
+          { role: "user", content: prompt, timestamp: new Date().toISOString() },
+        ],
+        model: this.model,
+        maxTokens: 2048,
+        temperature: 0,
+      })
+    );
+    const knownSlugs = new Set(all.map((m) => m.slug));
+    const ops = this.parseDreamResponse(response.content, knownSlugs);
+    for (const op of ops) {
+      if (op.action === "delete") {
+        await this.backupAndDelete(store, op.slug);
+      } else {
+        const now = new Date().toISOString();
+        await store.save(
+          {
+            slug: op.slug,
+            type: op.type as MemoryType,
+            name: op.name!,
+            description: op.description!,
+            content: op.content!,
+            createdAt: now,
+            updatedAt: now,
+          },
+          op.action as MemoryAction
+        );
+      }
+    }
+  }
+
+  private buildConsolidatePrompt(
+    indexContent: string,
+    all: readonly Memory[],
+    suspicions: Suspicion[],
+    evidence: Map<string, string[]>
+  ): string {
+    const memParts: string[] = [];
+    if (indexContent) memParts.push(indexContent.trim());
+    for (const m of all) memParts.push(`### ${m.slug}\ncontent:\n${m.content}`);
+    const suspText =
+      suspicions.map((s) => `- ${s.slug}: ${s.reason}`).join("\n") || "(无)";
+    const eviText =
+      [...evidence.entries()]
+        .map(([slug, snips]) => `### ${slug}\n${snips.join("\n---\n")}`)
+        .join("\n\n") || "(无证据)";
+    return [
+      "You are performing a dream - consolidate the memory system based on evidence.",
+      "",
+      "## Existing memories (index + full content)",
+      memParts.join("\n\n"),
+      "",
+      "## Suspicions from Orient",
+      suspText,
+      "",
+      "## Evidence gathered from recent sessions",
+      eviText,
+      "",
+      "## Instructions",
+      "基于证据整理记忆，输出 JSON 数组（无改动则 []）：",
+      '[{"action":"create|update|append|delete","slug":"<type>/<kebab-case>","type":"user|feedback|project|reference","name":"简短名称","description":"一句话描述","content":"完整正文"}]',
+      "",
+      "Rules:",
+      "- create：新主题；update：改写已有文件正文（slug 须匹配现有文件）；append：向已有文件补充新段落；delete：删除整条失效/被合并的记忆文件",
+      "- delete 项用 reason 字段说明删除理由（不需 content）",
+      "- 新信息与现有记忆矛盾时，用 update 重写或 delete 删除，禁止矛盾并存",
+      "- 优先把新信息合并进已有 topic 文件，避免创建重复文件",
+      "- 把\"昨天\"\"上周\"等相对日期转换为绝对日期",
+      "- 遵守 user/feedback/project/reference 四分类与\"What NOT to save\"（不存代码模式、git 历史、调试方案、任务进度）",
+      "- 只使用上述证据中的内容；不要臆测",
+    ].join("\n");
+  }
+
+  private parseDreamResponse(
+    raw: string,
+    knownSlugs: Set<string>
+  ): Array<{
+    action: string;
+    slug: string;
+    type?: string;
+    name?: string;
+    description?: string;
+    content?: string;
+    reason?: string;
+  }> {
+    try {
+      let json = raw.trim();
+      const fence = json.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+      if (fence) json = fence[1].trim();
+      const parsed = JSON.parse(json);
+      if (!Array.isArray(parsed)) return [];
+      const out: Array<{
+        action: string;
+        slug: string;
+        type?: string;
+        name?: string;
+        description?: string;
+        content?: string;
+        reason?: string;
+      }> = [];
+      for (const item of parsed) {
+        if (!item || typeof item.action !== "string" || typeof item.slug !== "string") continue;
+        if (item.action === "delete") {
+          if (knownSlugs.has(item.slug)) {
+            out.push({
+              action: "delete",
+              slug: item.slug,
+              reason: typeof item.reason === "string" ? item.reason : "",
+            });
+          }
+        } else if (
+          MemoryDream.MEMORY_ACTIONS.includes(item.action) &&
+          typeof item.type === "string" &&
+          ["user", "feedback", "project", "reference"].includes(item.type) &&
+          item.slug.startsWith(`${item.type}/`) &&
+          typeof item.name === "string" &&
+          typeof item.description === "string" &&
+          typeof item.content === "string"
+        ) {
+          out.push({
+            action: item.action,
+            slug: item.slug,
+            type: item.type,
+            name: item.name,
+            description: item.description,
+            content: item.content,
+          });
+        }
+      }
+      return out;
+    } catch {
+      return [];
+    }
+  }
+
+  /** Backup a to-be-deleted file + index, then delete. */
+  private async backupAndDelete(store: MemoryStore, slug: string): Promise<void> {
+    const memory = await store.load(slug);
+    if (!memory) return;
+    const storeDir = (store as unknown as Record<string, unknown>).dir as string;
+    const backupDir = path.join(storeDir, ".dream-backup", memory.type);
+    await fs.promises.mkdir(backupDir, { recursive: true });
+    const base = `${path.basename(slug)}.md`;
+    await fs.promises
+      .copyFile(path.join(storeDir, memory.type, base), path.join(backupDir, base))
+      .catch(() => {});
+    await fs.promises
+      .copyFile(
+        path.join(storeDir, "MEMORY.md"),
+        path.join(storeDir, ".dream-backup", "MEMORY.md")
+      )
+      .catch(() => {});
+    await store.delete(slug);
+  }
+
+  /** Phase 4 - Prune: rebuild index, shrink descriptions if over limits. */
+  protected async prune(store: MemoryStore): Promise<void> {
+    await store.rebuildIndex();
+    const index = await store.loadIndex();
+    const lines = index.split("\n").length;
+    const size = Buffer.byteLength(index, "utf-8");
+    if (lines <= 200 && size <= 25 * 1024) return;
+    // Over limits: ask LLM to shorten descriptions (best-effort, errors swallowed).
+    try {
+      const all = await store.listAll();
+      const prompt = [
+        "缩短以下记忆索引描述，每条 description 不超过 150 字符，保留关键信息。输出 JSON 数组：",
+        '[{"slug":"...","description":"..."}]',
+        "",
+        "## Current",
+        index,
+      ].join("\n");
+      const response = await this.withTimeout(
+        this.llm.chat({
+          messages: [
+            { role: "user", content: prompt, timestamp: new Date().toISOString() },
+          ],
+          model: this.model,
+          maxTokens: 1024,
+          temperature: 0,
+        })
+      );
+      const shortenMap = this.parseShortenResponse(
+        response.content,
+        new Set(all.map((m) => m.slug))
+      );
+      for (const m of all) {
+        if (shortenMap.has(m.slug)) {
+          await store.save({ ...m, description: shortenMap.get(m.slug)! }, "update");
+        }
+      }
+      await store.rebuildIndex();
+    } catch {
+      // keep original index
+    }
+  }
+
+  private parseShortenResponse(raw: string, knownSlugs: Set<string>): Map<string, string> {
+    const map = new Map<string, string>();
+    try {
+      let json = raw.trim();
+      const fence = json.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+      if (fence) json = fence[1].trim();
+      const parsed = JSON.parse(json);
+      if (!Array.isArray(parsed)) return map;
+      for (const item of parsed) {
+        if (
+          item &&
+          typeof item.slug === "string" &&
+          typeof item.description === "string" &&
+          knownSlugs.has(item.slug)
+        ) {
+          map.set(item.slug, item.description.slice(0, 150));
+        }
+      }
+    } catch {
+      /* empty */
+    }
+    return map;
+  }
+
+  /**
+   * Run the four phases. Never rejects. Updates .dream.state only on full
+   * success; on any failure logs and leaves state unchanged so the next run
+   * can retry.
+   */
+  async dream(
+    store: MemoryStore,
+    sessionsDir: string,
+    memoryDir: string
+  ): Promise<void> {
+    const statePath = path.join(memoryDir, ".dream.state");
+    const lastConsolidatedAt = await readState(statePath);
+    try {
+      const suspicions = await this.orient(store);
+      const evidence = await this.gather(suspicions, sessionsDir, lastConsolidatedAt);
+      await this.consolidate(store, suspicions, evidence);
+      await this.prune(store);
+      await writeState(statePath, Date.now());
+    } catch (err) {
+      this.logError(memoryDir, err);
+      // do NOT update state - next run can retry
+    }
+  }
+
+  private logError(memoryDir: string, err: unknown): void {
+    const message = err instanceof Error ? err.message : String(err);
+    const detail = err instanceof Error ? err.stack ?? message : message;
+    console.error("[MemoryDream] failed:", message);
+    try {
+      const logDir = path.join(path.dirname(memoryDir), "logs");
+      fs.mkdirSync(logDir, { recursive: true });
+      fs.appendFileSync(
+        path.join(logDir, "dream.log"),
+        `[${new Date().toISOString()}] ${detail}\n`,
+        "utf-8"
+      );
+    } catch {
+      // give up
+    }
   }
 }
 
