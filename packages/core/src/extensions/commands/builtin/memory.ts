@@ -51,8 +51,18 @@ async function listMemories(store: MemoryStore): Promise<string> {
 function errorUnknown(): { type: "error"; message: string } {
   return {
     type: "error",
-    message: "未知子命令。使用: /memory-list | /memory-add <内容> | /memory-delete <slug>",
+    message: "未知子命令。使用: /memory-list | /memory-add <内容> | /memory-delete <slug> | /memory-archive | /memory-restore <slug>",
   };
+}
+
+async function listArchivedMemories(store: MemoryStore): Promise<string> {
+  const entries = await store.listArchived();
+  if (entries.length === 0) return "📦 没有已归档的记忆。";
+  const lines = entries.map((m) => {
+    const preview = m.content.length > 60 ? m.content.slice(0, 60) + "..." : m.content;
+    return `  [${m.slug}] ${m.name}: ${preview}`;
+  });
+  return `📦 已归档记忆 (${entries.length}):\n${lines.join("\n")}`;
 }
 
 // ── /memory ── (backward compat, delegates to list) ──────────────────
@@ -103,6 +113,24 @@ export const memoryCommand: SlashCommand = {
         type: "action",
         message: `🗑️ 已删除记忆 [${slug}]: ${existing.name}`,
       };
+    }
+    if (sub === "restore") {
+      const slug = args[1];
+      if (!slug) {
+        return { type: "error", message: "使用方式: /memory-restore <slug>" };
+      }
+      const store = getStore(context);
+      const existing = await store.restore(slug);
+      if (!existing) {
+        return { type: "error", message: `归档中未找到记忆 "${slug}"。` };
+      }
+      return {
+        type: "action",
+        message: `♻️ 已恢复记忆 [${slug}]: ${existing.name}`,
+      };
+    }
+    if (sub === "archive") {
+      return { type: "action", message: await listArchivedMemories(getStore(context)) };
     }
     return errorUnknown();
   },
@@ -166,6 +194,38 @@ export const memoryDeleteCommand: SlashCommand = {
     return {
       type: "action",
       message: `🗑️ 已删除记忆 [${slug}]: ${existing.name}`,
+    };
+  },
+};
+
+// ── /memory-archive ──────────────────────────────────────────────────
+
+export const memoryArchiveCommand: SlashCommand = {
+  name: "memory-archive",
+  description: "列出已归档记忆",
+  async execute(_args, context) {
+    return { type: "action", message: await listArchivedMemories(getStore(context)) };
+  },
+};
+
+// ── /memory-restore ──────────────────────────────────────────────────
+
+export const memoryRestoreCommand: SlashCommand = {
+  name: "memory-restore",
+  description: "从归档恢复记忆",
+  async execute(args, context) {
+    const slug = args[0];
+    if (!slug) {
+      return { type: "error", message: "使用方式: /memory-restore <slug>" };
+    }
+    const store = getStore(context);
+    const existing = await store.restore(slug);
+    if (!existing) {
+      return { type: "error", message: `归档中未找到记忆 "${slug}"。` };
+    }
+    return {
+      type: "action",
+      message: `♻️ 已恢复记忆 [${slug}]: ${existing.name}`,
     };
   },
 };
