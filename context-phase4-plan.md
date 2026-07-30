@@ -1,6 +1,6 @@
 # Phase 4 实现计划:工具输出溢出保护
 
-> **状态**:计划冻结,待 TDD 实现
+> **状态**:实现完成,验收通过(2026-07-31)。393 测试通过(仅 1 个与上下文无关的预存 MCP 启动测试失败),`pnpm build` 零 TS 错误,零新依赖。
 >
 > **冻结日期**:2026-07-31(基于 worktree `context-management-improvement` commit `14ee6a5` 的代码快照)
 >
