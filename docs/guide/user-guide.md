@@ -339,7 +339,8 @@ LICode 调用工具时，会显示**工具调用卡片**，有 4 种状态：
 ┌───────────────────────▼──────────────────────────────┐
 │                  EventPipeline（事件管线）              │
 │  洋葱模型中间件链：                                     │
-│  token计数 → 上下文压缩 → 记忆注入 → Hooks → AgentLoop  │
+│  token计数 → 上下文压缩 → Hooks → AgentLoop             │
+│  （记忆召回/提取挂在 AgentLoop 内外两侧，见 §17）          │
 └───────────────────────┬──────────────────────────────┘
                         │
 ┌───────────────────────▼──────────────────────────────┐
@@ -389,12 +390,11 @@ EventPipeline 采用**洋葱模型（Onion Model）**组织中间件：
         │  ┌────────────────────────┐  │
         │  │  contextMiddleware     │  │  ← 上下文压缩
         │  │ ┌────────────────────┐ │  │
-        │  │ │  memoryMiddleware  │ │  │  ← 记忆注入
+        │  │ │  hookMiddleware    │ │  │  ← 用户钩子（before/after:agentLoop）
         │  │ │ ┌────────────────┐ │ │  │
-        │  │ │ │  hookMiddleware│ │ │  │  ← 用户钩子
-        │  │ │ │ ┌────────────┐ │ │ │  │
-        │  │ │ │ │ AgentLoop  │ │ │ │  │  ← 最内层：Agent
-        │  │ │ │ └────────────┘ │ │ │  │
+        │  │ │ │   AgentLoop    │ │ │  │  ← 最内层：Agent
+        │  │ │ │  （记忆召回/提取  │ │ │  │
+        │  │ │ │   挂于此，§17）  │ │ │  │
         │  │ │ └────────────────┘ │ │  │
         │  │ └────────────────────┘ │  │
         │  └────────────────────────┘  │
@@ -551,7 +551,8 @@ Message 类型：
   ─────────────────────────────────────────
    0    role（角色定义）     always    内置模板
    1    safety（安全规则）   always    内置模板
-   8    memory（用户偏好）   按需      自动提取
+   4    memory-guide（记忆指引）按需   内置模板（见 §17）
+   5    memory（记忆索引）   按需      MEMORY.md 自动注入（见 §17）
   10    tool-use（工具说明）  按需     内置模板
   15    skills（技能描述）   按需      用户/项目配置
   动态  CLAUDE.md           按需      项目根目录
@@ -601,7 +602,7 @@ CommandRouter 拦截 `/` 开头的输入并路由到对应命令处理器：
 | `/help` | 列出所有可用命令 | ✅ |
 | `/clear` | 清空对话历史 | ✅ |
 | `/context` | 显示模型、token、消息数、会话 ID | ✅ |
-| `/memory` | 记忆管理 | ⚠️ 占位 |
+| `/memory`、`/memory-list`、`/memory-add`、`/memory-delete` | 记忆管理：查看、手动添加、删除 | ✅ |
 | `/subagent` | 开关子 Agent 支持 | ✅ |
 
 ### 13. MCP 协议（Model Context Protocol）
@@ -711,23 +712,118 @@ Hook 可以设为 `blocking: true`（阻塞等待完成）或非阻塞（fire-an
 
 ### 17. Memory（记忆系统）
 
-自动记录你的偏好和习惯，跨会话生效：
+LICode 拥有跨会话的持久记忆：它能记住你是谁、你喜欢怎样协作、项目有哪些不成文的约定，并在后续对话中主动用上。2026-07 的重构（**Phase 1 生产层修复** + **Phase 2 召回层升级**）让记忆从"只进不出的记事本"升级为"会更新、会召回、不打扰"的完整系统。
+
+#### 改进亮点
+
+| 亮点 | 说明 | 来自 |
+|------|------|------|
+| **记忆会动态更新** | 先说"我喜欢红烧排骨"，后说"不喜欢了"——同一个记忆文件被改写，不会出现"喜欢/不喜欢"矛盾并存 | Phase 1 |
+| **双路径生产** | 明确说"记住"→ 主 Agent 当场写入；日常对话 → 后台 LLM 自动提取（5 分钟冷却控制成本） | Phase 1 |
+| **纠正/决策类不再漏检** | "不对，以后都用 pnpm"不含关键词，旧版关键词门槛直接漏掉；新门槛为冷却 + 问句排除，不再依赖关键词 | Phase 1 |
+| **按查询召回正文** | 每轮对话由小模型从索引中选出 ≤5 条相关记忆，把**正文**注入当轮上下文；无关问题（如"帮我重构函数"）一条都不选 | Phase 2 |
+| **召回透明可见** | 召回在对话流中显示为 `[调用工具: memory_recall]` 卡片，你能看到 LICode 想起了什么 | Phase 2 |
+| **会话内即时生效** | 本会话刚写的记忆，后续轮次即可被召回（无需重启）；system prompt 索引每轮自动刷新 | Phase 2 |
+| **失败零干扰** | side query 失败/超时（10s）→ 自动退回"仅索引"模式，对话不受影响；`LICODE_MEMORY_RECALL=off` 可整体关闭召回 | Phase 2 |
+
+#### 存储层：四类记忆 + 自动索引（两阶段共用）
 
 ```
-用户说: "记住：我喜欢用 pnpm 而不是 npm"
-    │
-    ▼
-memoryMiddleware 拦截 user-message
-    │
-    ▼
-MemoryExtractor 匹配 "remember/prefer/like..."
-    │
-    ▼
-MemoryStore 保存为 .md 文件（含 YAML frontmatter）
-    │
-    ▼
-下次会话 → MemoryLoader → 注入 system prompt 层（priority 8）
+.licode/memory/
+├── MEMORY.md               ← 索引：每条一行 "- [名称](slug) — 描述"（自动重建，勿手改）
+├── user/                   ← 用户角色、经验、偏好、目标
+│   └── food-preferences.md
+├── feedback/               ← 用户纠正/确认过的协作方式（必含 Why: / How to apply:）
+│   └── use-pnpm.md
+├── project/                ← 无法从代码/git 推导的项目背景与决策
+└── reference/              ← 外部系统、看板、频道入口
 ```
+
+单条记忆文件（YAML frontmatter + 正文，一个主题一个文件）：
+
+```markdown
+---
+name: 食物偏好
+description: 用户喜欢吃辣，不喜欢红烧排骨
+type: user
+createdAt: 2026-07-27T10:00:00.000Z
+updatedAt: 2026-07-28T09:30:00.000Z
+---
+
+用户喜欢吃辣；2026-07-28 起不再喜欢红烧排骨。
+```
+
+#### 生产原理（Phase 1）：两条写入路径 + 自动协调
+
+```
+路径 1（明确指令）：你说"记住：我的编辑器是 Neovim"
+  → 主 Agent 按 memory-guide 指引层（system prompt，priority 4）
+    当场用 Write 工具写入 .licode/memory/user/editor.md
+
+路径 2（日常对话）：agent loop 结束 → after:agentLoop hook（fire-and-forget）
+  1. 互斥锁：已有提取在跑 → 直接跳过（不排队）
+  2. 主 Agent 本轮已写过记忆（mtime 检测）→ 只重建索引，跳过提取（防重复）
+  3. 轻量门槛：无新用户消息 / 全是问句 → 跳过；
+     "记住"等明确指令 → 绕过冷却立即提取；距上次 <5 分钟 → 跳过
+  4. LLM 提取：prompt 携带全部现有记忆正文 + 最近对话，
+     输出 [{action, slug, type, name, description, content}]
+  5. 落盘：create 新建 / update 改写正文 / append 段落去重追加
+  6. MEMORY.md 索引自动重建
+```
+
+**矛盾处理的关键**：提取 prompt 携带现有记忆的**正文**（而非仅索引）——LLM 发现"不喜欢红烧排骨了"与旧的"喜欢红烧排骨"冲突时，输出 `update` 整体改写该文件（保留 createdAt，刷新 updatedAt），以最新信息为准。
+
+#### 召回原理（Phase 2）：side query + 合成 tool_call 注入
+
+每轮对话，agent loop 在首次调用大模型**之前**（`AgentConfig.onTurnStart` 挂点）执行：
+
+```
+1. 刷新索引层：重读 MEMORY.md，内容有变化才更新 system prompt 的 memory 层
+   （本会话新写的记忆由此进入索引）
+2. 剪除：移除上一轮注入的召回对（历史中任意时刻最多一对，token 不累积）
+3. side query：小模型读取磁盘最新索引 + 你的当前消息，
+   选出 ≤5 条相关记忆（slug 必须真实存在于索引，幻觉被过滤）
+4. 注入：把选中记忆的正文作为合成 tool_call 对追加到你的消息之后：
+
+   [..., U(今晚吃什么好？), A(调用 memory_recall), U(tool_result: 记忆正文)]
+                                                          ↑ 模型从这里继续回答
+```
+
+- **为什么是 tool_call 而不是拼进你的消息**：不改动 system prompt 和你的原文；消息角色严格交替，所有 provider 兼容；TUI 渲染为工具卡片，召回透明可见。
+- **降级**：索引为空 → 不发起 LLM 调用（零成本）；side query 失败/超时 10s → 本轮只剪除不注入，退回"仅索引"，对话完全不受影响。
+- **开关**：`LICODE_MEMORY_RECALL=off` 启动即整体关闭召回，退回仅索引模式。
+- **主 Agent 兜底**：未被 side query 选中的记忆，主 Agent 仍可按 memory-guide 指引用 Read 工具自行查阅 `.licode/memory/` 目录。
+
+#### 涉及文件及各自作用
+
+| 文件 | 作用 |
+|------|------|
+| `packages/core/src/memory/store.ts` | **MemoryStore**——存储底座。`save(memory, action)` 实现 create/update/append 三种写入语义；`rebuildIndex()` 重建 MEMORY.md 索引；`hasChangesSince()` 用 mtime 检测主 Agent 的直接写入 |
+| `packages/core/src/memory/extractor.ts` | **MemoryExtractor**——生产路径 2。轻量门槛（冷却 / 问句排除 / 明确指令绕过）+ 携带全部现有记忆正文的提取 prompt + 输出校验落盘 |
+| `packages/core/src/memory/hook.ts` | **提取钩子**——共享状态（互斥锁 / 上次提取时间 / 本轮开始时间），协调"主 Agent 已写则跳过提取"与索引重建 |
+| `packages/core/src/memory/recall.ts` | **MemoryRecall**——召回引擎。side query 选择（永不抛异常，失败返回空）；召回对的构造/剪除纯函数；`createMemoryRecallHandler` 生成每轮回调（刷新索引层 → 剪除 → 选择 → 注入） |
+| `packages/core/src/memory/loader.ts` | **MemoryLoader**——会话启动时把 MEMORY.md 索引注入 system prompt（priority 5 层） |
+| `packages/core/src/conversation/templates/memory-guide.md` | **主 Agent 指引层**（priority 4）——教主 Agent 何时写 / 如何写 / 不写什么 / 如何用 Read 查记忆 |
+| `packages/core/src/agent/loop.ts` | **AgentLoop**——`AgentConfig.onTurnStart` 挂点：召回注入的唯一入口（addUserMessage 之后、首次 LLM 调用之前，异常不阻断 loop） |
+| `packages/cli/src/hooks.ts` | **CLI 接线**——创建 store/extractor/recall，注册 after:agentLoop 提取 hook，为两处 pipeline 配置 onTurnStart，读取 `LICODE_MEMORY_RECALL` 开关 |
+
+#### 它们如何搭配（一轮对话的全景）
+
+```
+你说"今晚吃什么好？"
+  │
+  ├─ AgentLoop.run() 把你的消息入列
+  ├─ onTurnStart（recall.ts + store.ts）：刷新索引层 → 剪除旧召回对
+  │    → side query 选中 user/food-preferences → 注入合成 tool_call 对
+  ├─ LLM 看到 [你的问题, 召回的记忆正文] → 回答时避开红烧排骨、推荐辣味
+  │
+  └─ agent-loop-complete → 提取 hook（hook.ts + extractor.ts + store.ts）
+       → 若本轮出现新偏好（如"我最近开始健身，少油"），
+         LLM 用 append 补充进 food-preferences.md 并重建索引
+       → 下一轮 onTurnStart 刷新索引层，新内容立即可被召回
+```
+
+生产（after:agentLoop）与召回（onTurnStart）分居 agent loop 两侧，共用同一个 MemoryStore 作为真相源，MEMORY.md 索引是两者之间的桥梁。
 
 ### 18. 多智能体（Multi-Agent）
 
@@ -782,9 +878,14 @@ MemoryStore 保存为 .md 文件（含 YAML frontmatter）
 │   ├── sessions/                     ← 会话存档
 │   │   ├── abc123-def456.json        ← 会话文件（完整 JSON 序列化）
 │   │   └── def789-ghi012.json
-│   ├── memory/                       ← 跨会话记忆
-│   │   ├── prefer-pnpm.md            ← 每条记忆一个 .md 文件
-│   │   └── code-style-2spaces.md
+│   ├── memory/                       ← 跨会话记忆（详见架构原理 §17）
+│   │   ├── MEMORY.md                 ← 记忆索引（系统自动重建，勿手改）
+│   │   ├── user/                     ← 用户偏好类记忆，每条一个 .md 文件
+│   │   │   └── food-preferences.md
+│   │   ├── feedback/                 ← 协作纠正类记忆（含 Why / How to apply）
+│   │   │   └── use-pnpm.md
+│   │   ├── project/                  ← 项目背景类记忆
+│   │   └── reference/                ← 外部系统入口类记忆
 │   ├── mcp/
 │   │   └── config.json               ← MCP 服务端配置
 │   ├── hooks.json                    ← 生命周期钩子配置
@@ -835,28 +936,29 @@ MemoryStore 保存为 .md 文件（含 YAML frontmatter）
 
 ---
 
-#### 2. `.licode/memory/{name}.md` — 记忆文件
+#### 2. `.licode/memory/{type}/{slug}.md` — 记忆文件
 
-**何时创建**：当你说"记住"、"我习惯"、"我喜欢"等关键词时，LICode 自动提取并存储。
+**何时创建**：两种路径——你说"记住：……"时主 Agent 当场写入；日常对话中的偏好、纠正、决策由后台 LLM 在每轮对话结束后自动提取（5 分钟冷却，问句不提取）。
 
-**文件格式**：每个记忆一个 Markdown 文件，包含 YAML frontmatter：
+**文件格式**：按类型分目录（`user/`、`feedback/`、`project/`、`reference/`），一个主题一个 Markdown 文件，YAML frontmatter + 正文：
 
 ```markdown
 ---
-name: prefer-pnpm
+name: 包管理器偏好
 description: 用户偏好使用 pnpm 作为包管理器
-metadata:
-  type: user
+type: feedback
+createdAt: 2026-07-24T10:00:00.000Z
+updatedAt: 2026-07-27T08:00:00.000Z
 ---
 
-用户习惯用 pnpm 而不是 npm 来管理依赖。
-**Why:** pnpm 更快且节省磁盘空间。
-**How to apply:** 所有包管理命令使用 pnpm，而不是 npm 或 yarn。
+所有包管理命令使用 pnpm，而不是 npm 或 yarn。
+**Why:** 用户明确要求过；pnpm 更快且节省磁盘空间。
+**How to apply:** 安装、添加、移除依赖时一律使用 pnpm。
 ```
 
-**如何生效**：下次启动 LICode 时，所有记忆文件自动加载并注入 system prompt（priority 8），影响 LICode 的行为。
+**如何生效**：启动时 MEMORY.md 索引注入 system prompt；之后每轮对话由 side query 按相关性选出 ≤5 条，把**正文**注入当轮上下文（详见架构原理 §17）。同一主题的新旧信息冲突时，旧文件会被直接改写（update 语义），不会矛盾并存。
 
-**如何删除**：直接删除对应的 `.md` 文件，或使用 `/memory` 命令管理。
+**如何删除**：使用 `/memory-delete` 命令，或直接删除对应的 `.md 文件`（索引会自动重建）。
 
 ---
 
@@ -960,7 +1062,7 @@ specs/用户通知功能/
 | 你做了什么 | 产出了什么 | 存放在哪里 |
 |-----------|-----------|-----------|
 | 启动 LICode 对话 | 会话 JSON 文件 | `.licode/sessions/{id}.json` |
-| 说"记住我习惯 xxx" | 记忆 .md 文件 | `.licode/memory/{name}.md` |
+| 说"记住 …"，或日常纠正被自动提取 | 记忆 .md 文件 + MEMORY.md 索引 | `.licode/memory/{type}/{slug}.md` |
 | 配置 MCP 服务端 | 无新文件（已手动创建） | `.licode/mcp/config.json` |
 | 配置 Hooks | Hook 日志文件（可选） | `.licode/logs/` (由 Hook 命令决定) |
 | 创建 Skill | skill.md + 工具注册 | `.licode/skills/{name}/skill.md` |
@@ -990,7 +1092,7 @@ specs/用户通知功能/
 | `/help` | 列出所有可用命令 |
 | `/clear` | 清空当前对话历史 |
 | `/context` | 显示 token 用量和会话信息 |
-| `/memory` | 记忆管理（即将推出） |
+| `/memory`、`/memory-list`、`/memory-add`、`/memory-delete` | 记忆管理：查看、手动添加、删除 |
 | `/subagent` | 开关子 Agent 功能 |
 
 ### Spec 子命令
@@ -1035,6 +1137,7 @@ specs/用户通知功能/
 |------|------|------|
 | `ANTHROPIC_API_KEY` | API 密钥 | ✅ 是 |
 | `ANTHROPIC_BASE_URL` | API 地址（使用第三方兼容 API 时设置） | 否 |
+| `LICODE_MEMORY_RECALL` | 设为 `off` 时关闭每轮记忆召回（side query），退回仅索引模式（见架构原理 §17） | 否 |
 
 ### 项目配置文件
 
@@ -1165,7 +1268,7 @@ LICode 的定位是"能自主完成复杂开发任务的终端 AI 助手"，而�
 
 **Q: 如何让 LICode 记住我的偏好？**
 
-直接在对话中说"记住我喜欢用 pnpm 而不是 npm"，LICode 的 MemoryExtractor 会自动匹配关键词并存储。存储的文件在 `.licode/memory/` 下，下次会话自动生效。详见 [Recipe 6](recipes/memory-preferences.md)。
+直接说"记住：我喜欢用 pnpm 而不是 npm"，主 Agent 会当场写入记忆文件；日常对话中的偏好、纠正和决策（如"不对，以后都用 pnpm"）也会由后台在每轮结束后自动提取——不再依赖关键词。改口也不用担心：新信息与旧记忆冲突时会直接改写旧文件，以最新为准。之后每轮对话，相关记忆的正文会被自动召回注入（显示为 `[调用工具: memory_recall]` 卡片）；无关问题不会打扰。存储在 `.licode/memory/` 下，可用 `/memory-list` 查看、`/memory-delete` 删除。原理详见 [架构原理 §17](#架构原理) 与 [Recipe 6](recipes/memory-preferences.md)。
 
 **Q: 会话数据包含敏感信息吗？如何保护？**
 
