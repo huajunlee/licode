@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, existsSync, utimesSync, writeFileSync, mkdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { SystemPrompt } from "../conversation/system-prompt.js";
 import { MemoryLoader } from "./loader.js";
 import { MemoryStore } from "./store.js";
