@@ -9,6 +9,7 @@ import type {
 import type { ConversationManager } from "../conversation/manager.js";
 import type { MemoryStore } from "./store.js";
 import type { Memory } from "./types.js";
+import type { DreamState } from "./dream.js";
 
 /** tool_use name identifying a synthetic recall pair (also the prune key). */
 export const MEMORY_RECALL_TOOL_NAME = "memory_recall";
@@ -219,8 +220,10 @@ export class MemoryRecall {
 export function createMemoryRecallHandler(deps: {
   recall: MemoryRecall;
   store: MemoryStore;
+  /** Phase 4: when provided and running, skip usage recording (yield to Dream). */
+  dreamState?: DreamState;
 }): (conversation: ConversationManager) => Promise<void> {
-  const { recall, store } = deps;
+  const { recall, store, dreamState } = deps;
   let lastIndexContent: string | null = null;
 
   return async (conversation: ConversationManager) => {
@@ -261,6 +264,15 @@ export function createMemoryRecallHandler(deps: {
 
       const memories = await recall.select(query, store);
       if (memories.length === 0) return;
+
+      // Phase 4: 注入即计数（best-effort）。Dream 整理期间让位（同提取），
+      // 避免 recordUsage 与 Dream consolidate 的写写竞态；recall 的读路径
+      // （select/inject）服务用户当轮，不让位。
+      if (!dreamState?.running) {
+        await Promise.all(
+          memories.map((m) => store.recordUsage(m.slug).catch(() => {}))
+        ).catch(() => {});
+      }
 
       const [toolUse, toolResult] = buildRecallPair(query, memories);
       conversation.replaceMessages([...conversation.getMessages(), toolUse, toolResult]);
