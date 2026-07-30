@@ -507,41 +507,59 @@ describe("MemoryDream consolidate archive (Phase 4)", () => {
     rmSync(sessionsDir, { recursive: true, force: true });
   });
 
-  it("archives a stale candidate when LLM emits archive", async () => {
+  it("auto-archives a stale candidate when LLM emits nothing (default-archive)", async () => {
     const store = new MemoryStore(memoryDir);
     await store.save(makeMemory("user/old"));
     await seedLastUsedAt(store, "user/old", new Date(Date.now() - 35 * 86400 * 1000).toISOString());
     const dream = new MemoryDream({ minIntervalMs: 1, minNewSessions: 1, archiveThresholdMs: 30 * 86400 * 1000 });
     (dream as any).llm.chat = vi.fn()
       .mockResolvedValueOnce({ content: "[]", usage: { input: 1, output: 1 }, model: "mock", stopReason: "end_turn" })
-      .mockResolvedValueOnce({ content: '[{"action":"archive","slug":"user/old","reason":"长期未用"}]', usage: { input: 1, output: 1 }, model: "mock", stopReason: "end_turn" });
+      .mockResolvedValueOnce({ content: "[]", usage: { input: 1, output: 1 }, model: "mock", stopReason: "end_turn" });
     await dream.dream(store, sessionsDir, memoryDir);
-    expect(await store.load("user/old")).toBeNull(); // 已移出活跃集
+    expect(await store.load("user/old")).toBeNull();
     expect(fsExists(path.join(memoryDir, "archive", "user", "old.md"))).toBe(true);
   });
 
-  it("drops archive ops on non-candidate slugs (rule guard)", async () => {
+  it("LLM keep protects a candidate from auto-archiving", async () => {
     const store = new MemoryStore(memoryDir);
-    await store.save(makeMemory("user/fresh"));
-    await seedLastUsedAt(store, "user/fresh", new Date().toISOString()); // 刚用过，非候选
+    await store.save(makeMemory("user/old"));
+    await seedLastUsedAt(store, "user/old", new Date(Date.now() - 35 * 86400 * 1000).toISOString());
     const dream = new MemoryDream({ minIntervalMs: 1, minNewSessions: 1, archiveThresholdMs: 30 * 86400 * 1000 });
     (dream as any).llm.chat = vi.fn()
       .mockResolvedValueOnce({ content: "[]", usage: { input: 1, output: 1 }, model: "mock", stopReason: "end_turn" })
-      .mockResolvedValueOnce({ content: '[{"action":"archive","slug":"user/fresh","reason":"r"}]', usage: { input: 1, output: 1 }, model: "mock", stopReason: "end_turn" });
+      .mockResolvedValueOnce({ content: '[{"action":"keep","slug":"user/old","reason":"仍重要"}]', usage: { input: 1, output: 1 }, model: "mock", stopReason: "end_turn" });
     await dream.dream(store, sessionsDir, memoryDir);
-    expect(await store.load("user/fresh")).not.toBeNull(); // 未被归档
+    expect(await store.load("user/old")).not.toBeNull();
+    expect(fsExists(path.join(memoryDir, "archive", "user", "old.md"))).toBe(false);
   });
 
-  it("keeps all candidates when LLM returns [] (default-keep)", async () => {
+  it("archives all candidates when LLM returns [] (default-archive)", async () => {
     const store = new MemoryStore(memoryDir);
-    await store.save(makeMemory("user/old"));
-    await seedLastUsedAt(store, "user/old", new Date(Date.now() - 40 * 86400 * 1000).toISOString());
+    await store.save(makeMemory("user/old1"));
+    await store.save(makeMemory("user/old2"));
+    await seedLastUsedAt(store, "user/old1", new Date(Date.now() - 35 * 86400 * 1000).toISOString());
+    await seedLastUsedAt(store, "user/old2", new Date(Date.now() - 40 * 86400 * 1000).toISOString());
     const dream = new MemoryDream({ minIntervalMs: 1, minNewSessions: 1, archiveThresholdMs: 30 * 86400 * 1000 });
     (dream as any).llm.chat = vi.fn()
       .mockResolvedValueOnce({ content: "[]", usage: { input: 1, output: 1 }, model: "mock", stopReason: "end_turn" })
       .mockResolvedValueOnce({ content: "[]", usage: { input: 1, output: 1 }, model: "mock", stopReason: "end_turn" });
     await dream.dream(store, sessionsDir, memoryDir);
-    expect(await store.load("user/old")).not.toBeNull(); // 默认保留
+    expect(await store.load("user/old1")).toBeNull();
+    expect(await store.load("user/old2")).toBeNull();
+  });
+
+  it("delete op on a candidate takes precedence over auto-archive", async () => {
+    const store = new MemoryStore(memoryDir);
+    await store.save(makeMemory("user/old"));
+    await seedLastUsedAt(store, "user/old", new Date(Date.now() - 35 * 86400 * 1000).toISOString());
+    const dream = new MemoryDream({ minIntervalMs: 1, minNewSessions: 1, archiveThresholdMs: 30 * 86400 * 1000 });
+    (dream as any).llm.chat = vi.fn()
+      .mockResolvedValueOnce({ content: "[]", usage: { input: 1, output: 1 }, model: "mock", stopReason: "end_turn" })
+      .mockResolvedValueOnce({ content: '[{"action":"delete","slug":"user/old","reason":"失效"}]', usage: { input: 1, output: 1 }, model: "mock", stopReason: "end_turn" });
+    await dream.dream(store, sessionsDir, memoryDir);
+    expect(await store.load("user/old")).toBeNull();
+    expect(fsExists(path.join(memoryDir, "archive", "user", "old.md"))).toBe(false);
+    expect(fsExists(path.join(memoryDir, ".dream-backup", "user", "old.md"))).toBe(true);
   });
 
   it("isArchiveCandidate: never-used is not a candidate; stale is", async () => {

@@ -282,11 +282,13 @@ export class MemoryDream {
     );
     const knownSlugs = new Set(all.map((m) => m.slug));
     const ops = this.parseDreamResponse(response.content, knownSlugs, candidateSlugs);
+    const keepSlugs = new Set<string>();
     for (const op of ops) {
       if (op.action === "delete") {
         await this.backupAndDelete(store, op.slug);
-      } else if (op.action === "archive") {
-        await store.archive(op.slug); // Phase 4: 软归档（可恢复），不进 .dream-backup
+      } else if (op.action === "keep") {
+        // Phase 4: LLM veto - protect a stale candidate from auto-archiving.
+        if (candidateSlugs.has(op.slug)) keepSlugs.add(op.slug);
       } else {
         const nowIso = new Date().toISOString();
         await store.save(
@@ -302,6 +304,14 @@ export class MemoryDream {
           op.action as MemoryAction
         );
       }
+    }
+    // Phase 4: auto-archive stale candidates the LLM did not protect (and that
+    // were not deleted above). Rule-driven (>30d unused) per spec §6.3; the LLM
+    // only vetoes via `keep`. Already-deleted candidates (load == null) skipped.
+    for (const slug of candidateSlugs) {
+      if (keepSlugs.has(slug)) continue;
+      if (!(await store.load(slug))) continue;
+      await store.archive(slug);
     }
   }
 
@@ -342,18 +352,19 @@ export class MemoryDream {
       "## Evidence gathered from recent sessions",
       eviText,
       "",
-      "## Archive candidates（长期未被召回，归档候选）",
+      "## Archive candidates（>30 天未被召回，默认将归档）",
       candText,
       "",
       "## Instructions",
       "基于证据整理记忆，输出 JSON 数组（无改动则 []）：",
-      '[{"action":"create|update|append|delete|archive","slug":"<type>/<kebab-case>","type":"user|feedback|project|reference","name":"简短名称","description":"一句话描述","content":"完整正文"}]',
+      '[{"action":"create|update|append|delete|keep","slug":"<type>/<kebab-case>","type":"user|feedback|project|reference","name":"简短名称","description":"一句话描述","content":"完整正文"}]',
       "",
       "Rules:",
-      "- create：新主题；update：改写已有文件正文（slug 须匹配现有文件）；append：向已有文件补充新段落；delete：删除整条失效/被合并的记忆文件（仅当内容本身失效/重复/矛盾时使用；归档候选若只是长期未用但内容仍有效，应用 archive 而非 delete）",
-      "- delete 项用 reason 字段说明删除理由（不需 content）",
-      "- archive：把\"归档候选\"中确已长期无用、可安全退出活跃集的记忆移入归档区（可恢复）。只可作用于上面的归档候选；非候选不要 archive。用 reason 说明理由（不需 content）",
-      "- 对归档候选，若仍明显相关/可能再用，则不输出（保留默认）；只对确应退役的输出 archive（长期未用但内容仍有效的，archive 优于 delete）",
+      "- create：新主题；update：改写已有文件正文（slug 须匹配现有文件）；append：向已有文件补充新段落",
+      "- delete：删除整条失效/被合并的记忆文件（仅当内容本身失效/重复/矛盾时使用；用 reason 说明理由，不需 content）",
+      "- keep：阻止某\"归档候选\"被自动归档（仅可用于上面的归档候选；用 reason 说明为何保留，不需 content）",
+      "- 归档候选默认归档（移入归档区，可经 /memory-restore 恢复）：只对仍明确相关、近期可能用到、或归档会有严重后果（凭据/关键决策/活跃项目背景）的候选输出 keep；普通的\"可能某天用到\"的不要 keep--那正是归档（可恢复）的用途",
+      "- 归档候选若内容同时失效，可输出 delete（内容维度优先于热度），否则默认归档、无需输出任何 action",
       "- 新信息与现有记忆矛盾时，用 update 重写或 delete 删除，禁止矛盾并存",
       "- 优先把新信息合并进已有 topic 文件，避免创建重复文件",
       "- 把\"昨天\"\"上周\"等相对日期转换为绝对日期",
@@ -400,11 +411,11 @@ export class MemoryDream {
               reason: typeof item.reason === "string" ? item.reason : "",
             });
           }
-        } else if (item.action === "archive") {
-          // Phase 4 规则护栏：只接受程序识别的候选 slug（防幻觉归档新/常用记忆）
+        } else if (item.action === "keep") {
+          // Phase 4 规则护栏：keep 只接受程序识别的候选 slug（防幻觉）
           if (candidateSlugs.has(item.slug)) {
             out.push({
-              action: "archive",
+              action: "keep",
               slug: item.slug,
               reason: typeof item.reason === "string" ? item.reason : "",
             });
