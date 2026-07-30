@@ -405,6 +405,105 @@ EventPipeline 采用**洋葱模型（Onion Model）**组织中间件：
 
 每个中间件都可以在事件进入时做前置处理，在 `next()` 返回后做后置处理。
 
+> **运行时说明**：上面的洋葱图是中间件的**概念模型**。CLI 实际注册的 pipeline 链路是：`before:agentLoop` 扩展 → `createAgentLoopMiddleware` → `hook:after:agentLoop` → 错误处理。其中 `tokenCountingMiddleware`、`contextMiddleware`、`memoryMiddleware` 已不在 pipeline 上——token 计数走 AgentLoop 内部校准，UI 显示与上下文管理走下文的 EventBus 通道。
+
+### 2.1 两条事件通道：Pipeline 与 EventBus
+
+LICode 运行时有**两条独立的事件通道**。理解它们的关系，是理解 token 计数、上下文管理与 UI 更新的关键。
+
+**通道对比：**
+
+```
+┌─────────────── 通道 A：Pipeline (EventPipeline) ───────────────┐
+│ 角色：请求编排（洋葱模型中间件链）                              │
+│ 承载事件：仅 user-message 一个                                  │
+│ 链路：① before:agentLoop 扩展                                   │
+│      ② createAgentLoopMiddleware（拦截 user-message，跑循环）   │
+│      ③ hook:after:agentLoop（内存提取 / shell hooks）          │
+│      ④ 错误处理                                                │
+│ 消费者：中间件（可拦截 / 预处理 / 后处理）                      │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────── 通道 B：EventBus (createEventBus) ──────────────┐
+│ 角色：流式 UI 更新（循环内事件 -> React setState -> ink 重渲染）│
+│ 承载事件：llm-token / llm-thinking / tool-use-detected /       │
+│          tool-execute-* / agent-loop-complete（带 usage） /     │
+│          error ...                                             │
+│ 生产者：AgentLoop + collectResponse 每步 emit                   │
+│ 消费者：createEventBus 的 switch 分发到 setStreaming /          │
+│         setThinkingBlocks / setActiveToolCalls / setError /    │
+│         setTokenCount                                          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**一轮对话的流转（含通道交互）：**
+
+```
+用户输入
+   │  singleEvent() 产出 { user-message }
+   ▼
+═══════════════ 通道 A：Pipeline ═══════════════
+ ① before:agentLoop 扩展中间件
+        │ next()
+        ▼
+ ② createAgentLoopMiddleware ──┐  拦截 user-message，接管控制权
+        │                      │  loop.run(content):
+        │   ┌──────────────────┘
+        │   │
+        │   │   ═══════════════ 通道 B：EventBus ═══════════════
+        │   │   ┌─ eventBus 作为 config 参数注入 agent loop ──┐
+        │   │   │                                              │
+        │   │   │   loop 每步 emit(...)  ──▶  createEventBus.emit()
+        │   │   │        │                              │
+        │   │   │        │              ┌───────────────┼───────────────┐
+        │   │   │        │              ▼               ▼               ▼
+        │   │   │        │        setStreaming    setThinkingBlocks  setActiveToolCalls
+        │   │   │        │        (流式文本)      (推理折叠)        (工具卡片)
+        │   │   │        │
+        │   │   │   emit(agent-loop-complete, {usage}) ──┐
+        │   │   │                                          ▼
+        │   │   │                                   setTokenCount          ← 状态栏 token 数
+        │   │   │                                   (getTokenCount())        （校准后的上下文大小）
+        │   │   │                                          │
+        │   │   │        └──────────────► React 状态变更 ──▶ ink 重渲染
+        │   │   │
+        │   │   └──────────────────────────────────────────────┘
+        │   ◀──┐  loop.run() 返回（响应完成）
+        ▼      │
+ ③ hook:after:agentLoop  （内存提取等 in-process hooks + shell hooks）
+        │ next()
+        ▼
+ ④ 错误处理中间件
+════════════════════════════════════════════════════════════
+```
+
+**通道交互的本质：**
+
+- **Pipeline 是外层控制流**：只过 `user-message` 一个事件，职责是"预处理 → 跑循环 → 后处理"。中间件之间用 `next()` 串联。
+- **EventBus 是内层流式通道**：循环内部每一步（LLM token、工具调用、完成）都 emit 到这里，职责是"实时更新 UI"。
+- **唯一的桥**：`createAgentLoopMiddleware` 构造时把 `eventBus` 作为参数**注入** agent loop。所以 loop 虽然跑在 pipeline 内部，却把事件发到 eventBus——可以理解为 **pipeline 包住 loop，loop 驱动 eventBus**。
+- **两条通道除此之外不交叉**：pipeline 上的中间件看不到 eventBus 的事件，eventBus 也看不到 pipeline 的 `user-message`。
+
+**为什么 token 计数不接在 `tokenCountingMiddleware` 上：**
+
+```
+                       校准（学 ratio）        显示（状态栏数字）
+                       ─────────────          ──────────────
+所在通道               都不在通道上            通道 B（EventBus）
+所在位置               AgentLoop 内部          createEventBus 的
+                       （observeUsage）         agent-loop-complete 分支
+为什么在这             需要"调用前 base +       agent-loop-complete 每轮
+                       调用后 usage"成对，      必发到 eventBus 且带 usage；
+                       只有 loop 持有对话       不在 pipeline 上（收不到）
+
+原 tokenCountingMiddleware  →  挂在 pipeline 上等 llm-response-complete
+                                  ① agent-loop 路径不发该事件
+                                  ② 就算发也只到 eventBus，pipeline 收不到
+                                  故已移除（Phase 1 收尾）
+```
+
+一句话：**pipeline 管"跑这一轮"，eventBus 管"把这轮的过程播给 UI"；校准是 loop 的内部账，显示是 eventBus 的播报——两者都不该、也不能接在 pipeline 的 `tokenCountingMiddleware` 上。**
+
 ### 3. AgentLoop（Agent 引擎）
 
 AgentLoop 是 LICode 的核心决策发动机，实现 **ReAct（Reasoning + Acting）** 模式。
