@@ -9,7 +9,6 @@ import {
   SystemPrompt,
   loadDefaultLayers,
   EventPipeline,
-  tokenCountingMiddleware,
   ToolRegistry,
   builtinTools,
   createAgentLoopMiddleware,
@@ -79,11 +78,13 @@ function resolveSessionPath(sessionId: string): string | null {
   return null;
 }
 
-function createEventBus(
+export function createEventBus(
   setStreaming: (s: string) => void,
   setThinkingBlocks: (blocks: ThinkingBlock[]) => void,
   setActiveToolCalls: Dispatch<SetStateAction<ToolCallState[]>>,
-  setError: (e: string | null) => void
+  setError: (e: string | null) => void,
+  setTokenCount: (n: number) => void,
+  getTokenCount: () => number
 ): EventBus {
   let streamText = "";
   const blocks: ThinkingBlock[] = [];
@@ -176,6 +177,11 @@ function createEventBus(
           setStreaming("");
           setThinkingBlocks([]);
           setActiveToolCalls([]);
+          // Refresh the status bar with the calibrated context size. The
+          // agent-loop path never emits the llm-response-complete event that
+          // tokenCountingMiddleware listened for, so we read the live count
+          // here instead.
+          setTokenCount(getTokenCount());
           break;
 
         case "error":
@@ -373,14 +379,15 @@ export function useConversation(
               setStreaming,
               setThinkingBlocks,
               setActiveToolCalls,
-              setError
+              setError,
+              setTokenCount,
+              () => manager.getTokenCount()
             );
 
             const pipeline = new EventPipeline();
             registerExtensionMiddleware(pipeline, extensionsRef.current!, "before:agentLoop");
 
             pipeline
-              .use(tokenCountingMiddleware((total) => setTokenCount(total)))
               .use(
                 createAgentLoopMiddleware({
                   llm: provider,
@@ -429,14 +436,15 @@ export function useConversation(
           setStreaming,
           setThinkingBlocks,
           setActiveToolCalls,
-          setError
+          setError,
+          setTokenCount,
+          () => manager.getTokenCount()
         );
 
         const pipeline = new EventPipeline();
         registerExtensionMiddleware(pipeline, extensionsRef.current!, "before:agentLoop");
 
         pipeline
-          .use(tokenCountingMiddleware((total) => setTokenCount(total)))
           .use(
             createAgentLoopMiddleware({
               llm: provider,

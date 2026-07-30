@@ -76,6 +76,7 @@ Cycle 9  ConversationManager.observeUsage(base, real):喂校准器
 Cycle 10 ConversationManager.getTokenCount 校准:观测后返回 base*ratio(当前无 ratio,红)
 Cycle 11 AgentLoop 接线:run 后 getTokenCount 反映校准(用假 provider 返回 usage,红)
 Cycle 12 全量 pnpm test + pnpm build:零回归
+Cycle 13 状态栏显示(收尾):createEventBus 在 agent-loop-complete 调 setTokenCount(getTokenCount());移除死掉的 tokenCountingMiddleware(红)
 ```
 
 ## 六、验收结论
@@ -87,12 +88,19 @@ Cycle 12 全量 pnpm test + pnpm build:零回归
 - [ ] 校准器冷启动 ratio=1;首次=real/base;EMA 与 clamp 行为正确(Cycle 1-4 绿)
 - [ ] `ConversationManager.getTokenCount()` 在观测后应用 ratio;未观测时等价现状(Cycle 10 绿)
 - [ ] `AgentLoop` 每轮把真实 `usage.input` 喂入校准器(Cycle 11 绿)
+- [ ] 状态栏显示校准后的 token 数(非 0);`/context` 与状态栏语义一致(Cycle 13 绿)
 - [ ] `TokenCounter` 接口签名不变,6 个调用点零改动
 - [ ] `pnpm test` 全绿(含原有 token-counter / manager / loop 测试),零回归
 - [ ] `pnpm build` 零 TypeScript 错误
 - [ ] 无新运行时依赖
 
 **精度验收(有校准样本后)**:对真实会话,`getTokenCount()` 与 API 返回 `usage.input_tokens` 的相对误差目标 ≤ ±5%(cold-start 首轮除外)。此条为运行时经验指标,不以单测硬断言,但在计划中作为方向性验收。
+
+## 收尾补记:状态栏显示缺口(原计划外)
+
+实现中发现:`tokens: 0` 是**预存的显示断链**,非 Phase 1 造成,但原 5 阶段蓝图与 Phase 1 计划均未覆盖。根因:agent-loop 路径把事件发到 eventBus(非 pipeline),`tokenCountingMiddleware` 监听的 `llm-response-complete` 只存在于旧的 `generateChatEvents` 路径,故永不触发,`setTokenCount` 从不被调用。
+
+作为 Phase 1 收尾(Cycle 13)修复:导出 `createEventBus`,在 `agent-loop-complete` 分支调 `setTokenCount(getTokenCount())`(每轮必发、带 usage),并移除死掉的 `tokenCountingMiddleware`。状态栏改为显示校准后的上下文大小,与 `/context` 命令语义一致。TDD:对 `createEventBus` 写失败测试(emit agent-loop-complete -> setTokenCount 收到 getTokenCount 值)再实现。
 
 ## 七、风险与 caveat
 
