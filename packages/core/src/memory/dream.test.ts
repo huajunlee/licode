@@ -10,6 +10,7 @@ import {
   releaseLock,
   readState,
   writeState,
+  isArchiveCandidate,
 } from "./dream.js";
 import { MemoryStore } from "./store.js";
 import type { Memory } from "./types.js";
@@ -478,5 +479,79 @@ describe("createMemoryDreamHook", () => {
     });
     await hook({ type: "user-message" } as unknown as PipelineEvent);
     expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+/** save(create) 默认 lastUsedAt=""，需手动 seed 旧值造归档候选。 */
+async function seedLastUsedAt(store: MemoryStore, slug: string, lastUsedAt: string, usageCount = 1) {
+  const m = await store.load(slug);
+  if (!m) return;
+  const storeDir = (store as unknown as Record<string, unknown>).dir as string;
+  const file = path.join(storeDir, m.type, `${path.basename(slug)}.md`);
+  writeFileSync(file, [
+    "---", `name: ${m.name}`, `description: ${m.description}`, `type: ${m.type}`,
+    `createdAt: ${m.createdAt}`, `updatedAt: ${m.updatedAt}`,
+    `usageCount: ${usageCount}`, `lastUsedAt: ${lastUsedAt}`, "---", "", m.content, "",
+  ].join("\n"));
+}
+
+describe("MemoryDream consolidate archive (Phase 4)", () => {
+  let memoryDir: string;
+  let sessionsDir: string;
+  beforeEach(() => {
+    memoryDir = mkdtempSync(path.join(tmpdir(), "dream-arc-mem-"));
+    sessionsDir = mkdtempSync(path.join(tmpdir(), "dream-arc-ses-"));
+  });
+  afterEach(() => {
+    rmSync(memoryDir, { recursive: true, force: true });
+    rmSync(sessionsDir, { recursive: true, force: true });
+  });
+
+  it("archives a stale candidate when LLM emits archive", async () => {
+    const store = new MemoryStore(memoryDir);
+    await store.save(makeMemory("user/old"));
+    await seedLastUsedAt(store, "user/old", new Date(Date.now() - 35 * 86400 * 1000).toISOString());
+    const dream = new MemoryDream({ minIntervalMs: 1, minNewSessions: 1, archiveThresholdMs: 30 * 86400 * 1000 });
+    (dream as any).llm.chat = vi.fn()
+      .mockResolvedValueOnce({ content: "[]", usage: { input: 1, output: 1 }, model: "mock", stopReason: "end_turn" })
+      .mockResolvedValueOnce({ content: '[{"action":"archive","slug":"user/old","reason":"长期未用"}]', usage: { input: 1, output: 1 }, model: "mock", stopReason: "end_turn" });
+    await dream.dream(store, sessionsDir, memoryDir);
+    expect(await store.load("user/old")).toBeNull(); // 已移出活跃集
+    expect(fsExists(path.join(memoryDir, "archive", "user", "old.md"))).toBe(true);
+  });
+
+  it("drops archive ops on non-candidate slugs (rule guard)", async () => {
+    const store = new MemoryStore(memoryDir);
+    await store.save(makeMemory("user/fresh"));
+    await seedLastUsedAt(store, "user/fresh", new Date().toISOString()); // 刚用过，非候选
+    const dream = new MemoryDream({ minIntervalMs: 1, minNewSessions: 1, archiveThresholdMs: 30 * 86400 * 1000 });
+    (dream as any).llm.chat = vi.fn()
+      .mockResolvedValueOnce({ content: "[]", usage: { input: 1, output: 1 }, model: "mock", stopReason: "end_turn" })
+      .mockResolvedValueOnce({ content: '[{"action":"archive","slug":"user/fresh","reason":"r"}]', usage: { input: 1, output: 1 }, model: "mock", stopReason: "end_turn" });
+    await dream.dream(store, sessionsDir, memoryDir);
+    expect(await store.load("user/fresh")).not.toBeNull(); // 未被归档
+  });
+
+  it("keeps all candidates when LLM returns [] (default-keep)", async () => {
+    const store = new MemoryStore(memoryDir);
+    await store.save(makeMemory("user/old"));
+    await seedLastUsedAt(store, "user/old", new Date(Date.now() - 40 * 86400 * 1000).toISOString());
+    const dream = new MemoryDream({ minIntervalMs: 1, minNewSessions: 1, archiveThresholdMs: 30 * 86400 * 1000 });
+    (dream as any).llm.chat = vi.fn()
+      .mockResolvedValueOnce({ content: "[]", usage: { input: 1, output: 1 }, model: "mock", stopReason: "end_turn" })
+      .mockResolvedValueOnce({ content: "[]", usage: { input: 1, output: 1 }, model: "mock", stopReason: "end_turn" });
+    await dream.dream(store, sessionsDir, memoryDir);
+    expect(await store.load("user/old")).not.toBeNull(); // 默认保留
+  });
+
+  it("isArchiveCandidate: never-used is not a candidate; stale is", async () => {
+    const store = new MemoryStore(memoryDir);
+    await store.save(makeMemory("user/never")); // lastUsedAt="" (默认)
+    const now = Date.now();
+    const all = await store.listAll();
+    expect(all.filter((m) => isArchiveCandidate(m, now, 1)).map((m) => m.slug)).toEqual([]);
+    await seedLastUsedAt(store, "user/never", new Date(Date.now() - 2 * 86400 * 1000).toISOString());
+    const all2 = await store.listAll();
+    expect(all2.filter((m) => isArchiveCandidate(m, now, 1)).map((m) => m.slug)).toEqual(["user/never"]);
   });
 });

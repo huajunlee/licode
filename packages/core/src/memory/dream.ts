@@ -10,6 +10,7 @@ const DEFAULT_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
 const DEFAULT_MIN_NEW_SESSIONS = 5;
 const DEFAULT_TIMEOUT_MS = 30_000;
 const LOCK_TIMEOUT_MS = 30 * 60 * 1000; // 30 min
+const DEFAULT_ARCHIVE_THRESHOLD_MS = 30 * 24 * 60 * 60 * 1000; // 30d (Phase 4)
 
 /** Shared mutable state for the dream hook (pass-by-reference, like MemoryExtractionState). */
 export interface DreamState {
@@ -33,6 +34,8 @@ export interface DreamConfig {
   minNewSessions?: number;
   /** Per-LLM-call timeout. Default 30s. */
   timeoutMs?: number;
+  /** Phase 4: memories unused longer than this are archive candidates. Default 30d. */
+  archiveThresholdMs?: number;
 }
 
 /**
@@ -92,6 +95,7 @@ export class MemoryDream {
   protected minIntervalMs: number;
   protected minNewSessions: number;
   protected timeoutMs: number;
+  protected archiveThresholdMs: number;
 
   constructor(config?: DreamConfig) {
     const apiKey =
@@ -102,6 +106,7 @@ export class MemoryDream {
     this.minIntervalMs = config?.minIntervalMs ?? DEFAULT_MIN_INTERVAL_MS;
     this.minNewSessions = config?.minNewSessions ?? DEFAULT_MIN_NEW_SESSIONS;
     this.timeoutMs = config?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.archiveThresholdMs = config?.archiveThresholdMs ?? DEFAULT_ARCHIVE_THRESHOLD_MS;
     this.llm = new AnthropicProvider({ apiKey, baseUrl });
   }
 
@@ -256,8 +261,14 @@ export class MemoryDream {
     evidence: Map<string, string[]>
   ): Promise<void> {
     const all = await store.listAll();
+    const now = Date.now();
+    const candidateSlugs = new Set(
+      all
+        .filter((m) => isArchiveCandidate(m, now, this.archiveThresholdMs))
+        .map((m) => m.slug)
+    );
     const index = await store.loadIndex();
-    const prompt = this.buildConsolidatePrompt(index, all, suspicions, evidence);
+    const prompt = this.buildConsolidatePrompt(index, all, suspicions, evidence, candidateSlugs, now);
     // LLM errors bubble to dream(); parse failures degrade to [].
     const response = await this.withTimeout(
       this.llm.chat({
@@ -270,12 +281,14 @@ export class MemoryDream {
       })
     );
     const knownSlugs = new Set(all.map((m) => m.slug));
-    const ops = this.parseDreamResponse(response.content, knownSlugs);
+    const ops = this.parseDreamResponse(response.content, knownSlugs, candidateSlugs);
     for (const op of ops) {
       if (op.action === "delete") {
         await this.backupAndDelete(store, op.slug);
+      } else if (op.action === "archive") {
+        await store.archive(op.slug); // Phase 4: 软归档（可恢复），不进 .dream-backup
       } else {
-        const now = new Date().toISOString();
+        const nowIso = new Date().toISOString();
         await store.save(
           {
             slug: op.slug,
@@ -283,8 +296,8 @@ export class MemoryDream {
             name: op.name!,
             description: op.description!,
             content: op.content!,
-            createdAt: now,
-            updatedAt: now,
+            createdAt: nowIso,
+            updatedAt: nowIso,
           },
           op.action as MemoryAction
         );
@@ -296,7 +309,9 @@ export class MemoryDream {
     indexContent: string,
     all: readonly Memory[],
     suspicions: Suspicion[],
-    evidence: Map<string, string[]>
+    evidence: Map<string, string[]>,
+    candidateSlugs: Set<string>,
+    now: number
   ): string {
     const memParts: string[] = [];
     if (indexContent) memParts.push(indexContent.trim());
@@ -307,6 +322,14 @@ export class MemoryDream {
       [...evidence.entries()]
         .map(([slug, snips]) => `### ${slug}\n${snips.join("\n---\n")}`)
         .join("\n\n") || "(无证据)";
+    const candText =
+      all
+        .filter((m) => candidateSlugs.has(m.slug))
+        .map((m) => {
+          const ageDays = Math.floor((now - Date.parse(m.lastUsedAt!)) / 86_400_000);
+          return `- ${m.slug} | usageCount=${m.usageCount ?? 0} | lastUsedAt=${m.lastUsedAt} | 已 ${ageDays} 天未用`;
+        })
+        .join("\n") || "(无)";
     return [
       "You are performing a dream - consolidate the memory system based on evidence.",
       "",
@@ -319,13 +342,18 @@ export class MemoryDream {
       "## Evidence gathered from recent sessions",
       eviText,
       "",
+      "## Archive candidates（长期未被召回，归档候选）",
+      candText,
+      "",
       "## Instructions",
       "基于证据整理记忆，输出 JSON 数组（无改动则 []）：",
-      '[{"action":"create|update|append|delete","slug":"<type>/<kebab-case>","type":"user|feedback|project|reference","name":"简短名称","description":"一句话描述","content":"完整正文"}]',
+      '[{"action":"create|update|append|delete|archive","slug":"<type>/<kebab-case>","type":"user|feedback|project|reference","name":"简短名称","description":"一句话描述","content":"完整正文"}]',
       "",
       "Rules:",
       "- create：新主题；update：改写已有文件正文（slug 须匹配现有文件）；append：向已有文件补充新段落；delete：删除整条失效/被合并的记忆文件",
       "- delete 项用 reason 字段说明删除理由（不需 content）",
+      "- archive：把\"归档候选\"中确已长期无用、可安全退出活跃集的记忆移入归档区（可恢复）。只可作用于上面的归档候选；非候选不要 archive。用 reason 说明理由（不需 content）",
+      "- 对归档候选，若仍明显相关/可能再用，则不输出（保留默认）；只对确应退役的输出 archive",
       "- 新信息与现有记忆矛盾时，用 update 重写或 delete 删除，禁止矛盾并存",
       "- 优先把新信息合并进已有 topic 文件，避免创建重复文件",
       "- 把\"昨天\"\"上周\"等相对日期转换为绝对日期",
@@ -336,7 +364,8 @@ export class MemoryDream {
 
   private parseDreamResponse(
     raw: string,
-    knownSlugs: Set<string>
+    knownSlugs: Set<string>,
+    candidateSlugs: Set<string>
   ): Array<{
     action: string;
     slug: string;
@@ -367,6 +396,15 @@ export class MemoryDream {
           if (knownSlugs.has(item.slug)) {
             out.push({
               action: "delete",
+              slug: item.slug,
+              reason: typeof item.reason === "string" ? item.reason : "",
+            });
+          }
+        } else if (item.action === "archive") {
+          // Phase 4 规则护栏：只接受程序识别的候选 slug（防幻觉归档新/常用记忆）
+          if (candidateSlugs.has(item.slug)) {
+            out.push({
+              action: "archive",
               slug: item.slug,
               reason: typeof item.reason === "string" ? item.reason : "",
             });
@@ -528,6 +566,25 @@ export interface Suspicion {
   slug: string;
   keywords: string[];
   reason: string;
+}
+
+/**
+ * Phase 4: archive candidate = recalled before (lastUsedAt set) and stale.
+ *
+ * Only lastUsedAt is considered, NOT createdAt: a never-recalled memory is not
+ * a candidate (it may simply never have matched a query, or recall may be off
+ * -- using createdAt would mass-archive everything when recall is disabled).
+ * Never-recalled junk is left to Phase 3's content-driven delete.
+ */
+export function isArchiveCandidate(
+  m: { lastUsedAt?: string },
+  now: number,
+  thresholdMs: number
+): boolean {
+  if (!m.lastUsedAt) return false;
+  const lu = Date.parse(m.lastUsedAt);
+  if (!lu) return false;
+  return now - lu > thresholdMs;
 }
 
 /** Extract plain text from a message (string content or tool blocks). */
