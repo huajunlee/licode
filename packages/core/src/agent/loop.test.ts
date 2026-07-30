@@ -301,3 +301,24 @@ describe("AgentLoop compression", () => {
     expect(events.some((e) => e.type === "context-compressed")).toBe(false);
   });
 });
+
+describe("AgentLoop overflow config", () => {
+  it("passes ContextConfig.overflowMaxBytes to the ToolExecutor", () => {
+    const loop = new AgentLoop({
+      llm: mockLLM([]),
+      conversation: makeManager(),
+      tools: new ToolRegistry(),
+      context: { overflowMaxBytes: 1234 },
+    });
+    expect((loop as unknown as { executor: { overflowMaxBytes: number } }).executor.overflowMaxBytes).toBe(1234);
+  });
+
+  it("defaults overflowMaxBytes to 64KB when not configured", () => {
+    const loop = new AgentLoop({
+      llm: mockLLM([]),
+      conversation: makeManager(),
+      tools: new ToolRegistry(),
+    });
+    expect((loop as unknown as { executor: { overflowMaxBytes: number } }).executor.overflowMaxBytes).toBe(64 * 1024);
+  });
+});

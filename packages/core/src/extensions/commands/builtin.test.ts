@@ -1,4 +1,7 @@
 import { describe, it, expect } from "vitest";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { helpCommand, helpRecipesCommand, helpShortcutsCommand, helpToolsCommand } from "./builtin/help.js";
 import { clearCommand } from "./builtin/clear.js";
 import { contextCommand } from "./builtin/context.js";
@@ -95,6 +98,23 @@ describe("context command", () => {
     expect(msg).toContain("5000");
     expect(msg).toContain("12");
     expect(msg).toContain("test-session-123");
+  });
+
+  it("shows overflow file count when overflow files exist", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "licode-ctx-"));
+    fs.mkdirSync(path.join(dir, ".licode", "overflow"), { recursive: true });
+    fs.writeFileSync(path.join(dir, ".licode", "overflow", "a.txt"), "x");
+    fs.writeFileSync(path.join(dir, ".licode", "overflow", "b.txt"), "y");
+    try {
+      const result = await contextCommand.execute(
+        [],
+        mockContext({ workingDirectory: dir })
+      );
+      const msg = (result as { message: string }).message;
+      expect(msg).toContain("Overflow: 2 files");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

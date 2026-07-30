@@ -27,6 +27,8 @@ export interface ContextConfig {
   keepRecentTurns?: number;
   /** Model used for the summarization side-call. Default "deepseek-chat". */
   summarizerModel?: string;
+  /** Max inline bytes for a tool's success output; larger spills to .licode/overflow/. Default 64KB. (Phase 4) */
+  overflowMaxBytes?: number;
 }
 
 export interface AgentConfig {
@@ -68,17 +70,20 @@ export class AgentLoop {
     this.llm = config.llm;
     this.conversation = config.conversation;
     this.tools = config.tools;
-    this.executor = new ToolExecutor(config.tools);
-    this.termination = new TerminationPolicy(config.termination ?? {});
-    this.eventBus = config.eventBus;
-    this.onTurnStart = config.onTurnStart;
-    this.compressor = config.compressor;
     this.context = {
       outputReserve: config.context?.outputReserve ?? 8192,
       compressThreshold: config.context?.compressThreshold ?? 0.85,
       keepRecentTurns: config.context?.keepRecentTurns ?? 2,
       summarizerModel: config.context?.summarizerModel ?? "deepseek-chat",
+      overflowMaxBytes: config.context?.overflowMaxBytes ?? 64 * 1024,
     };
+    this.executor = new ToolExecutor(config.tools, {
+      overflowMaxBytes: this.context.overflowMaxBytes,
+    });
+    this.termination = new TerminationPolicy(config.termination ?? {});
+    this.eventBus = config.eventBus;
+    this.onTurnStart = config.onTurnStart;
+    this.compressor = config.compressor;
   }
 
   async run(userInput: string): Promise<PipelineEvent> {

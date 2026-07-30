@@ -35,11 +35,13 @@ export const grepTool: Tool<typeof GrepParams> = {
         maxBuffer: 10 * 1024 * 1024,
       });
 
-      const truncated =
-        stdout.length > 10000 ? stdout.slice(0, 10000) + "\n... (truncated)" : stdout;
+      // Phase 4: no more manual 10000-char truncation. The ToolExecutor wraps
+      // every tool and spills output > overflowMaxBytes (default 64KB) to
+      // .licode/overflow/ with a recoverable pointer. Output under the limit
+      // is returned in full (better than the old lossy 10000-char cap).
       return {
         status: "success",
-        content: truncated || "(no matches)",
+        content: stdout || "(no matches)",
       };
     } catch (err: unknown) {
       const e = err as Error & { stdout?: string; stderr?: string; code?: number };

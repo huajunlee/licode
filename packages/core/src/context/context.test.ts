@@ -231,4 +231,60 @@ describe("overflowToolResult", () => {
       "x".repeat(50)
     );
   });
+
+  it("pointer includes a head preview of the first lines", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-overflow-"));
+    const content = Array.from({ length: 100 }, (_, i) => `line ${i + 1}`).join("\n");
+    const result = await overflowToolResult(content, {
+      workingDirectory: dir,
+      maxInlineBytes: 10,
+    });
+    if (result.status !== "success") throw new Error(result.error);
+    expect(result.content).toContain("First 50 lines:");
+    expect(result.content).toContain("line 1");
+    expect(result.content).toContain("line 50");
+    expect(result.content).not.toContain("line 51");
+  });
+
+  it("pointer reports total bytes and line count", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-overflow-"));
+    const result = await overflowToolResult("a\nb\nc\n", {
+      workingDirectory: dir,
+      maxInlineBytes: 2,
+    });
+    if (result.status !== "success") throw new Error(result.error);
+    expect(result.content).toMatch(/\d+ bytes/);
+    expect(result.content).toMatch(/\d+ lines/);
+  });
+
+  it("pointer includes a paging hint mentioning Read + offset/limit + path", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-overflow-"));
+    const result = await overflowToolResult("x".repeat(100), {
+      workingDirectory: dir,
+      maxInlineBytes: 10,
+    });
+    if (result.status !== "success") throw new Error(result.error);
+    expect(result.content).toContain("Read with offset/limit");
+    expect(result.content).toContain(".licode/overflow/");
+  });
+
+  it("preview is byte-capped so a huge single line does not flood it", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-overflow-"));
+    const hugeLine = "y".repeat(10000);
+    const result = await overflowToolResult(hugeLine, {
+      workingDirectory: dir,
+      maxInlineBytes: 10,
+    });
+    if (result.status !== "success") throw new Error(result.error);
+    expect(result.content.length).toBeLessThan(hugeLine.length);
+    expect(result.content).toContain("…");
+  });
+
+  it("small content is returned inline unchanged", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-overflow-"));
+    const result = await overflowToolResult("small output", { workingDirectory: dir });
+    if (result.status !== "success") throw new Error(result.error);
+    expect(result.content).toBe("small output");
+    expect(result.metadata?.overflowPath).toBeUndefined();
+  });
 });

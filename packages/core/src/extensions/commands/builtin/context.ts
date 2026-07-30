@@ -1,3 +1,5 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { MemoryStore } from "../../../memory/store.js";
 import type { SlashCommand } from "../registry.js";
 
@@ -28,6 +30,18 @@ export const contextCommand: SlashCommand = {
     const entries = await store.listAll();
     if (entries.length > 0) {
       info.push(`Memory: ${entries.length} entries`);
+    }
+
+    // Phase 4: count spilled overflow files.
+    const overflowDir = path.join(context.workingDirectory, ".licode", "overflow");
+    let overflowCount = 0;
+    try {
+      overflowCount = fs.readdirSync(overflowDir).length;
+    } catch {
+      // dir missing -> 0
+    }
+    if (overflowCount > 0) {
+      info.push(`Overflow: ${overflowCount} files`);
     }
 
     return { type: "action", message: info.join("\n") };
