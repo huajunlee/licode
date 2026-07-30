@@ -203,6 +203,7 @@ function ChatApp({
     commandMessage,
     slashCommands,
     isDreaming,
+    archivedNotice,
     handleSubmit,
   } = useConversation({ apiKey, model, sessionId, baseUrl, existingSessions });
 
@@ -238,6 +239,11 @@ function ChatApp({
       {isDreaming && (
         <Box marginBottom={1}>
           <DreamIndicator />
+        </Box>
+      )}
+      {archivedNotice && (
+        <Box marginBottom={1}>
+          <Text color="yellow">{archivedNotice}</Text>
         </Box>
       )}
       {hasThinking && (

@@ -63,6 +63,8 @@ export interface UseConversationResult {
   slashCommands: Array<{ name: string; description: string }>;
   /** True while a memory dream consolidation is running in the background. */
   isDreaming: boolean;
+  /** Phase 4: notice shown after a dream archives memories (null = none). */
+  archivedNotice: string | null;
   handleSubmit: (input: string) => Promise<void>;
 }
 
@@ -215,6 +217,7 @@ export function useConversation(
   const [commandMessage, setCommandMessage] = useState<string | null>(null);
   const [slashCommands, setSlashCommands] = useState<Array<{ name: string; description: string }>>([]);
   const [isDreaming, setIsDreaming] = useState(false);
+  const [archivedNotice, setArchivedNotice] = useState<string | null>(null);
 
   const commandRouterRef = useRef<CommandRouter>(new CommandRouter());
   const memoryStoreRef = useRef<MemoryStore>(
@@ -252,6 +255,10 @@ export function useConversation(
           sessionsDir: dreamSessionsDir,
           memoryDir: dreamMemoryDir,
           onStateChange: setIsDreaming,
+          onArchived: (slugs) =>
+            setArchivedNotice(
+              `🌙 记忆整理完成：已归档 ${slugs.length} 条 [${slugs.join(", ")}]，可用 /memory-restore <slug> 恢复`
+            ),
         })
   );
 
@@ -382,6 +389,7 @@ export function useConversation(
       setIsLoading(true);
       setStreaming("");
       setError(null);
+      setArchivedNotice(null);
       setThinkingBlocks([]);
       setActiveToolCalls([]);
       setCommandMessage(null);
@@ -532,6 +540,7 @@ export function useConversation(
     commandMessage,
     slashCommands,
     isDreaming,
+    archivedNotice,
     handleSubmit,
   };
 }
