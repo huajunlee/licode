@@ -3,6 +3,7 @@ import {
   createMemoryExtractionHook,
   createMemoryExtractionState,
 } from "./hook.js";
+import { createMemoryDreamState } from "./dream.js";
 import type { PipelineEvent } from "../events/types.js";
 import type { MemoryStore } from "./store.js";
 import type { MemoryExtractor } from "./extractor.js";
@@ -200,5 +201,21 @@ describe("createMemoryExtractionHook", () => {
     expect(state.running).toBe(false);
     // The attempt counts — prevents a failure storm every loop
     expect(state.lastExtractedAt).toBeGreaterThan(0);
+  });
+
+  it("yields to a running dream (dreamState.running -> return without extracting)", async () => {
+    const extractor = mockExtractor(true);
+    const store = mockStore();
+    const conv = mockConversation(userMessages);
+    const state = createMemoryExtractionState();
+    const dreamState = createMemoryDreamState();
+    dreamState.running = true;
+
+    const fn = createMemoryExtractionHook(extractor, store, conv, state, dreamState);
+    await fn(agentLoopCompleteEvent());
+
+    expect(extractor.shouldExtract).not.toHaveBeenCalled();
+    expect(extractor.extract).not.toHaveBeenCalled();
+    expect(store.hasChangesSince).not.toHaveBeenCalled();
   });
 });

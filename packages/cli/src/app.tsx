@@ -4,6 +4,7 @@ import { ConversationManager } from "@licode/core";
 import { ChatView } from "./components/chat-view.js";
 import { StreamRenderer } from "./components/stream-renderer.js";
 import { WaitingIndicator } from "./components/waiting-indicator.js";
+import { DreamIndicator } from "./components/dream-indicator.js";
 import { ThinkingAccordion } from "./components/thinking-accordion.js";
 import { InputBox } from "./components/input-box.js";
 import { StatusBar } from "./components/status-bar.js";
@@ -201,6 +202,7 @@ function ChatApp({
     activeToolCalls,
     commandMessage,
     slashCommands,
+    isDreaming,
     handleSubmit,
   } = useConversation({ apiKey, model, sessionId, baseUrl, existingSessions });
 
@@ -233,6 +235,11 @@ function ChatApp({
   return (
     <Box flexDirection="column" padding={1}>
       <ChatView messages={messages} />
+      {isDreaming && (
+        <Box marginBottom={1}>
+          <DreamIndicator />
+        </Box>
+      )}
       {hasThinking && (
         <ThinkingAccordion blocks={thinkingBlocks} focusedIndex={focusedIndex} />
       )}

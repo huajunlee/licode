@@ -2,6 +2,7 @@ import type { PipelineEvent } from "../events/types.js";
 import type { ConversationManager } from "../conversation/manager.js";
 import type { MemoryExtractor } from "./extractor.js";
 import type { MemoryStore } from "./store.js";
+import type { DreamState } from "./dream.js";
 
 /**
  * Hook function type compatible with {@link HookFunction}.
@@ -62,7 +63,8 @@ export function createMemoryExtractionHook(
   extractor: MemoryExtractor,
   store: MemoryStore,
   conversation: ConversationManager,
-  state: MemoryExtractionState
+  state: MemoryExtractionState,
+  dreamState?: DreamState
 ): MemoryExtractionHookFn {
   return async (event: PipelineEvent) => {
     // Only react to agent-loop-complete
@@ -70,6 +72,9 @@ export function createMemoryExtractionHook(
 
     // In-process mutex — overlapping events are dropped, not queued
     if (state.running) return;
+
+    // Dream is running - yield. Dream is a fuller consolidation; don't race it.
+    if (dreamState?.running) return;
 
     // Main agent already wrote memory files during this loop → just
     // rebuild the index (covers files written directly with the Write
