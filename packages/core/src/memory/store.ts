@@ -56,18 +56,29 @@ export class MemoryStore {
     let finalContent = memory.content;
     let createdAt = memory.createdAt;
     let updatedAt = memory.updatedAt;
+    // Phase 4: usage fields. create(new file) -> 0/"" (a new memory is unused);
+    // update/append -> preserve existing (content change ≠ usage event; never
+    // reset the forgetting clock on a content edit).
+    let usageCount = 0;
+    let lastUsedAt = "";
 
     if (effectiveAction === "update") {
       // Replace content wholesale; keep the original createdAt, refresh updatedAt
       if (exists) {
         const existing = await this.load(memory.slug);
-        if (existing) createdAt = existing.createdAt;
+        if (existing) {
+          createdAt = existing.createdAt;
+          usageCount = existing.usageCount ?? 0;
+          lastUsedAt = existing.lastUsedAt ?? "";
+        }
       }
       updatedAt = new Date().toISOString();
     } else if (effectiveAction === "append" && exists) {
       const existing = await this.load(memory.slug);
       if (existing) {
         finalContent = mergeAppend(existing.content, memory.content);
+        usageCount = existing.usageCount ?? 0;
+        lastUsedAt = existing.lastUsedAt ?? "";
       }
     }
 
@@ -78,6 +89,8 @@ export class MemoryStore {
       `type: ${memory.type}`,
       `createdAt: ${createdAt}`,
       `updatedAt: ${updatedAt}`,
+      `usageCount: ${usageCount}`,
+      `lastUsedAt: ${lastUsedAt}`,
       "---",
       "",
       finalContent,
@@ -199,6 +212,51 @@ export class MemoryStore {
   }
 
   /**
+   * Phase 4: record a recall-injection usage event for `slug`.
+   *
+   * Increments usageCount, sets lastUsedAt=now, preserves everything else
+   * (name/description/type/createdAt/updatedAt/content). Restores the original
+   * mtime so the write is invisible to {@link hasChangesSince} -- this is the
+   * fix for the Phase 2/3 pre-noted mtime坑 (otherwise each recall would bump
+   * mtime ≥ loopStartedAt and the extraction hook would skip extraction as
+   * "main agent already wrote"). Does NOT rebuildIndex (usage fields are not
+   * in the index). Best-effort: a missing slug or utimes failure is swallowed.
+   */
+  async recordUsage(slug: string): Promise<void> {
+    for (const type of MEMORY_TYPES) {
+      const filePath = path.join(this.dir, type, `${path.basename(slug)}.md`);
+      if (!fs.existsSync(filePath)) continue;
+      const stat = await fs.promises.stat(filePath);
+      const mtimeMs = stat.mtimeMs;
+      const atimeMs = stat.atimeMs;
+      const raw = await fs.promises.readFile(filePath, "utf-8");
+      const existing = this.parse(raw, slug, type);
+      const usageCount = (existing.usageCount ?? 0) + 1;
+      const lastUsedAt = new Date().toISOString();
+      const frontmatter = [
+        "---",
+        `name: ${existing.name}`,
+        `description: ${existing.description}`,
+        `type: ${existing.type}`,
+        `createdAt: ${existing.createdAt}`,
+        `updatedAt: ${existing.updatedAt}`,
+        `usageCount: ${usageCount}`,
+        `lastUsedAt: ${lastUsedAt}`,
+        "---",
+        "",
+        existing.content,
+        "",
+      ].join("\n");
+      await fs.promises.writeFile(filePath, frontmatter, "utf-8");
+      // Restore original mtime -> invisible to hasChangesSince(loopStartedAt).
+      await fs.promises
+        .utimes(filePath, atimeMs / 1000, mtimeMs / 1000)
+        .catch(() => {});
+      return; // first matching type dir wins
+    }
+  }
+
+  /**
    * Read all markdown memory files directly without going through parse().
    * Used internally by rebuildIndex() to avoid double-parsing.
    */
@@ -257,6 +315,8 @@ export class MemoryStore {
       content: match[2].trim(),
       createdAt: fm.get("createdAt") ?? new Date().toISOString(),
       updatedAt: fm.get("updatedAt") ?? new Date().toISOString(),
+      usageCount: fm.has("usageCount") ? Number(fm.get("usageCount")) || 0 : 0,
+      lastUsedAt: fm.get("lastUsedAt") ?? "",
     };
   }
 }

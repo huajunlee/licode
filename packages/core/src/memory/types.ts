@@ -15,6 +15,10 @@ export interface Memory {
   createdAt: string;
   /** 更新时间 ISO */
   updatedAt: string;
+  /** 被 recall 注入上下文的累计次数（Phase 4）。未用过为 0。 */
+  usageCount?: number;
+  /** 最近一次被 recall 注入的 ISO 时间（Phase 4）。未用过为 ""。 */
+  lastUsedAt?: string;
 }
 
 /** @deprecated 使用 Memory 替代 */
