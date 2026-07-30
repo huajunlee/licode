@@ -3,9 +3,24 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { ConversationManager } from "../conversation/manager.js";
-import { ContextCompressor } from "./compressor.js";
+import { ContextCompressor, splitIntoTurns } from "./compressor.js";
 import { overflowToolResult } from "./overflow.js";
 import { TokenBudget } from "./token-budget.js";
+import type { Message } from "../llm/provider.js";
+
+const ts = () => new Date().toISOString();
+const U = (content: string): Message => ({ role: "user", content, timestamp: ts() });
+const A = (content: string): Message => ({ role: "assistant", content, timestamp: ts() });
+const aT = (id: string, name: string, input: Record<string, unknown>): Message => ({
+  role: "assistant",
+  content: [{ id, name, input }],
+  timestamp: ts(),
+});
+const uR = (id: string, content: string): Message => ({
+  role: "user",
+  content: [{ tool_use_id: id, content }],
+  timestamp: ts(),
+});
 
 describe("TokenBudget", () => {
   it("reports when messages exceed the configured budget", () => {
@@ -17,29 +32,176 @@ describe("TokenBudget", () => {
   });
 });
 
+describe("splitIntoTurns", () => {
+  it("keeps tool pairs within a turn (never splits mid-pair)", () => {
+    const msgs = [
+      U("task"),
+      aT("t1", "read", { path: "x" }),
+      uR("t1", "file content"),
+      A("done with read"),
+      U("next"),
+      aT("t2", "edit", { path: "y" }),
+      uR("t2", "ok"),
+    ];
+    const turns = splitIntoTurns(msgs);
+    expect(turns).toHaveLength(2);
+    expect(turns[0]).toEqual(msgs.slice(0, 4));
+    expect(turns[1]).toEqual(msgs.slice(4));
+  });
+
+  it("keeps recall pairs within a turn", () => {
+    const msgs = [
+      U("task"),
+      aT("mrec_1", "memory_recall", { query: "task" }),
+      uR("mrec_1", "recalled memory"),
+      A("answer"),
+      U("next"),
+    ];
+    const turns = splitIntoTurns(msgs);
+    expect(turns).toHaveLength(2);
+    expect(turns[0]).toEqual(msgs.slice(0, 4));
+  });
+});
+
 describe("ContextCompressor", () => {
-  it("trims the oldest messages and emits a compression summary", async () => {
-    const manager = new ConversationManager({ model: "test-model" });
-    manager.addUserMessage("first message with lots of words");
-    manager.appendToAssistantMessage("first answer with lots of words");
-    manager.addUserMessage("second message stays");
-    manager.appendToAssistantMessage("second answer stays");
+  it("keeps first user + recent turns, summarizes the middle as an assistant SUMMARY", async () => {
+    const mgr = new ConversationManager({ model: "test-model" });
+    mgr.replaceMessages([
+      U("turn1 question"), A("turn1 answer"),
+      U("turn2 question"), A("turn2 answer"),
+      U("turn3 question"), A("turn3 answer"),
+      U("turn4 question"), A("turn4 answer"),
+    ]);
 
     const compressor = new ContextCompressor({
-      maxTokens: 20,
-      summarizer: async (messages) => `Compressed ${messages.length} messages`,
+      summarizer: async (m) => `SUMMARY of ${m.length} msgs`,
     });
-    const result = await compressor.compress(manager);
+    const result = await compressor.compress(mgr, { keepRecentTurns: 2 });
 
     expect(result.compressed).toBe(true);
-    expect(manager.getMessages()[0]).toMatchObject({
+    expect(result.method).toBe("summarize");
+    const out = mgr.getMessages();
+    // [firstUser, SUMMARY(assistant), ...last 2 turns (4 msgs)]
+    expect(out[0]).toMatchObject({ role: "user", content: "turn1 question" });
+    expect(out[1]).toMatchObject({
       role: "assistant",
-      content: expect.stringContaining("Compressed"),
+      content: expect.stringContaining("SUMMARY of"),
     });
-    expect(manager.getMessages().at(-1)).toMatchObject({
-      role: "assistant",
-      content: expect.stringContaining("second answer"),
+    expect(out.slice(2)).toHaveLength(4);
+    expect(out.at(-1)).toMatchObject({ role: "assistant", content: "turn4 answer" });
+    // summarized region = turn1 answer + turn2 (U,A) = 3 msgs
+    expect(result.removedMessages).toBe(3);
+    // Role alternation: user, assistant, user, assistant, user, assistant
+    const roles = out.map((m) => m.role);
+    expect(roles).toEqual(["user", "assistant", "user", "assistant", "user", "assistant"]);
+  });
+
+  it("keeps recent tool pairs atomic (no orphan tool_result)", async () => {
+    const mgr = new ConversationManager({ model: "test-model" });
+    mgr.replaceMessages([
+      U("turn1"), aT("t1", "read", {}), uR("t1", "content1"),
+      U("turn2"), aT("t2", "read", {}), uR("t2", "content2"),
+      U("turn3 current"), aT("t3", "read", {}), uR("t3", "content3"),
+    ]);
+
+    const compressor = new ContextCompressor({ summarizer: async () => "S" });
+    const result = await compressor.compress(mgr, { keepRecentTurns: 2 });
+    expect(result.compressed).toBe(true);
+
+    const out = mgr.getMessages();
+    // Every tool_result block must have its tool_use present (no orphans).
+    for (const m of out) {
+      if (m.role === "user" && Array.isArray(m.content)) {
+        for (const block of m.content as { tool_use_id: string }[]) {
+          const hasUse = out.some(
+            (mm) =>
+              mm.role === "assistant" &&
+              Array.isArray(mm.content) &&
+              (mm.content as { id: string }[]).some((b) => b.id === block.tool_use_id)
+          );
+          expect(hasUse).toBe(true);
+        }
+      }
+    }
+    // The most recent tool pair (t3) is preserved intact.
+    expect(out.some((m) => m.role === "assistant" && Array.isArray(m.content) &&
+      (m.content as { id: string }[]).some((b) => b.id === "t3"))).toBe(true);
+  });
+
+  it("keeps a recall pair in the current turn intact", async () => {
+    const mgr = new ConversationManager({ model: "test-model" });
+    mgr.replaceMessages([
+      U("turn1"), A("answer1"),
+      U("turn2 current"),
+      aT("mrec_1", "memory_recall", { query: "turn2" }),
+      uR("mrec_1", "recalled memory"),
+    ]);
+
+    const compressor = new ContextCompressor({ summarizer: async () => "S" });
+    await compressor.compress(mgr, { keepRecentTurns: 1 });
+
+    const out = mgr.getMessages();
+    const hasRecallResult = out.some(
+      (m) =>
+        m.role === "user" &&
+        Array.isArray(m.content) &&
+        (m.content as { tool_use_id: string }[]).some((b) => b.tool_use_id === "mrec_1")
+    );
+    const hasRecallUse = out.some(
+      (m) =>
+        m.role === "assistant" &&
+        Array.isArray(m.content) &&
+        (m.content as { id: string }[]).some((b) => b.id === "mrec_1")
+    );
+    expect(hasRecallResult).toBe(true);
+    expect(hasRecallUse).toBe(true);
+  });
+
+  it("degrades to trim when the summarizer throws", async () => {
+    const mgr = new ConversationManager({ model: "test-model" });
+    mgr.replaceMessages([
+      U("turn1"), A("a1"),
+      U("turn2"), A("a2"),
+      U("turn3"), A("a3"),
+    ]);
+
+    const compressor = new ContextCompressor({
+      summarizer: async () => {
+        throw new Error("LLM down");
+      },
     });
+    const result = await compressor.compress(mgr, { keepRecentTurns: 2 });
+
+    expect(result.compressed).toBe(true);
+    expect(result.method).toBe("trim");
+    expect(result.summary).toBeUndefined();
+    const out = mgr.getMessages();
+    // No SUMMARY message.
+    expect(
+      out.some(
+        (m) =>
+          m.role === "assistant" &&
+          typeof m.content === "string" &&
+          m.content.includes("Previous conversation summary")
+      )
+    ).toBe(false);
+    // firstUser intent folded into the first recent user message (still user-first).
+    expect(out[0]).toMatchObject({ role: "user" });
+    expect(out[0].content as string).toContain("Earlier task");
+    // last 2 turns kept (4 messages), no summary message.
+    expect(out).toHaveLength(4);
+  });
+
+  it("does not compress when there are not enough turns to summarize", async () => {
+    const mgr = new ConversationManager({ model: "test-model" });
+    mgr.replaceMessages([U("only turn"), A("answer")]);
+
+    const compressor = new ContextCompressor({ summarizer: async () => "S" });
+    const result = await compressor.compress(mgr, { keepRecentTurns: 2 });
+
+    expect(result.compressed).toBe(false);
+    expect(result.removedMessages).toBe(0);
+    expect(mgr.getMessages()).toHaveLength(2);
   });
 });
 

@@ -101,7 +101,6 @@ export type {
 export { TokenBudget } from "./context/token-budget.js";
 export { ContextCompressor } from "./context/compressor.js";
 export { Summarizer } from "./context/summarizer.js";
-export { contextMiddleware } from "./context/middleware.js";
 export { overflowToolResult } from "./context/overflow.js";
 export type {
   TokenBudgetConfig,

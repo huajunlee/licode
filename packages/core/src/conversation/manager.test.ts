@@ -167,47 +167,47 @@ describe("ConversationManager", () => {
     expect(mgr.getMessageTokenBase()).toBe(base);
   });
 
-  it("trimToBudget keeps recent messages within budget", () => {
+  // --- Phase 2: calibration upgrade (base = messages + system + tools) ---
+
+  it("setToolTokenBase includes tool tokens in getMessageTokenBase", () => {
     const mgr = new ConversationManager({ model: "test" });
-    // Add 3 rounds of conversation
-    mgr.addUserMessage("Round 1 question");
-    mgr.appendToAssistantMessage("Round 1 answer here yes ok");
-    mgr.addUserMessage("Round 2 question that is longer");
-    mgr.appendToAssistantMessage("Round 2 answer goes here");
-    mgr.addUserMessage("Round 3 question latest one");
-    mgr.appendToAssistantMessage("Round 3 answer final reply");
-
-    const beforeCount = mgr.getMessageCount();
-    expect(beforeCount).toBe(6); // 3 user + 3 assistant
-
-    // Tight budget — room for ~2 rounds max
-    mgr.trimToBudget(20);
-
-    const afterMessages = mgr.getMessages();
-    // Should have kept only recent messages
-    expect(afterMessages.length).toBeLessThan(beforeCount);
-    // At minimum, the last round should be preserved
-    expect(
-      afterMessages.some(
-        (m) => m.role === "user" && m.content === "Round 3 question latest one"
-      )
-    ).toBe(true);
+    mgr.addUserMessage("Hello world");
+    const before = mgr.getMessageTokenBase(); // messages only (no system, no tools)
+    mgr.setToolTokenBase(123);
+    expect(mgr.getMessageTokenBase()).toBe(before + 123);
   });
 
-  it("trimToBudget preserves all messages when budget is large", () => {
+  it("getMessageTokenBase includes the system prompt estimate", () => {
     const mgr = new ConversationManager({ model: "test" });
-    mgr.addUserMessage("Hello");
-    mgr.appendToAssistantMessage("Hi there");
-
-    const beforeCount = mgr.getMessageCount();
-    mgr.trimToBudget(10000);
-    expect(mgr.getMessageCount()).toBe(beforeCount);
+    mgr.addUserMessage("Hello world");
+    const before = mgr.getMessageTokenBase(); // no system layers
+    mgr.systemPrompt.addLayer({
+      name: "role",
+      priority: 0,
+      always: true,
+      content: "You are a helpful assistant with a decently long system prompt.",
+    });
+    expect(mgr.getMessageTokenBase()).toBeGreaterThan(before);
   });
 
-  it("trimToBudget handles empty conversation gracefully", () => {
+  it("calibration with full base keeps ratio near 1 (no clamp-4 inflation)", () => {
+    // Under the old message-only base, large system+tools would force
+    // ratio = real/messages to clamp at 4. With the upgrade, base includes
+    // system+tools, so ratio = real/base ≈ 1.
     const mgr = new ConversationManager({ model: "test" });
-    expect(() => mgr.trimToBudget(100)).not.toThrow();
-    expect(mgr.getMessageCount()).toBe(0);
+    mgr.addUserMessage("Hi"); // tiny message
+    mgr.systemPrompt.addLayer({
+      name: "role",
+      priority: 0,
+      always: true,
+      content: "x".repeat(2000),
+    });
+    mgr.setToolTokenBase(500);
+    const base = mgr.getMessageTokenBase(); // messages + ~500 system + 500 tools
+    // Backend reports the true full input, which ≈ base (all components counted).
+    mgr.observeUsage(base, base);
+    // ratio is exactly 1 -> getTokenCount == base, NOT messages × 4.
+    expect(mgr.getTokenCount()).toBe(base);
   });
 
   // --- Phase 3: /clear and /context support ---
@@ -236,5 +236,18 @@ describe("ConversationManager", () => {
     expect(stats.messageCount).toBe(2);
     expect(typeof stats.tokenCount).toBe("number");
     expect(stats.tokenCount).toBeGreaterThan(0);
+  });
+
+  // --- Phase 2: budget info for /context ---
+
+  it("getBudgetInfo reports window, reserve, used, remaining", () => {
+    const mgr = new ConversationManager({ model: "test" });
+    mgr.addUserMessage("Hello world");
+    mgr.setContextBudget({ contextWindow: 1000, outputReserve: 100 });
+    const info = mgr.getBudgetInfo();
+    expect(info.contextWindow).toBe(1000);
+    expect(info.outputReserve).toBe(100);
+    expect(info.used).toBe(mgr.getTokenCount());
+    expect(info.remaining).toBe(1000 - mgr.getTokenCount());
   });
 });

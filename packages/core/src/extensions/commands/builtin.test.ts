@@ -23,6 +23,9 @@ function mockContext(overrides?: Partial<CommandContext>): CommandContext {
       getMessageCount() {
         return 12;
       },
+      getBudgetInfo() {
+        return { contextWindow: 0, outputReserve: 0, used: 5000, remaining: 0 };
+      },
     } as unknown as CommandContext["conversation"],
     toolRegistry: {} as CommandContext["toolRegistry"],
     workingDirectory: "/tmp",

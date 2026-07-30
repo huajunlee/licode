@@ -6,12 +6,22 @@ export const contextCommand: SlashCommand = {
   description: "Show token usage, session info, and memory",
   async execute(_args, context) {
     const conv = context.conversation;
+    const budget = conv.getBudgetInfo();
     const info = [
       `Model: ${conv.metadata.model}`,
-      `Tokens: ${conv.getTokenCount()}`,
+      `Tokens: ${budget.used}`,
       `Messages: ${conv.getMessageCount()}`,
       `Session: ${conv.id}`,
     ];
+
+    // Window/reserve are published by the AgentLoop each turn; before the
+    // first turn they are 0 and we omit them.
+    if (budget.contextWindow > 0) {
+      info.push(
+        `Window: ${budget.contextWindow} (reserve ${budget.outputReserve})`
+      );
+      info.push(`Remaining: ${budget.remaining}`);
+    }
 
     // Show memory stats
     const store = new MemoryStore(`${context.workingDirectory}/.licode/memory`);

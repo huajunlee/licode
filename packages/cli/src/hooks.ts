@@ -23,6 +23,8 @@ import {
   createMemoryExtractionHook,
   createMemoryExtractionState,
   emitAfterAgentLoop,
+  ContextCompressor,
+  Summarizer,
 } from "@licode/core";
 import type {
   Message,
@@ -78,13 +80,43 @@ function resolveSessionPath(sessionId: string): string | null {
   return null;
 }
 
+/**
+ * Phase 2: build the structure-aware context compressor. Summarization runs
+ * on a cheap side model (default deepseek-chat) via a separate provider, so
+ * the main loop's provider is untouched. Summarizer failure degrades to trim
+ * inside the compressor - never breaks the loop.
+ */
+function createContextCompressor(
+  apiKey: string,
+  baseUrl: string | undefined,
+  model: string
+): ContextCompressor {
+  const sideProvider = new AnthropicProvider({ apiKey, baseUrl });
+  const summarizer = new Summarizer({
+    generate: async (prompt) => {
+      const res = await sideProvider.chat({
+        messages: [
+          { role: "user", content: prompt, timestamp: new Date().toISOString() },
+        ],
+        model,
+        maxTokens: 1024,
+      });
+      return res.content;
+    },
+  });
+  return new ContextCompressor({
+    summarizer: (msgs) => summarizer.summarize(msgs),
+  });
+}
+
 export function createEventBus(
   setStreaming: (s: string) => void,
   setThinkingBlocks: (blocks: ThinkingBlock[]) => void,
   setActiveToolCalls: Dispatch<SetStateAction<ToolCallState[]>>,
   setError: (e: string | null) => void,
   setTokenCount: (n: number) => void,
-  getTokenCount: () => number
+  getTokenCount: () => number,
+  setCommandMessage?: (message: string) => void
 ): EventBus {
   let streamText = "";
   const blocks: ThinkingBlock[] = [];
@@ -184,6 +216,17 @@ export function createEventBus(
           setTokenCount(getTokenCount());
           break;
 
+        case "context-compressed":
+          // Phase 2: surface that older turns were summarized/trimmed so the
+          // user understands why earlier detail is gone.
+          setCommandMessage?.(
+            `已压缩 ${event.removedMessages ?? 0} 条消息（${
+              event.method === "trim" ? "裁剪" : "摘要"
+            }）`
+          );
+          setTokenCount(getTokenCount());
+          break;
+
         case "error":
           setError(`${event.context}: ${event.error.message}`);
           break;
@@ -235,12 +278,16 @@ export function useConversation(
       store: memoryStoreRef.current,
     })
   );
+  // Phase 2: structure-aware context compressor (summarize older turns when
+  // near the context window). Constructed once the provider is ready.
+  const compressorRef = useRef<ContextCompressor | null>(null);
 
   useEffect(() => {
     if (!apiKey) return;
 
     const provider = new AnthropicProvider({ apiKey, baseUrl });
     providerRef.current = provider;
+    compressorRef.current = createContextCompressor(apiKey, baseUrl, model);
 
     // Initialize ToolRegistry with builtin tools
     const tools = new ToolRegistry();
@@ -340,6 +387,7 @@ export function useConversation(
       const provider = providerRef.current;
       const manager = managerRef.current;
       const tools = toolsRef.current;
+      const compressor = compressorRef.current;
       const router = commandRouterRef.current;
       if (!provider || !manager || !input.trim()) return;
 
@@ -381,7 +429,8 @@ export function useConversation(
               setActiveToolCalls,
               setError,
               setTokenCount,
-              () => manager.getTokenCount()
+              () => manager.getTokenCount(),
+              setCommandMessage
             );
 
             const pipeline = new EventPipeline();
@@ -394,6 +443,7 @@ export function useConversation(
                   conversation: manager,
                   tools,
                   eventBus,
+                  compressor: compressor ?? undefined,
                   ...(process.env.LICODE_MEMORY_RECALL === "off"
                     ? {}
                     : { onTurnStart: memoryRecallHandlerRef.current }),
@@ -438,7 +488,8 @@ export function useConversation(
           setActiveToolCalls,
           setError,
           setTokenCount,
-          () => manager.getTokenCount()
+          () => manager.getTokenCount(),
+          setCommandMessage
         );
 
         const pipeline = new EventPipeline();
@@ -451,6 +502,7 @@ export function useConversation(
               conversation: manager,
               tools,
               eventBus,
+              compressor: compressor ?? undefined,
               ...(process.env.LICODE_MEMORY_RECALL === "off"
                 ? {}
                 : { onTurnStart: memoryRecallHandlerRef.current }),

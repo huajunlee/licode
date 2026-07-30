@@ -23,4 +23,29 @@ describe("createEventBus", () => {
     // not the stale 0 left by the dead tokenCountingMiddleware.
     expect(setTokenCount).toHaveBeenCalledWith(1337);
   });
+
+  it("surfaces a compression notice on context-compressed", () => {
+    const setCommandMessage = vi.fn();
+    const setTokenCount = vi.fn();
+    const bus = createEventBus(
+      vi.fn(),
+      vi.fn(),
+      vi.fn(),
+      vi.fn(),
+      setTokenCount,
+      () => 42,
+      setCommandMessage
+    );
+
+    bus.emit({ type: "context-compressed", method: "summarize", removedMessages: 7 });
+
+    expect(setCommandMessage).toHaveBeenCalledWith(
+      expect.stringContaining("7")
+    );
+    expect(setCommandMessage).toHaveBeenCalledWith(
+      expect.stringContaining("摘要")
+    );
+    // Status bar refreshed with the post-compression count.
+    expect(setTokenCount).toHaveBeenCalledWith(42);
+  });
 });

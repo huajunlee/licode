@@ -1,6 +1,6 @@
 # Phase 2 实现计划:预算感知消息构建 + 结构感知压缩(合并 Phase 2+3)
 
-> **状态**:计划冻结,待 TDD 实现
+> **状态**:实现完成,验收通过(2026-07-30)。380 测试通过(仅 1 个与上下文无关的预存 MCP 启动测试失败),`pnpm build` 零 TS 错误,零新依赖。
 >
 > **冻结日期**:2026-07-30(基于 worktree `context-management-improvement` commit `bf1c55f` 的代码快照)
 >
