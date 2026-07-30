@@ -489,3 +489,59 @@ describe("MemoryStore usage tracking (Phase 4)", () => {
     await expect(store.recordUsage("user/ghost")).resolves.toBeUndefined();
   });
 });
+
+describe("MemoryStore archive/restore (Phase 4)", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-archive-"));
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("archive moves file to archive/<type>/ and drops from index", async () => {
+    const store = new MemoryStore(dir);
+    await store.save(makeMemory({ slug: "user/old" }));
+    await store.archive("user/old");
+    expect(existsSync(path.join(dir, "user", "old.md"))).toBe(false);
+    expect(existsSync(path.join(dir, "archive", "user", "old.md"))).toBe(true);
+    expect(await store.load("user/old")).toBeNull(); // listAll/load 不扫 archive/
+    await store.rebuildIndex();
+    expect((await store.loadIndex()).includes("user/old")).toBe(false);
+  });
+
+  it("archive on missing slug is a no-op", async () => {
+    const store = new MemoryStore(dir);
+    await expect(store.archive("user/ghost")).resolves.toBeUndefined();
+  });
+
+  it("listArchived lists archived memories (with usage fields)", async () => {
+    const store = new MemoryStore(dir);
+    await store.save(makeMemory({ slug: "user/old" }));
+    await store.archive("user/old");
+    const archived = await store.listArchived();
+    expect(archived).toHaveLength(1);
+    expect(archived[0].slug).toBe("user/old");
+  });
+
+  it("listArchived returns [] when no archive dir", async () => {
+    const store = new MemoryStore(dir);
+    expect(await store.listArchived()).toEqual([]);
+  });
+
+  it("restore moves back to <type>/ and re-indexes", async () => {
+    const store = new MemoryStore(dir);
+    await store.save(makeMemory({ slug: "user/old" }));
+    await store.archive("user/old");
+    const restored = await store.restore("user/old");
+    expect(restored?.slug).toBe("user/old");
+    expect(existsSync(path.join(dir, "user", "old.md"))).toBe(true);
+    expect(existsSync(path.join(dir, "archive", "user", "old.md"))).toBe(false);
+    expect((await store.loadIndex()).includes("user/old")).toBe(true);
+  });
+
+  it("restore on missing slug returns null", async () => {
+    const store = new MemoryStore(dir);
+    expect(await store.restore("user/ghost")).toBeNull();
+  });
+});

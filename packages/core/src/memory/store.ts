@@ -257,6 +257,61 @@ export class MemoryStore {
   }
 
   /**
+   * Phase 4: retire a memory to archive/<type>/ (soft-delete, recoverable).
+   *
+   * The file leaves the type directory so listAll/rebuildIndex/hasChangesSince
+   * no longer see it. Does NOT rebuildIndex (the caller - Dream's Prune - does
+   * that once). A missing slug is a silent no-op.
+   */
+  async archive(slug: string): Promise<void> {
+    for (const type of MEMORY_TYPES) {
+      const src = path.join(this.dir, type, `${path.basename(slug)}.md`);
+      if (!fs.existsSync(src)) continue;
+      const dstDir = path.join(this.dir, "archive", type);
+      await fs.promises.mkdir(dstDir, { recursive: true });
+      await fs.promises.rename(src, path.join(dstDir, `${path.basename(slug)}.md`));
+      return;
+    }
+  }
+
+  /** Phase 4: list memories retired to archive/. */
+  async listArchived(): Promise<Memory[]> {
+    const archiveDir = path.join(this.dir, "archive");
+    if (!fs.existsSync(archiveDir)) return [];
+    const memories: Memory[] = [];
+    for (const type of MEMORY_TYPES) {
+      const typeDir = path.join(archiveDir, type);
+      if (!fs.existsSync(typeDir)) continue;
+      const files = (await fs.promises.readdir(typeDir)).filter((f) =>
+        f.endsWith(".md")
+      );
+      for (const file of files) {
+        const raw = await fs.promises.readFile(path.join(typeDir, file), "utf-8");
+        memories.push(this.parse(raw, `${type}/${path.basename(file, ".md")}`, type));
+      }
+    }
+    return memories.sort((a, b) => a.slug.localeCompare(b.slug));
+  }
+
+  /**
+   * Phase 4: restore an archived memory back to its type directory and rebuild
+   * the index so it re-enters recall candidates. Returns the restored memory,
+   * or null if not found in archive/.
+   */
+  async restore(slug: string): Promise<Memory | null> {
+    for (const type of MEMORY_TYPES) {
+      const src = path.join(this.dir, "archive", type, `${path.basename(slug)}.md`);
+      if (!fs.existsSync(src)) continue;
+      const dstDir = path.join(this.dir, type);
+      await fs.promises.mkdir(dstDir, { recursive: true });
+      await fs.promises.rename(src, path.join(dstDir, `${path.basename(slug)}.md`));
+      await this.rebuildIndex();
+      return this.load(slug);
+    }
+    return null;
+  }
+
+  /**
    * Read all markdown memory files directly without going through parse().
    * Used internally by rebuildIndex() to avoid double-parsing.
    */
