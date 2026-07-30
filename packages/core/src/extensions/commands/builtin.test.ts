@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { helpCommand, helpRecipesCommand, helpShortcutsCommand, helpToolsCommand } from "./builtin/help.js";
 import { clearCommand } from "./builtin/clear.js";
 import { contextCommand } from "./builtin/context.js";
-import { memoryCommand, memoryListCommand, memoryAddCommand, memoryDeleteCommand, memoryRestoreCommand, memoryArchiveCommand } from "./builtin/memory.js";
+import { memoryCommand, memoryListCommand, memoryAddCommand, memoryDeleteCommand, memoryRestoreCommand, memoryArchiveCommand, memoryPinCommand, memoryUnpinCommand } from "./builtin/memory.js";
 import { MemoryStore } from "../../memory/store.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -185,5 +185,26 @@ describe("memory-archive command", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("memory-pin / memory-unpin commands", () => {
+  it("errors when no slug provided", async () => {
+    expect((await memoryPinCommand.execute([], mockContext())).type).toBe("error");
+    expect((await memoryUnpinCommand.execute([], mockContext())).type).toBe("error");
+  });
+
+  it("pins and unpins a memory", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "mem-pin-cmd-"));
+    try {
+      const store = new MemoryStore(`${dir}/.licode/memory`);
+      await store.save({ slug: "user/x", type: "user", name: "X", description: "d", content: "c", createdAt: "2026-07-01T00:00:00Z", updatedAt: "2026-07-01T00:00:00Z" });
+      const r1 = await memoryPinCommand.execute(["user/x"], mockContext({ workingDirectory: dir }));
+      expect(r1.type).toBe("action");
+      expect((await store.load("user/x"))?.pinned).toBe(true);
+      const r2 = await memoryUnpinCommand.execute(["user/x"], mockContext({ workingDirectory: dir }));
+      expect(r2.type).toBe("action");
+      expect((await store.load("user/x"))?.pinned).toBe(false);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });

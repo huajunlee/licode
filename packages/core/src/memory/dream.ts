@@ -259,7 +259,7 @@ export class MemoryDream {
     store: MemoryStore,
     suspicions: Suspicion[],
     evidence: Map<string, string[]>
-  ): Promise<void> {
+  ): Promise<string[]> {
     const all = await store.listAll();
     const now = Date.now();
     const candidateSlugs = new Set(
@@ -281,14 +281,10 @@ export class MemoryDream {
       })
     );
     const knownSlugs = new Set(all.map((m) => m.slug));
-    const ops = this.parseDreamResponse(response.content, knownSlugs, candidateSlugs);
-    const keepSlugs = new Set<string>();
+    const ops = this.parseDreamResponse(response.content, knownSlugs);
     for (const op of ops) {
       if (op.action === "delete") {
         await this.backupAndDelete(store, op.slug);
-      } else if (op.action === "keep") {
-        // Phase 4: LLM veto - protect a stale candidate from auto-archiving.
-        if (candidateSlugs.has(op.slug)) keepSlugs.add(op.slug);
       } else {
         const nowIso = new Date().toISOString();
         await store.save(
@@ -305,14 +301,16 @@ export class MemoryDream {
         );
       }
     }
-    // Phase 4: auto-archive stale candidates the LLM did not protect (and that
-    // were not deleted above). Rule-driven (>30d unused) per spec §6.3; the LLM
-    // only vetoes via `keep`. Already-deleted candidates (load == null) skipped.
+    // Phase 4: rule-driven auto-archive. Stale candidates (>30d unused, not
+    // pinned) not content-deleted above are archived (recoverable). Pinned
+    // memories never reach candidateSlugs (isArchiveCandidate excludes them).
+    const archived: string[] = [];
     for (const slug of candidateSlugs) {
-      if (keepSlugs.has(slug)) continue;
-      if (!(await store.load(slug))) continue;
+      if (!(await store.load(slug))) continue; // already deleted via a delete op
       await store.archive(slug);
+      archived.push(slug);
     }
+    return archived;
   }
 
   private buildConsolidatePrompt(
@@ -352,19 +350,17 @@ export class MemoryDream {
       "## Evidence gathered from recent sessions",
       eviText,
       "",
-      "## Archive candidates（>30 天未被召回，默认将归档）",
+      "## Archive candidates（>30 天未被召回，将自动归档）",
       candText,
       "",
       "## Instructions",
       "基于证据整理记忆，输出 JSON 数组（无改动则 []）：",
-      '[{"action":"create|update|append|delete|keep","slug":"<type>/<kebab-case>","type":"user|feedback|project|reference","name":"简短名称","description":"一句话描述","content":"完整正文"}]',
+      '[{"action":"create|update|append|delete","slug":"<type>/<kebab-case>","type":"user|feedback|project|reference","name":"简短名称","description":"一句话描述","content":"完整正文"}]',
       "",
       "Rules:",
       "- create：新主题；update：改写已有文件正文（slug 须匹配现有文件）；append：向已有文件补充新段落",
       "- delete：删除整条失效/被合并的记忆文件（仅当内容本身失效/重复/矛盾时使用；用 reason 说明理由，不需 content）",
-      "- keep：阻止某\"归档候选\"被自动归档（仅可用于上面的归档候选；用 reason 说明为何保留，不需 content）",
-      "- 归档候选默认归档（移入归档区，可经 /memory-restore 恢复）：只对仍明确相关、近期可能用到、或归档会有严重后果（凭据/关键决策/活跃项目背景）的候选输出 keep；普通的\"可能某天用到\"的不要 keep--那正是归档（可恢复）的用途",
-      "- 归档候选若内容同时失效，可输出 delete（内容维度优先于热度），否则默认归档、无需输出任何 action",
+      "- 上面的归档候选将被自动归档（移入归档区，可经 /memory-restore 恢复），无需你输出 archive；pinned 记忆不会出现在候选中。若某候选内容同时失效/重复/矛盾，用 delete 优先删除（内容维度优先于热度）",
       "- 新信息与现有记忆矛盾时，用 update 重写或 delete 删除，禁止矛盾并存",
       "- 优先把新信息合并进已有 topic 文件，避免创建重复文件",
       "- 把\"昨天\"\"上周\"等相对日期转换为绝对日期",
@@ -375,8 +371,7 @@ export class MemoryDream {
 
   private parseDreamResponse(
     raw: string,
-    knownSlugs: Set<string>,
-    candidateSlugs: Set<string>
+    knownSlugs: Set<string>
   ): Array<{
     action: string;
     slug: string;
@@ -407,15 +402,6 @@ export class MemoryDream {
           if (knownSlugs.has(item.slug)) {
             out.push({
               action: "delete",
-              slug: item.slug,
-              reason: typeof item.reason === "string" ? item.reason : "",
-            });
-          }
-        } else if (item.action === "keep") {
-          // Phase 4 规则护栏：keep 只接受程序识别的候选 slug（防幻觉）
-          if (candidateSlugs.has(item.slug)) {
-            out.push({
-              action: "keep",
               slug: item.slug,
               reason: typeof item.reason === "string" ? item.reason : "",
             });
@@ -534,24 +520,25 @@ export class MemoryDream {
   /**
    * Run the four phases. Never rejects. Updates .dream.state only on full
    * success; on any failure logs and leaves state unchanged so the next run
-   * can retry.
+   * can retry. Returns the slugs archived this run (for user notification).
    */
   async dream(
     store: MemoryStore,
     sessionsDir: string,
     memoryDir: string
-  ): Promise<void> {
+  ): Promise<string[]> {
     const statePath = path.join(memoryDir, ".dream.state");
     const lastConsolidatedAt = await readState(statePath);
     try {
       const suspicions = await this.orient(store);
       const evidence = await this.gather(suspicions, sessionsDir, lastConsolidatedAt);
-      await this.consolidate(store, suspicions, evidence);
+      const archived = await this.consolidate(store, suspicions, evidence);
       await this.prune(store);
       await writeState(statePath, Date.now());
+      return archived;
     } catch (err) {
       this.logError(memoryDir, err);
-      // do NOT update state - next run can retry
+      return []; // do NOT update state - next run can retry
     }
   }
 
@@ -588,10 +575,11 @@ export interface Suspicion {
  * Never-recalled junk is left to Phase 3's content-driven delete.
  */
 export function isArchiveCandidate(
-  m: { lastUsedAt?: string },
+  m: { lastUsedAt?: string; pinned?: boolean },
   now: number,
   thresholdMs: number
 ): boolean {
+  if (m.pinned) return false; // Phase 4: pinned 永不归档（硬条件，不靠 LLM 判断）
   if (!m.lastUsedAt) return false;
   const lu = Date.parse(m.lastUsedAt);
   if (!lu) return false;
@@ -623,8 +611,10 @@ export function createMemoryDreamHook(deps: {
   sessionsDir: string;
   memoryDir: string;
   onStateChange?: (running: boolean) => void;
+  /** Phase 4: called when a dream completes with the slugs it archived (may be []). */
+  onArchived?: (archivedSlugs: string[]) => void;
 }): (event: PipelineEvent) => Promise<void> {
-  const { dream, store, state, sessionsDir, memoryDir, onStateChange } = deps;
+  const { dream, store, state, sessionsDir, memoryDir, onStateChange, onArchived } = deps;
   const lockPath = path.join(memoryDir, ".dream.lock");
   return async (event: PipelineEvent) => {
     if (event.type !== "agent-loop-complete") return;
@@ -637,6 +627,9 @@ export function createMemoryDreamHook(deps: {
     // fire-and-forget - do NOT await; the hook must return immediately.
     dream
       .dream(store, sessionsDir, memoryDir)
+      .then((archived) => {
+        if (archived.length > 0) onArchived?.(archived);
+      })
       .catch(() => {
         /* dream() never rejects, but guard anyway */
       })

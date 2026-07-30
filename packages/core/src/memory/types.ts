@@ -19,6 +19,8 @@ export interface Memory {
   usageCount?: number;
   /** 最近一次被 recall 注入的 ISO 时间（Phase 4）。未用过为 ""。 */
   lastUsedAt?: string;
+  /** Phase 4: 用户/Agent 标记的"永不归档"。pinned 记忆不进归档候选。 */
+  pinned?: boolean;
 }
 
 /** @deprecated 使用 Memory 替代 */

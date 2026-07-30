@@ -359,7 +359,7 @@ describe("MemoryDream.dream (consolidate + prune)", () => {
     await store.save(makeMemory("user/food"));
     const dream = new MemoryDream({ minIntervalMs: 1, minNewSessions: 1, timeoutMs: 50 });
     (dream as any).llm.chat = vi.fn().mockRejectedValue(new Error("boom"));
-    await expect(dream.dream(store, sessionsDir, memoryDir)).resolves.toBeUndefined();
+    await expect(dream.dream(store, sessionsDir, memoryDir)).resolves.toEqual([]);
     expect(await readState(path.join(memoryDir, ".dream.state"))).toBe(0);
   });
 });
@@ -400,7 +400,7 @@ describe("createMemoryDreamHook", () => {
 
   it("does not dream when shouldDream is false", async () => {
     const dream = new MemoryDream({ minIntervalMs: 24 * 3600 * 1000, minNewSessions: 5 });
-    const spy = vi.spyOn(dream, "dream").mockResolvedValue(undefined);
+    const spy = vi.spyOn(dream, "dream").mockResolvedValue([]);
     const state = createMemoryDreamState();
     const onStateChange = vi.fn();
     const hook = createMemoryDreamHook({
@@ -420,7 +420,7 @@ describe("createMemoryDreamHook", () => {
     const dream = new MemoryDream({ minIntervalMs: 1, minNewSessions: 1 });
     seedNewSession();
     await writeState(path.join(memoryDir, ".dream.state"), Date.now() - 2000);
-    const spy = vi.spyOn(dream, "dream").mockImplementation(async () => {});
+    const spy = vi.spyOn(dream, "dream").mockImplementation(async () => []);
     const state = createMemoryDreamState();
     const onStateChange = vi.fn();
     const hook = createMemoryDreamHook({
@@ -444,9 +444,9 @@ describe("createMemoryDreamHook", () => {
     const dream = new MemoryDream({ minIntervalMs: 1, minNewSessions: 1 });
     seedNewSession();
     await writeState(path.join(memoryDir, ".dream.state"), Date.now() - 2000);
-    let resolveDream: () => void = () => {};
+    let resolveDream: (v: string[]) => void = () => {};
     const spy = vi.spyOn(dream, "dream").mockImplementation(
-      () => new Promise<void>((r) => {
+      () => new Promise<string[]>((r) => {
         resolveDream = r;
       })
     );
@@ -462,13 +462,13 @@ describe("createMemoryDreamHook", () => {
     await hook(makeEvent());
     await hook(makeEvent()); // 第二次：running，应跳过
     expect(spy).toHaveBeenCalledTimes(1);
-    resolveDream();
+    resolveDream([]);
     await new Promise((r) => setTimeout(r, 20));
   });
 
   it("ignores non agent-loop-complete events", async () => {
     const dream = new MemoryDream();
-    const spy = vi.spyOn(dream, "dream").mockResolvedValue(undefined);
+    const spy = vi.spyOn(dream, "dream").mockResolvedValue([]);
     const hook = createMemoryDreamHook({
       dream,
       store: new MemoryStore(memoryDir),
@@ -520,16 +520,18 @@ describe("MemoryDream consolidate archive (Phase 4)", () => {
     expect(fsExists(path.join(memoryDir, "archive", "user", "old.md"))).toBe(true);
   });
 
-  it("LLM keep protects a candidate from auto-archiving", async () => {
+  it("pinned candidate is not archived (hard protection)", async () => {
     const store = new MemoryStore(memoryDir);
     await store.save(makeMemory("user/old"));
     await seedLastUsedAt(store, "user/old", new Date(Date.now() - 35 * 86400 * 1000).toISOString());
+    await store.setPinned("user/old", true); // pinned -> never a candidate
     const dream = new MemoryDream({ minIntervalMs: 1, minNewSessions: 1, archiveThresholdMs: 30 * 86400 * 1000 });
     (dream as any).llm.chat = vi.fn()
       .mockResolvedValueOnce({ content: "[]", usage: { input: 1, output: 1 }, model: "mock", stopReason: "end_turn" })
-      .mockResolvedValueOnce({ content: '[{"action":"keep","slug":"user/old","reason":"仍重要"}]', usage: { input: 1, output: 1 }, model: "mock", stopReason: "end_turn" });
-    await dream.dream(store, sessionsDir, memoryDir);
-    expect(await store.load("user/old")).not.toBeNull();
+      .mockResolvedValueOnce({ content: "[]", usage: { input: 1, output: 1 }, model: "mock", stopReason: "end_turn" });
+    const archived = await dream.dream(store, sessionsDir, memoryDir);
+    expect(archived).toEqual([]); // nothing archived
+    expect(await store.load("user/old")).not.toBeNull(); // still active
     expect(fsExists(path.join(memoryDir, "archive", "user", "old.md"))).toBe(false);
   });
 
@@ -562,7 +564,7 @@ describe("MemoryDream consolidate archive (Phase 4)", () => {
     expect(fsExists(path.join(memoryDir, ".dream-backup", "user", "old.md"))).toBe(true);
   });
 
-  it("isArchiveCandidate: never-used is not a candidate; stale is", async () => {
+  it("isArchiveCandidate: never-used is not a candidate; stale is; pinned is not", async () => {
     const store = new MemoryStore(memoryDir);
     await store.save(makeMemory("user/never")); // lastUsedAt="" (默认)
     const now = Date.now();
@@ -571,5 +573,9 @@ describe("MemoryDream consolidate archive (Phase 4)", () => {
     await seedLastUsedAt(store, "user/never", new Date(Date.now() - 2 * 86400 * 1000).toISOString());
     const all2 = await store.listAll();
     expect(all2.filter((m) => isArchiveCandidate(m, now, 1)).map((m) => m.slug)).toEqual(["user/never"]);
+    // pin it -> no longer a candidate even though stale
+    await store.setPinned("user/never", true);
+    const all3 = await store.listAll();
+    expect(all3.filter((m) => isArchiveCandidate(m, now, 1)).map((m) => m.slug)).toEqual([]);
   });
 });

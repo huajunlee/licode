@@ -61,6 +61,7 @@ export class MemoryStore {
     // reset the forgetting clock on a content edit).
     let usageCount = 0;
     let lastUsedAt = "";
+    let pinned = memory.pinned ?? false;
 
     if (effectiveAction === "update") {
       // Replace content wholesale; keep the original createdAt, refresh updatedAt
@@ -70,6 +71,7 @@ export class MemoryStore {
           createdAt = existing.createdAt;
           usageCount = existing.usageCount ?? 0;
           lastUsedAt = existing.lastUsedAt ?? "";
+          pinned = existing.pinned ?? false;
         }
       }
       updatedAt = new Date().toISOString();
@@ -79,6 +81,7 @@ export class MemoryStore {
         finalContent = mergeAppend(existing.content, memory.content);
         usageCount = existing.usageCount ?? 0;
         lastUsedAt = existing.lastUsedAt ?? "";
+        pinned = existing.pinned ?? false;
       }
     }
 
@@ -91,6 +94,7 @@ export class MemoryStore {
       `updatedAt: ${updatedAt}`,
       `usageCount: ${usageCount}`,
       `lastUsedAt: ${lastUsedAt}`,
+      `pinned: ${pinned}`,
       "---",
       "",
       finalContent,
@@ -312,6 +316,38 @@ export class MemoryStore {
   }
 
   /**
+   * Phase 4: set the `pinned` flag on a memory. Pinned memories are excluded
+   * from archive candidates (never auto-archived). Rewrites frontmatter
+   * preserving everything else. Returns the updated memory, or null if missing.
+   */
+  async setPinned(slug: string, pinned: boolean): Promise<Memory | null> {
+    for (const type of MEMORY_TYPES) {
+      const filePath = path.join(this.dir, type, `${path.basename(slug)}.md`);
+      if (!fs.existsSync(filePath)) continue;
+      const raw = await fs.promises.readFile(filePath, "utf-8");
+      const existing = this.parse(raw, slug, type);
+      const frontmatter = [
+        "---",
+        `name: ${existing.name}`,
+        `description: ${existing.description}`,
+        `type: ${existing.type}`,
+        `createdAt: ${existing.createdAt}`,
+        `updatedAt: ${existing.updatedAt}`,
+        `usageCount: ${existing.usageCount ?? 0}`,
+        `lastUsedAt: ${existing.lastUsedAt ?? ""}`,
+        `pinned: ${pinned}`,
+        "---",
+        "",
+        existing.content,
+        "",
+      ].join("\n");
+      await fs.promises.writeFile(filePath, frontmatter, "utf-8");
+      return this.parse(frontmatter, slug, type);
+    }
+    return null;
+  }
+
+  /**
    * Read all markdown memory files directly without going through parse().
    * Used internally by rebuildIndex() to avoid double-parsing.
    */
@@ -372,6 +408,7 @@ export class MemoryStore {
       updatedAt: fm.get("updatedAt") ?? new Date().toISOString(),
       usageCount: fm.has("usageCount") ? Number(fm.get("usageCount")) || 0 : 0,
       lastUsedAt: fm.get("lastUsedAt") ?? "",
+      pinned: fm.get("pinned") === "true",
     };
   }
 }
