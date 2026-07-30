@@ -73,6 +73,7 @@ export class AgentLoop {
           reasoning: "",
         });
 
+        const requestBase = this.conversation.getMessageTokenBase();
         const response = await collectResponse(
           this.llm,
           messages,
@@ -80,6 +81,11 @@ export class AgentLoop {
           this.conversation,
           this.eventBus
         );
+
+        // Calibrate the token estimator against the real input-token count
+        // reported by the backend. requestBase was captured before the
+        // assistant response was appended, so it matches the request input.
+        this.conversation.observeUsage(requestBase, response.usage.input);
 
         if (response.type === "text") {
           if (!response.content) {

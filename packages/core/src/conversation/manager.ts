@@ -285,7 +285,27 @@ export class ConversationManager {
   }
 
   getTokenCount(): number {
+    return Math.round(
+      this.tokenCounter.estimateMessages(this.messages) *
+        this.tokenCounter.ratio
+    );
+  }
+
+  /**
+   * Raw (uncalibrated) token estimate of the message history, excluding the
+   * system prompt. Used as the base for calibration against real usage.
+   */
+  getMessageTokenBase(): number {
     return this.tokenCounter.estimateMessages(this.messages);
+  }
+
+  /**
+   * Feed a real input-token count (from the backend's usage) back into the
+   * calibrator, alongside the base estimate it was predicted from. Subsequent
+   * getTokenCount() calls reflect the learned ratio.
+   */
+  observeUsage(baseEstimate: number, realInputTokens: number): void {
+    this.tokenCounter.observe(baseEstimate, realInputTokens);
   }
 
   getMessageCount(): number {

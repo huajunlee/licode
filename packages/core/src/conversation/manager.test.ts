@@ -145,6 +145,28 @@ describe("ConversationManager", () => {
     expect(mgr.getTokenCount()).toBeGreaterThan(0);
   });
 
+  it("getMessageTokenBase returns the raw uncalibrated estimate of messages", () => {
+    const mgr = new ConversationManager({ model: "test" });
+    mgr.addUserMessage("Hello world");
+    const base = mgr.getMessageTokenBase();
+    expect(base).toBeGreaterThan(0);
+    // Before any calibration (ratio is 1) it equals getTokenCount.
+    expect(mgr.getTokenCount()).toBe(base);
+  });
+
+  it("applies calibration from observeUsage to getTokenCount", () => {
+    const mgr = new ConversationManager({ model: "test" });
+    mgr.addUserMessage("Hello world this is a test message");
+    const base = mgr.getMessageTokenBase();
+    expect(base).toBeGreaterThan(0);
+    // Real backend reports 2x the base estimate.
+    mgr.observeUsage(base, base * 2);
+    // getTokenCount now reflects the learned ratio (2).
+    expect(mgr.getTokenCount()).toBe(base * 2);
+    // The raw base stays uncalibrated.
+    expect(mgr.getMessageTokenBase()).toBe(base);
+  });
+
   it("trimToBudget keeps recent messages within budget", () => {
     const mgr = new ConversationManager({ model: "test" });
     // Add 3 rounds of conversation

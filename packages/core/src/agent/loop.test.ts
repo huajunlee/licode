@@ -67,3 +67,31 @@ describe("AgentLoop onTurnStart", () => {
     expect(result.type).toBe("stream-complete");
   });
 });
+
+describe("AgentLoop calibration", () => {
+  it("feeds real usage.input into the conversation calibrator each turn", async () => {
+    const conversation = makeManager();
+    const llm: LLMProvider = {
+      name: "mock-llm",
+      maxContextTokens: 200000,
+      chat: vi.fn(),
+      countTokens: vi.fn(() => 0),
+      stream: vi.fn(async function* (): AsyncIterable<StreamChunk> {
+        yield { type: "token", text: "好的好的好的好的", index: 0 };
+        yield {
+          type: "stop",
+          stopReason: "end_turn",
+          usage: { input: 500, output: 2 },
+        };
+      }),
+    };
+    const loop = new AgentLoop({ llm, conversation, tools: new ToolRegistry() });
+    await loop.run("你好你好你好你好");
+
+    // usage.input (500) >> the base estimate, so the learned ratio is > 1 and
+    // the calibrated getTokenCount must exceed the raw uncalibrated base.
+    expect(conversation.getTokenCount()).toBeGreaterThan(
+      conversation.getMessageTokenBase()
+    );
+  });
+});

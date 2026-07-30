@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { TokenCounter } from "./token-counter.js";
+import type { Message } from "./provider.js";
 
 describe("TokenCounter", () => {
   const counter = new TokenCounter();
@@ -25,6 +26,14 @@ describe("TokenCounter", () => {
     expect(counter.estimate("")).toBe(0);
   });
 
+  it("estimates symbol-heavy text as denser than equal-length letters", () => {
+    // Punctuation/symbols tend to be their own tokens, so the same char count
+    // should yield more tokens than a bare letter run.
+    const symbols = counter.estimate("......"); // 6 symbols
+    const letters = counter.estimate("abcdef"); // 6 letters
+    expect(symbols).toBeGreaterThan(letters);
+  });
+
   it("estimates messages array", () => {
     const messages = [
       { role: "user" as const, content: "Hello", timestamp: "2026-01-01T00:00:00Z" },
@@ -32,5 +41,42 @@ describe("TokenCounter", () => {
     ];
     const tokens = counter.estimateMessages(messages);
     expect(tokens).toBeGreaterThan(0);
+  });
+
+  it("estimates tool_result messages by content, ignoring tool_use_id", () => {
+    const a: Message = {
+      role: "user",
+      content: [{ tool_use_id: "a", content: "done" }],
+      timestamp: "t",
+    };
+    const b: Message = {
+      role: "user",
+      content: [{ tool_use_id: "aaaaaaaaaa", content: "done" }],
+      timestamp: "t",
+    };
+    expect(counter.estimateMessages([a])).toBe(counter.estimateMessages([b]));
+  });
+
+  it("estimates tool_use messages by name+input, ignoring id", () => {
+    const a: Message = {
+      role: "assistant",
+      content: [{ id: "a", name: "read", input: { path: "/x" } }],
+      timestamp: "t",
+    };
+    const b: Message = {
+      role: "assistant",
+      content: [{ id: "aaaaaaaaaa", name: "read", input: { path: "/x" } }],
+      timestamp: "t",
+    };
+    expect(counter.estimateMessages([a])).toBe(counter.estimateMessages([b]));
+  });
+});
+
+describe("TokenCounter calibration", () => {
+  it("exposes ratio starting at 1 and updates it via observe", () => {
+    const counter = new TokenCounter();
+    expect(counter.ratio).toBe(1);
+    counter.observe(100, 150);
+    expect(counter.ratio).toBe(1.5);
   });
 });
