@@ -228,17 +228,18 @@ export function useConversation(
   const memoryExtractionStateRef = useRef<MemoryExtractionState>(
     createMemoryExtractionState()
   );
+  // Phase 3: dream consolidation (after:agentLoop, fire-and-forget).
+  // Shared with the extraction hook AND the recall handler (yield-while-dreaming).
+  const memoryDreamStateRef = useRef<DreamState>(createMemoryDreamState());
   // Phase 2: per-turn memory recall (side query -> synthetic tool_call pair).
-  // Same model tier as extraction; disabled via LICODE_MEMORY_RECALL=off.
+  // Phase 4: dreamState passed in so recordUsage yields while dreaming.
   const memoryRecallHandlerRef = useRef(
     createMemoryRecallHandler({
       recall: new MemoryRecall({ apiKey, baseUrl, model }),
       store: memoryStoreRef.current,
+      dreamState: memoryDreamStateRef.current,
     })
   );
-  // Phase 3: dream consolidation (after:agentLoop, fire-and-forget).
-  // Shared with the extraction hook so extraction yields while dreaming.
-  const memoryDreamStateRef = useRef<DreamState>(createMemoryDreamState());
   const dreamMemoryDir = path.join(process.cwd(), ".licode", "memory");
   const dreamSessionsDir = path.join(process.cwd(), ".licode", "sessions");
   const memoryDreamHookRef = useRef(
