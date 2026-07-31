@@ -141,6 +141,23 @@ export { SessionManager } from "./session/manager.js";
 export type { SessionSummary } from "./session/manager.js";
 export { recoverLatestSession } from "./session/recovery.js";
 
+// diary/
+export type {
+  DiaryEntry, DiaryEntryMeta, Segment, Fact, Decision, Emotion, PersonRef,
+  Candidate, FutureMemoryType, Importance, Promotability,
+} from "./diary/types.js";
+export { emptyEntry, dateString } from "./diary/types.js";
+export { serializeEntry, parseEntry } from "./diary/serialize.js";
+export { JournalStore } from "./diary/store.js";
+export type { DiaryStore } from "./diary/store.js";
+export { DiaryExtractor } from "./diary/extractor.js";
+export type { DiaryExtractorLike, ExtractInput, DiaryExtractorConfig } from "./diary/extractor.js";
+export { DiarySession } from "./diary/session.js";
+export { handleDiaryInput } from "./diary/dispatch.js";
+export type {
+  DiaryDispatchDeps, DiaryDispatchContext, DiaryDispatchResult, DiaryDispatchOutcome,
+} from "./diary/dispatch.js";
+
 // Phase 5: multi-agent
 export { createAgentTool } from "./multi-agent/agent-tool.js";
 export { SubAgentManager } from "./multi-agent/subagent.js";

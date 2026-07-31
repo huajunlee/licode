@@ -28,6 +28,10 @@ import {
   emitAfterAgentLoop,
   ContextCompressor,
   CompressionAssistant,
+  JournalStore,
+  DiaryExtractor,
+  DiarySession,
+  handleDiaryInput,
 } from "@licode/core";
 import type {
   Message,
@@ -138,6 +142,33 @@ function createContextCompressor(
     selectiveRetention: flags.selectiveRetention,
     fileChangeCompaction: flags.fileChangeCompaction,
     summaryMaxTokens: flags.summaryMaxTokens,
+  });
+}
+
+export function readDiaryFlags(): { enabled: boolean; model: string } {
+  return {
+    enabled: process.env.LICODE_DIARY !== "off",
+    model: process.env.LICODE_DIARY_MODEL || "deepseek-chat",
+  };
+}
+
+function createDiaryExtractor(
+  apiKey: string,
+  baseUrl: string | undefined,
+  model: string
+): DiaryExtractor {
+  const sideProvider = new AnthropicProvider({ apiKey, baseUrl });
+  return new DiaryExtractor({
+    generate: async (prompt) => {
+      const res = await sideProvider.chat({
+        messages: [
+          { role: "user", content: prompt, timestamp: new Date().toISOString() },
+        ],
+        model,
+        maxTokens: 2048,
+      });
+      return res.content;
+    },
   });
 }
 
@@ -342,6 +373,13 @@ export function useConversation(
   // Phase 2: structure-aware context compressor (summarize older turns when
   // near the context window). Constructed once the provider is ready.
   const compressorRef = useRef<ContextCompressor | null>(null);
+  // diary capture: independent journal store + side-model extractor + session
+  const diaryStoreRef = useRef<JournalStore>(
+    new JournalStore(path.join(process.cwd(), ".licode", "journal"))
+  );
+  const diaryEnabledRef = useRef<boolean>(readDiaryFlags().enabled);
+  const diaryExtractorRef = useRef<DiaryExtractor | null>(null);
+  const diarySessionRef = useRef<DiarySession | null>(null);
 
   useEffect(() => {
     if (!apiKey) return;
@@ -349,6 +387,11 @@ export function useConversation(
     const provider = new AnthropicProvider({ apiKey, baseUrl });
     providerRef.current = provider;
     compressorRef.current = createContextCompressor(apiKey, baseUrl, model, process.cwd());
+    const diaryFlags = readDiaryFlags();
+    diaryEnabledRef.current = diaryFlags.enabled;
+    if (diaryFlags.enabled) {
+      diaryExtractorRef.current = createDiaryExtractor(apiKey, baseUrl, diaryFlags.model);
+    }
 
     // Initialize ToolRegistry with builtin tools
     const tools = new ToolRegistry();
@@ -430,7 +473,7 @@ export function useConversation(
         name: `/${s.name}`,
         description: s.description.slice(0, 80),
       }));
-      setSlashCommands([...cmds, ...skillItems]);
+      setSlashCommands([...cmds, ...skillItems, { name: "diary", description: "日记捕获（/diary 进入，/diary end 结束）" }]);
 
       // Register skills as prompt-pass-through commands so /skill-name
       // is recognized by the router and forwarded to the LLM
@@ -476,6 +519,23 @@ export function useConversation(
       setThinkingBlocks([]);
       setActiveToolCalls([]);
       setCommandMessage(null);
+
+      // ── diary capture: /diary commands + capture during active session ──
+      if (diaryEnabledRef.current && diaryExtractorRef.current) {
+        const outcome = await handleDiaryInput(input, {
+          session: diarySessionRef.current,
+          extractor: diaryExtractorRef.current,
+          store: diaryStoreRef.current,
+          now: () => new Date(),
+        });
+        if (outcome !== null) {
+          diarySessionRef.current = outcome.nextSession;
+          setIsLoading(false);
+          setCommandMessage(outcome.result.message);
+          setMessages([...manager.getMessages()]);
+          return;
+        }
+      }
 
       // Phase 3: route / commands before pipeline
       const cmdResult = await router.route(input.trim(), {
