@@ -9,7 +9,6 @@ import { memoryCommand, memoryListCommand, memoryAddCommand, memoryDeleteCommand
 import { MemoryStore } from "../../memory/store.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import * as path from "node:path";
 import type { CommandContext } from "./registry.js";
 
 function mockContext(overrides?: Partial<CommandContext>): CommandContext {
