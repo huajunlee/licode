@@ -1,5 +1,7 @@
 # 记忆系统 Phase 4（反馈闭环）实现计划
 
+> **⚠️ 实现期演进说明（2026-07-31 修订）**：本计划描述的是**初稿（Option A：LLM keep 否决）**。实现/验收期间迭代为**最终机制：规则驱动自动归档 + `pinned` 硬保护 + 归档通知（去 LLM keep）**。计划中 Task 1/2/3/5/6（计数、archive/store、recall 让位、命令、CLI 接线）与最终一致；**Task 4（Dream 归档）与最终不同**：归档不再靠 LLM 输出 `archive`，改为程序规则自动归档候选、`isArchiveCandidate` 排除 `pinned`、`dream()` 返回归档 slugs 供通知。另新增 `pinned` 字段（types/store `setPinned`/`/memory pin\|unpin`/memory-guide）与归档通知（`onArchived` -> TUI banner）。**最终设计以 [2026-07-30-memory-phase4-design.md](./2026-07-30-memory-phase4-design.md) 为准**（含 §0 演进说明）。迭代 commit：`445b521` -> `0bb8329` -> `35792b6` -> `7d55481`。本计划保留作历史记录，不再逐条更新。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 闭环记忆系统的"反馈"环节--recall 注入即计数（frontmatter `usageCount`/`lastUsedAt`），长期未用记忆由 Dream 复核后归档（移入 `archive/`、移出索引、可恢复）。计数写入对提取用 utimes 隐身、对 Dream 用让位缺席，两道安全网互补。
