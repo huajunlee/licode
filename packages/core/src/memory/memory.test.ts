@@ -1,7 +1,7 @@
-import { mkdtempSync, rmSync, existsSync, utimesSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, utimesSync, writeFileSync, mkdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { SystemPrompt } from "../conversation/system-prompt.js";
 import { MemoryLoader } from "./loader.js";
 import { MemoryStore } from "./store.js";
@@ -398,5 +398,150 @@ describe("MemoryLoader (new behaviour)", () => {
       .getLayers()
       .find((layer) => layer.name === "memory");
     expect(memoryLayer).toBeUndefined();
+  });
+});
+
+describe("MemoryStore usage tracking (Phase 4)", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-usage-"));
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("parse reads usageCount/lastUsedAt; missing -> 0/empty", async () => {
+    const store = new MemoryStore(dir);
+    await store.save(makeMemory({ slug: "user/a" }));
+    const m = await store.load("user/a");
+    expect(m?.usageCount).toBe(0);
+    expect(m?.lastUsedAt).toBe("");
+  });
+
+  it("save(create) writes usage fields (0/empty for new memory)", async () => {
+    const store = new MemoryStore(dir);
+    await store.save(makeMemory({ slug: "user/a" }));
+    const raw = require("node:fs").readFileSync(
+      path.join(dir, "user", "a.md"),
+      "utf-8"
+    );
+    expect(raw).toContain("usageCount: 0");
+    expect(raw).toContain("lastUsedAt:");
+  });
+
+  it("save(update) preserves existing usage (does not reset)", async () => {
+    const store = new MemoryStore(dir);
+    await store.save(makeMemory({ slug: "user/a" }));
+    await store.recordUsage("user/a"); // -> usageCount=1, lastUsedAt=now
+    const before = await store.load("user/a");
+    await store.save(makeMemory({ slug: "user/a", content: "新内容" }), "update");
+    const after = await store.load("user/a");
+    expect(after?.content).toBe("新内容");
+    expect(after?.usageCount).toBe(before!.usageCount);
+    expect(after?.lastUsedAt).toBe(before!.lastUsedAt);
+  });
+
+  it("recordUsage increments usageCount, sets lastUsedAt, preserves content + updatedAt", async () => {
+    const store = new MemoryStore(dir);
+    await store.save(
+      makeMemory({
+        slug: "user/a",
+        content: "正文",
+        updatedAt: "2026-07-01T00:00:00Z",
+      })
+    );
+    await store.recordUsage("user/a");
+    const m = await store.load("user/a");
+    expect(m?.usageCount).toBe(1);
+    expect(m?.lastUsedAt).toBeTruthy();
+    expect(m?.content).toBe("正文");
+    expect(m?.updatedAt).toBe("2026-07-01T00:00:00Z"); // 不被计数改写
+  });
+
+  it("recordUsage does NOT rebuildIndex (MEMORY.md untouched)", async () => {
+    const store = new MemoryStore(dir);
+    await store.save(makeMemory({ slug: "user/a" }));
+    const idxPath = path.join(dir, "MEMORY.md");
+    const idxMtimeBefore = statSync(idxPath).mtimeMs;
+    await new Promise((r) => setTimeout(r, 10));
+    await store.recordUsage("user/a");
+    expect(statSync(idxPath).mtimeMs).toBe(idxMtimeBefore); // 索引未重写
+  });
+
+  it("recordUsage restores mtime -> invisible to hasChangesSince (坑回归)", async () => {
+    const store = new MemoryStore(dir);
+    await store.save(makeMemory({ slug: "user/a" }));
+    const filePath = path.join(dir, "user", "a.md");
+    const mtimeBefore = statSync(filePath).mtimeMs;
+    await new Promise((r) => setTimeout(r, 10));
+    const loopStartedAt = Date.now(); // 模拟 handleSubmit 置位
+    await new Promise((r) => setTimeout(r, 10));
+    await store.recordUsage("user/a");
+    // mtime 恢复到写入前（< loopStartedAt）
+    expect(statSync(filePath).mtimeMs).toBe(mtimeBefore);
+    expect(await store.hasChangesSince(loopStartedAt)).toBe(false);
+    // 但 usage 确实记录了
+    expect((await store.load("user/a"))?.usageCount).toBe(1);
+  });
+
+  it("recordUsage on missing slug is a silent no-op", async () => {
+    const store = new MemoryStore(dir);
+    await expect(store.recordUsage("user/ghost")).resolves.toBeUndefined();
+  });
+});
+
+describe("MemoryStore archive/restore (Phase 4)", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-archive-"));
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("archive moves file to archive/<type>/ and drops from index", async () => {
+    const store = new MemoryStore(dir);
+    await store.save(makeMemory({ slug: "user/old" }));
+    await store.archive("user/old");
+    expect(existsSync(path.join(dir, "user", "old.md"))).toBe(false);
+    expect(existsSync(path.join(dir, "archive", "user", "old.md"))).toBe(true);
+    expect(await store.load("user/old")).toBeNull(); // listAll/load 不扫 archive/
+    await store.rebuildIndex();
+    expect((await store.loadIndex()).includes("user/old")).toBe(false);
+  });
+
+  it("archive on missing slug is a no-op", async () => {
+    const store = new MemoryStore(dir);
+    await expect(store.archive("user/ghost")).resolves.toBeUndefined();
+  });
+
+  it("listArchived lists archived memories (with usage fields)", async () => {
+    const store = new MemoryStore(dir);
+    await store.save(makeMemory({ slug: "user/old" }));
+    await store.archive("user/old");
+    const archived = await store.listArchived();
+    expect(archived).toHaveLength(1);
+    expect(archived[0].slug).toBe("user/old");
+  });
+
+  it("listArchived returns [] when no archive dir", async () => {
+    const store = new MemoryStore(dir);
+    expect(await store.listArchived()).toEqual([]);
+  });
+
+  it("restore moves back to <type>/ and re-indexes", async () => {
+    const store = new MemoryStore(dir);
+    await store.save(makeMemory({ slug: "user/old" }));
+    await store.archive("user/old");
+    const restored = await store.restore("user/old");
+    expect(restored?.slug).toBe("user/old");
+    expect(existsSync(path.join(dir, "user", "old.md"))).toBe(true);
+    expect(existsSync(path.join(dir, "archive", "user", "old.md"))).toBe(false);
+    expect((await store.loadIndex()).includes("user/old")).toBe(true);
+  });
+
+  it("restore on missing slug returns null", async () => {
+    const store = new MemoryStore(dir);
+    expect(await store.restore("user/ghost")).toBeNull();
   });
 });

@@ -39,6 +39,7 @@ description: {{一句话描述，用于相关性选择}}
 type: {{user|feedback|project|reference}}
 createdAt: {{ISO 时间}}
 updatedAt: {{ISO 时间}}
+pinned: {{false}}
 ---
 
 {{记忆正文}}
@@ -48,6 +49,7 @@ updatedAt: {{ISO 时间}}
 - 新信息与旧记忆矛盾时，直接改写旧文件，以最新信息为准
 - 把"昨天""上周"等相对日期转换为绝对日期
 - MEMORY.md 索引由系统自动重建，无需手动维护
+- **pinned**：凭据/密钥/关键配置这类绝不能丢自动召回的记忆，设 `pinned: true`（永不归档）；普通记忆保持 `pinned: false`
 
 ## 使用记忆时
 

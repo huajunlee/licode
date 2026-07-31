@@ -10,6 +10,7 @@ const DEFAULT_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
 const DEFAULT_MIN_NEW_SESSIONS = 5;
 const DEFAULT_TIMEOUT_MS = 30_000;
 const LOCK_TIMEOUT_MS = 30 * 60 * 1000; // 30 min
+const DEFAULT_ARCHIVE_THRESHOLD_MS = 30 * 24 * 60 * 60 * 1000; // 30d (Phase 4)
 
 /** Shared mutable state for the dream hook (pass-by-reference, like MemoryExtractionState). */
 export interface DreamState {
@@ -33,6 +34,8 @@ export interface DreamConfig {
   minNewSessions?: number;
   /** Per-LLM-call timeout. Default 30s. */
   timeoutMs?: number;
+  /** Phase 4: memories unused longer than this are archive candidates. Default 30d. */
+  archiveThresholdMs?: number;
 }
 
 /**
@@ -92,6 +95,7 @@ export class MemoryDream {
   protected minIntervalMs: number;
   protected minNewSessions: number;
   protected timeoutMs: number;
+  protected archiveThresholdMs: number;
 
   constructor(config?: DreamConfig) {
     const apiKey =
@@ -102,6 +106,7 @@ export class MemoryDream {
     this.minIntervalMs = config?.minIntervalMs ?? DEFAULT_MIN_INTERVAL_MS;
     this.minNewSessions = config?.minNewSessions ?? DEFAULT_MIN_NEW_SESSIONS;
     this.timeoutMs = config?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.archiveThresholdMs = config?.archiveThresholdMs ?? DEFAULT_ARCHIVE_THRESHOLD_MS;
     this.llm = new AnthropicProvider({ apiKey, baseUrl });
   }
 
@@ -254,10 +259,16 @@ export class MemoryDream {
     store: MemoryStore,
     suspicions: Suspicion[],
     evidence: Map<string, string[]>
-  ): Promise<void> {
+  ): Promise<string[]> {
     const all = await store.listAll();
+    const now = Date.now();
+    const candidateSlugs = new Set(
+      all
+        .filter((m) => isArchiveCandidate(m, now, this.archiveThresholdMs))
+        .map((m) => m.slug)
+    );
     const index = await store.loadIndex();
-    const prompt = this.buildConsolidatePrompt(index, all, suspicions, evidence);
+    const prompt = this.buildConsolidatePrompt(index, all, suspicions, evidence, candidateSlugs, now);
     // LLM errors bubble to dream(); parse failures degrade to [].
     const response = await this.withTimeout(
       this.llm.chat({
@@ -275,7 +286,7 @@ export class MemoryDream {
       if (op.action === "delete") {
         await this.backupAndDelete(store, op.slug);
       } else {
-        const now = new Date().toISOString();
+        const nowIso = new Date().toISOString();
         await store.save(
           {
             slug: op.slug,
@@ -283,20 +294,32 @@ export class MemoryDream {
             name: op.name!,
             description: op.description!,
             content: op.content!,
-            createdAt: now,
-            updatedAt: now,
+            createdAt: nowIso,
+            updatedAt: nowIso,
           },
           op.action as MemoryAction
         );
       }
     }
+    // Phase 4: rule-driven auto-archive. Stale candidates (>30d unused, not
+    // pinned) not content-deleted above are archived (recoverable). Pinned
+    // memories never reach candidateSlugs (isArchiveCandidate excludes them).
+    const archived: string[] = [];
+    for (const slug of candidateSlugs) {
+      if (!(await store.load(slug))) continue; // already deleted via a delete op
+      await store.archive(slug);
+      archived.push(slug);
+    }
+    return archived;
   }
 
   private buildConsolidatePrompt(
     indexContent: string,
     all: readonly Memory[],
     suspicions: Suspicion[],
-    evidence: Map<string, string[]>
+    evidence: Map<string, string[]>,
+    candidateSlugs: Set<string>,
+    now: number
   ): string {
     const memParts: string[] = [];
     if (indexContent) memParts.push(indexContent.trim());
@@ -307,6 +330,14 @@ export class MemoryDream {
       [...evidence.entries()]
         .map(([slug, snips]) => `### ${slug}\n${snips.join("\n---\n")}`)
         .join("\n\n") || "(无证据)";
+    const candText =
+      all
+        .filter((m) => candidateSlugs.has(m.slug))
+        .map((m) => {
+          const ageDays = Math.floor((now - Date.parse(m.lastUsedAt!)) / 86_400_000);
+          return `- ${m.slug} | usageCount=${m.usageCount ?? 0} | lastUsedAt=${m.lastUsedAt} | 已 ${ageDays} 天未用`;
+        })
+        .join("\n") || "(无)";
     return [
       "You are performing a dream - consolidate the memory system based on evidence.",
       "",
@@ -319,13 +350,17 @@ export class MemoryDream {
       "## Evidence gathered from recent sessions",
       eviText,
       "",
+      "## Archive candidates（>30 天未被召回，将自动归档）",
+      candText,
+      "",
       "## Instructions",
       "基于证据整理记忆，输出 JSON 数组（无改动则 []）：",
       '[{"action":"create|update|append|delete","slug":"<type>/<kebab-case>","type":"user|feedback|project|reference","name":"简短名称","description":"一句话描述","content":"完整正文"}]',
       "",
       "Rules:",
-      "- create：新主题；update：改写已有文件正文（slug 须匹配现有文件）；append：向已有文件补充新段落；delete：删除整条失效/被合并的记忆文件",
-      "- delete 项用 reason 字段说明删除理由（不需 content）",
+      "- create：新主题；update：改写已有文件正文（slug 须匹配现有文件）；append：向已有文件补充新段落",
+      "- delete：删除整条失效/被合并的记忆文件（仅当内容本身失效/重复/矛盾时使用；用 reason 说明理由，不需 content）",
+      "- 上面的归档候选将被自动归档（移入归档区，可经 /memory-restore 恢复），无需你输出 archive；pinned 记忆不会出现在候选中。若某候选内容同时失效/重复/矛盾，用 delete 优先删除（内容维度优先于热度）",
       "- 新信息与现有记忆矛盾时，用 update 重写或 delete 删除，禁止矛盾并存",
       "- 优先把新信息合并进已有 topic 文件，避免创建重复文件",
       "- 把\"昨天\"\"上周\"等相对日期转换为绝对日期",
@@ -485,24 +520,25 @@ export class MemoryDream {
   /**
    * Run the four phases. Never rejects. Updates .dream.state only on full
    * success; on any failure logs and leaves state unchanged so the next run
-   * can retry.
+   * can retry. Returns the slugs archived this run (for user notification).
    */
   async dream(
     store: MemoryStore,
     sessionsDir: string,
     memoryDir: string
-  ): Promise<void> {
+  ): Promise<string[]> {
     const statePath = path.join(memoryDir, ".dream.state");
     const lastConsolidatedAt = await readState(statePath);
     try {
       const suspicions = await this.orient(store);
       const evidence = await this.gather(suspicions, sessionsDir, lastConsolidatedAt);
-      await this.consolidate(store, suspicions, evidence);
+      const archived = await this.consolidate(store, suspicions, evidence);
       await this.prune(store);
       await writeState(statePath, Date.now());
+      return archived;
     } catch (err) {
       this.logError(memoryDir, err);
-      // do NOT update state - next run can retry
+      return []; // do NOT update state - next run can retry
     }
   }
 
@@ -530,6 +566,26 @@ export interface Suspicion {
   reason: string;
 }
 
+/**
+ * Phase 4: archive candidate = recalled before (lastUsedAt set) and stale.
+ *
+ * Only lastUsedAt is considered, NOT createdAt: a never-recalled memory is not
+ * a candidate (it may simply never have matched a query, or recall may be off
+ * -- using createdAt would mass-archive everything when recall is disabled).
+ * Never-recalled junk is left to Phase 3's content-driven delete.
+ */
+export function isArchiveCandidate(
+  m: { lastUsedAt?: string; pinned?: boolean },
+  now: number,
+  thresholdMs: number
+): boolean {
+  if (m.pinned) return false; // Phase 4: pinned 永不归档（硬条件，不靠 LLM 判断）
+  if (!m.lastUsedAt) return false;
+  const lu = Date.parse(m.lastUsedAt);
+  if (!lu) return false;
+  return now - lu > thresholdMs;
+}
+
 /** Extract plain text from a message (string content or tool blocks). */
 function messageText(m: { content: unknown }): string {
   if (typeof m.content === "string") return m.content;
@@ -555,8 +611,10 @@ export function createMemoryDreamHook(deps: {
   sessionsDir: string;
   memoryDir: string;
   onStateChange?: (running: boolean) => void;
+  /** Phase 4: called when a dream completes with the slugs it archived (may be []). */
+  onArchived?: (archivedSlugs: string[]) => void;
 }): (event: PipelineEvent) => Promise<void> {
-  const { dream, store, state, sessionsDir, memoryDir, onStateChange } = deps;
+  const { dream, store, state, sessionsDir, memoryDir, onStateChange, onArchived } = deps;
   const lockPath = path.join(memoryDir, ".dream.lock");
   return async (event: PipelineEvent) => {
     if (event.type !== "agent-loop-complete") return;
@@ -569,6 +627,9 @@ export function createMemoryDreamHook(deps: {
     // fire-and-forget - do NOT await; the hook must return immediately.
     dream
       .dream(store, sessionsDir, memoryDir)
+      .then((archived) => {
+        if (archived.length > 0) onArchived?.(archived);
+      })
       .catch(() => {
         /* dream() never rejects, but guard anyway */
       })

@@ -7,6 +7,7 @@ import {
   createMemoryRecallHandler,
 } from "./recall.js";
 import { MemoryStore } from "./store.js";
+import { createMemoryDreamState } from "./dream.js";
 import { ConversationManager } from "../conversation/manager.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -299,5 +300,48 @@ describe("createMemoryRecallHandler", () => {
     const broken = { select: vi.fn().mockRejectedValue(new Error("boom")) } as unknown as MemoryRecall;
     const handler = createMemoryRecallHandler({ recall: broken, store });
     await expect(handler(mgr)).resolves.toBeUndefined();
+  });
+
+  it("records usage for each recalled memory (not dreaming)", async () => {
+    const mgr = makeManager();
+    mgr.addUserMessage("今晚吃什么好？");
+    const spy = vi.spyOn(store, "recordUsage");
+    const handler = createMemoryRecallHandler({ recall: fakeRecall(["user/food"]), store });
+    await handler(mgr);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith("user/food");
+    expect((await store.load("user/food"))?.usageCount).toBe(1);
+  });
+
+  it("yields recordUsage while dreaming (but still injects)", async () => {
+    const mgr = makeManager();
+    mgr.addUserMessage("今晚吃什么好？");
+    const spy = vi.spyOn(store, "recordUsage");
+    const dreamState = createMemoryDreamState();
+    dreamState.running = true;
+    const handler = createMemoryRecallHandler({ recall: fakeRecall(["user/food"]), store, dreamState });
+    await handler(mgr);
+    expect(spy).not.toHaveBeenCalled(); // 让位：不计数
+    // 但合成对仍注入（recall 读路径不让位）
+    expect(mgr.getMessages().some((m) => Array.isArray(m.content))).toBe(true);
+    expect((await store.load("user/food"))?.usageCount).toBe(0); // 未计数
+  });
+
+  it("does not record usage when select returns empty", async () => {
+    const mgr = makeManager();
+    mgr.addUserMessage("无关问题");
+    const spy = vi.spyOn(store, "recordUsage");
+    const handler = createMemoryRecallHandler({ recall: fakeRecall([]), store });
+    await handler(mgr);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("recordUsage failure does not break recall", async () => {
+    const mgr = makeManager();
+    mgr.addUserMessage("今晚吃什么好？");
+    vi.spyOn(store, "recordUsage").mockRejectedValue(new Error("io"));
+    const handler = createMemoryRecallHandler({ recall: fakeRecall(["user/food"]), store });
+    await expect(handler(mgr)).resolves.toBeUndefined();
+    expect(mgr.getMessages().some((m) => Array.isArray(m.content))).toBe(true); // 仍注入
   });
 });
