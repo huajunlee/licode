@@ -42,6 +42,7 @@ export {
   editTool,
   globTool,
   grepTool,
+  journalRecallTool,
 } from "./tools/builtin/index.js";
 
 // Phase 2: agent/
