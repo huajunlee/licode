@@ -93,6 +93,7 @@
 | `cli/hooks.ts` | `createContextCompressor` 构造新的 `compressionAssistant` 回调 |
 | `events/types.ts` | 扩展 `context-compressed` 事件字段 |
 | `commands/builtin/context.ts` | `/context` 展示压缩/保留统计 |
+| `components/status-bar.tsx` + `app.tsx`/`hooks.ts` | token 显示改百分比+绝对值；上下文窗口透传至 StatusBar |
 
 实现路径采用**原地扩展 `ContextCompressor`**（候选 A）。曾考虑抽出 `CompressionStrategy` 类（B）或单职责阶段流水线（C），当前复杂度不值，否决。沿用现有"侧模型注入、失败降级 trim、永不中断循环"模式。
 
@@ -238,6 +239,20 @@
 - 上次压缩统计（removed/retained/compacted）
 - must-keep 保留轮数
 
+### 状态栏卡片百分比显示
+
+状态栏卡片（`components/status-bar.tsx`）的 `tokens:` 由纯绝对值改为**百分比 + 绝对值**，例：
+
+```
+tokens: 12% (24.6k/200k)
+```
+
+- **窗口透传**：`useConversation`（`hooks.ts`）经 `manager.getBudgetInfo().contextWindow`（由 `AgentLoop.setContextBudget` 每 run 发布）取窗口，thread 到 `app.tsx` -> `StatusBar`。StatusBar props 增 `contextWindow: number`。
+- **百分比** = `getTokenCount() / contextWindow × 100`（取整）。百分比直对应 `compressThreshold`（85%）与硬上限（100%），用户可直观看到"快压缩了 / 压缩完回降了"。
+- **绝对值用 k 简写**（÷1000，保留一位小数；≥100k 取整），控宽。
+- **边界**：首轮前 `contextWindow=0`，仅显示绝对值（与 `/context` 省略窗口的做法一致），不显示百分比。
+- 压缩后刷新时机不变：`context-compressed` 与 `agent-loop-complete` 仍调 `setTokenCount(getTokenCount())`，百分比随之同步回落。
+
 ---
 
 ## 十、ContextConfig 新增
@@ -268,6 +283,7 @@
 - [ ] **摘要有界**：`updatedSummary` ≤ `summaryMaxTokens`。
 - [ ] **失败降级**：side-call 抛错或 JSON 解析失败 -> 降级 trim、不中断循环。
 - [ ] **跨压缩信息丢失 < Phase 3**：对比测试（人工或用例对比一次性 vs 滚动的关键信息保留率）。
+- [ ] **状态栏百分比显示**：卡片显示 `tokens: <pct>% (<used>k/<window>k)`；首轮前 `contextWindow=0` 时仅显示绝对值；压缩后百分比随 `context-compressed` 同步回落。
 
 ### 回归
 
@@ -297,6 +313,7 @@
 | 摘要增长控制 | 单调用有界 / 合并+独立自压缩 / 软约束 | 单调用有界合并 | 开销不变、有界 |
 | 实现路径 | 原地扩展 / 抽 Strategy / 阶段流水线 | 原地扩展 ContextCompressor | 复杂度匹配、沿用注入模式 |
 | side-call 次数 | 一次统一 / 多次分离 | 一次统一（分类 + file_change + 合并） | 少往返 |
+| token 显示 | 绝对值 / 百分比 / 百分比+绝对值 | 百分比+绝对值 | 百分比直对应 compressThreshold，绝对值保留参考 |
 
 ---
 
