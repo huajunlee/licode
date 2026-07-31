@@ -24,7 +24,7 @@ import {
   createMemoryExtractionState,
   emitAfterAgentLoop,
   ContextCompressor,
-  Summarizer,
+  CompressionAssistant,
 } from "@licode/core";
 import type {
   Message,
@@ -86,26 +86,49 @@ function resolveSessionPath(sessionId: string): string | null {
  * the main loop's provider is untouched. Summarizer failure degrades to trim
  * inside the compressor - never breaks the loop.
  */
+export function readContextFlags(): {
+  rollingSummary: boolean;
+  selectiveRetention: boolean;
+  fileChangeCompaction: boolean;
+  summaryMaxTokens: number;
+} {
+  const off = (v?: string) => v === "off";
+  return {
+    rollingSummary: !off(process.env.LICODE_CONTEXT_ROLLING),
+    selectiveRetention: !off(process.env.LICODE_CONTEXT_SELECTIVE),
+    fileChangeCompaction: !off(process.env.LICODE_CONTEXT_FILECHANGE),
+    summaryMaxTokens: Number(process.env.LICODE_CONTEXT_SUMMARY_MAX_TOKENS) || 2048,
+  };
+}
+
 function createContextCompressor(
   apiKey: string,
   baseUrl: string | undefined,
-  model: string
+  model: string,
+  workingDirectory: string
 ): ContextCompressor {
+  const flags = readContextFlags();
   const sideProvider = new AnthropicProvider({ apiKey, baseUrl });
-  const summarizer = new Summarizer({
+  const assistant = new CompressionAssistant({
     generate: async (prompt) => {
       const res = await sideProvider.chat({
         messages: [
           { role: "user", content: prompt, timestamp: new Date().toISOString() },
         ],
         model,
-        maxTokens: 1024,
+        maxTokens: 2048,
       });
       return res.content;
     },
+    summaryMaxTokens: flags.summaryMaxTokens,
   });
   return new ContextCompressor({
-    summarizer: (msgs) => summarizer.summarize(msgs),
+    compressionAssistant: assistant,
+    workingDirectory,
+    rollingSummary: flags.rollingSummary,
+    selectiveRetention: flags.selectiveRetention,
+    fileChangeCompaction: flags.fileChangeCompaction,
+    summaryMaxTokens: flags.summaryMaxTokens,
   });
 }
 
@@ -287,7 +310,7 @@ export function useConversation(
 
     const provider = new AnthropicProvider({ apiKey, baseUrl });
     providerRef.current = provider;
-    compressorRef.current = createContextCompressor(apiKey, baseUrl, model);
+    compressorRef.current = createContextCompressor(apiKey, baseUrl, model, process.cwd());
 
     // Initialize ToolRegistry with builtin tools
     const tools = new ToolRegistry();
