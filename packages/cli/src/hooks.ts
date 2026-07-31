@@ -473,7 +473,15 @@ export function useConversation(
         name: `/${s.name}`,
         description: s.description.slice(0, 80),
       }));
-      setSlashCommands([...cmds, ...skillItems, { name: "diary", description: "日记捕获（/diary 进入，/diary end 结束）" }]);
+      setSlashCommands([
+        ...cmds,
+        ...skillItems,
+        { name: "/diary", description: "日记捕获（进入模式）" },
+        { name: "/diary-end", description: "结束日记会话并保存" },
+        { name: "/diary-list", description: "列出日记条目（/diary-list 日期）" },
+        { name: "/diary-find", description: "搜索日记（/diary-find 关键词）" },
+        { name: "/diary-show", description: "查看某条日记（/diary-show id）" },
+      ]);
 
       // Register skills as prompt-pass-through commands so /skill-name
       // is recognized by the router and forwarded to the LLM

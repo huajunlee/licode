@@ -36,16 +36,16 @@ export async function handleDiaryInput(
 
   if (trimmed.startsWith("/diary")) {
     const rest = trimmed.slice("/diary".length).trim();
-    const sub = rest.split(/\s+/)[0] ?? "";
+    const sub = (rest.split(/\s+/)[0] ?? "").replace(/^-/, "");
 
     // /diary or /diary start
     if (sub === "" || sub === "start") {
       if (ctx.session) {
-        return { result: { type: "error", message: "已在日记模式，请先 /diary end 结束当前会话。" }, nextSession: ctx.session };
+        return { result: { type: "error", message: "已在日记模式，请先 /diary-end 结束当前会话。" }, nextSession: ctx.session };
       }
       const session = new DiarySession(dateString(ctx.now()), ctx.now());
       return {
-        result: { type: "action", message: "📖 进入日记模式。描述今天发生的事，结束说 /diary end（查看历史：/diary list|find|show）。" },
+        result: { type: "action", message: "📖 进入日记模式。描述今天发生的事，结束说 /diary-end（查看历史：/diary-list、/diary-find、/diary-show）。" },
         nextSession: session,
       };
     }
@@ -65,7 +65,7 @@ export async function handleDiaryInput(
 
     // recall commands require no active session
     if (ctx.session) {
-      return { result: { type: "error", message: "请先 /diary end 结束当前会话再查询。" }, nextSession: ctx.session };
+      return { result: { type: "error", message: "请先 /diary-end 结束当前会话再查询。" }, nextSession: ctx.session };
     }
 
     if (sub === "list") {
@@ -76,25 +76,25 @@ export async function handleDiaryInput(
     }
     if (sub === "find") {
       const q = rest.split(/\s+/).slice(1).join(" ").trim();
-      if (!q) return { result: { type: "error", message: "使用方式: /diary find <关键词>" }, nextSession: null };
+      if (!q) return { result: { type: "error", message: "使用方式: /diary-find <关键词>" }, nextSession: null };
       const entries = await ctx.store.search(q);
       if (entries.length === 0) return { result: { type: "action", message: `没有匹配“${q}”的日记。` }, nextSession: null };
       return { result: { type: "action", message: `🔎 匹配“${q}”（${entries.length}）：\n${entries.map(formatPreview).join("\n")}` }, nextSession: null };
     }
     if (sub === "show") {
       const id = rest.split(/\s+/)[1];
-      if (!id) return { result: { type: "error", message: "使用方式: /diary show <id>" }, nextSession: null };
+      if (!id) return { result: { type: "error", message: "使用方式: /diary-show <id>" }, nextSession: null };
       const e = await ctx.store.load(id);
       if (!e) return { result: { type: "error", message: `未找到日记 ${id}。` }, nextSession: null };
       return { result: { type: "action", message: `📝 ${e.meta.date} ${e.meta.id}\n\n摘要：${e.summary}\n\n原文：\n${e.raw.segments.map((s) => s.content).join("\n")}` }, nextSession: null };
     }
-    return { result: { type: "error", message: "未知子命令。使用: /diary | /diary end | /diary list [date] | /diary find <关键词> | /diary show <id>" }, nextSession: null };
+    return { result: { type: "error", message: "未知子命令。使用: /diary | /diary-end | /diary-list [date] | /diary-find <关键词> | /diary-show <id>" }, nextSession: null };
   }
 
   // plain input during active session -> capture
   if (ctx.session) {
     ctx.session.addSegment(trimmed, ctx.now());
-    return { result: { type: "action", message: "✓ 已记下（继续描述，或 /diary end 结束）" }, nextSession: ctx.session };
+    return { result: { type: "action", message: "✓ 已记下（继续描述，或 /diary-end 结束）" }, nextSession: ctx.session };
   }
 
   return null;

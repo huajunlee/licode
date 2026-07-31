@@ -77,4 +77,23 @@ describe("handleDiaryInput", () => {
     const out = await handleDiaryInput("/diary", { ...ctx(null), session: started!.nextSession });
     expect(out!.result.type).toBe("error");
   });
+
+  it("/diary-end (hyphen form) ends and stores", async () => {
+    const started = await handleDiaryInput("/diary", ctx(null));
+    const session = started!.nextSession;
+    await handleDiaryInput("内容", { ...ctx(null), session });
+    const out = await handleDiaryInput("/diary-end", { ...ctx(null), session });
+    expect(out!.result.message).toContain("今日摘要");
+    expect(out!.nextSession).toBeNull();
+    const list = await new JournalStore(dir).listByDate("2026-07-31");
+    expect(list.length).toBe(1);
+  });
+
+  it("/diary-list (hyphen form) shows entries", async () => {
+    const started = await handleDiaryInput("/diary", ctx(null));
+    await handleDiaryInput("内容", { ...ctx(null), session: started!.nextSession });
+    await handleDiaryInput("/diary-end", { ...ctx(null), session: started!.nextSession });
+    const out = await handleDiaryInput("/diary-list", ctx(null));
+    expect(out!.result.message).toContain("2026-07-31");
+  });
 });
