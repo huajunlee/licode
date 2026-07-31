@@ -1,5 +1,6 @@
-import type { Message, UserMessage } from "../llm/provider.js";
+import type { Message, UserMessage, ToolUseBlock, ToolResultBlock } from "../llm/provider.js";
 import type { ConversationManager } from "../conversation/manager.js";
+import { isFileChangeMessage, WRITE_TOOL_NAMES, EDIT_TOOL_NAMES } from "./file-change.js";
 
 export interface ContextCompressorConfig {
   /** Produces a summary string from a slice of messages. Throws on failure. */
@@ -128,4 +129,70 @@ export class ContextCompressor {
       method,
     };
   }
+}
+
+export const SUMMARY_PREFIX = "Previous conversation summary: ";
+
+export function isSummaryMessage(m: Message): boolean {
+  return (
+    m.role === "assistant" &&
+    typeof m.content === "string" &&
+    m.content.startsWith(SUMMARY_PREFIX)
+  );
+}
+
+export function extractExistingSummary(messages: Message[]): string | null {
+  for (const m of messages) {
+    if (isSummaryMessage(m)) {
+      return (m.content as string).slice(SUMMARY_PREFIX.length);
+    }
+  }
+  return null;
+}
+
+export interface ClassifiedTurn {
+  turn: Message[];
+  kind: "must-keep-error" | "must-keep-write" | "candidate" | "fold";
+  /** True when the turn starts with a user-text message (safe to retain as a unit). */
+  complete: boolean;
+  /** True when a must-keep-write turn is already a compacted file_change note. */
+  alreadyCompacted: boolean;
+}
+
+export function classifyMiddleTurns(
+  turns: Message[][],
+  opts: { selectiveRetention: boolean }
+): ClassifiedTurn[] {
+  return turns.map((turn) => {
+    if (!isUserTextMessage(turn[0])) {
+      return { turn, kind: "fold", complete: false, alreadyCompacted: false };
+    }
+    if (!opts.selectiveRetention) {
+      return { turn, kind: "candidate", complete: true, alreadyCompacted: false };
+    }
+    const hasError = turn.some(
+      (m) =>
+        m.role === "user" &&
+        Array.isArray(m.content) &&
+        (m.content as ToolResultBlock[]).some((b) => b.is_error)
+    );
+    if (hasError) {
+      return { turn, kind: "must-keep-error", complete: true, alreadyCompacted: false };
+    }
+    if (turn.some((m) => isFileChangeMessage(m))) {
+      return { turn, kind: "must-keep-write", complete: true, alreadyCompacted: true };
+    }
+    const hasWrite = turn.some(
+      (m) =>
+        m.role === "assistant" &&
+        Array.isArray(m.content) &&
+        (m.content as ToolUseBlock[]).some(
+          (b) => WRITE_TOOL_NAMES.has(b.name) || EDIT_TOOL_NAMES.has(b.name)
+        )
+    );
+    if (hasWrite) {
+      return { turn, kind: "must-keep-write", complete: true, alreadyCompacted: false };
+    }
+    return { turn, kind: "candidate", complete: true, alreadyCompacted: false };
+  });
 }
