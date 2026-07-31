@@ -110,6 +110,19 @@ export type {
   ContextCompressorConfig,
   CompressionResult,
 } from "./context/compressor.js";
+// Phase 5: context-compression building blocks
+export { getRecoveryPointer } from "./context/git-pointer.js";
+export type { RecoveryPointer } from "./context/git-pointer.js";
+export {
+  computeStats,
+  buildFileChangeMessage,
+  isFileChangeMessage,
+  parseFileChangeMessage,
+  WRITE_TOOL_NAMES,
+  EDIT_TOOL_NAMES,
+} from "./context/file-change.js";
+export type { FileChangeNote, FileChangeStats, FileChangeOperation } from "./context/file-change.js";
+export { classifyMiddleTurns, extractExistingSummary, isSummaryMessage } from "./context/compressor.js";
 export { MemoryStore } from "./memory/store.js";
 export type { MemoryAction } from "./memory/store.js";
 export { MemoryLoader } from "./memory/loader.js";

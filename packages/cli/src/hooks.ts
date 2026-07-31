@@ -55,6 +55,7 @@ export interface UseConversationResult {
   streaming: string;
   isLoading: boolean;
   tokenCount: number;
+  contextWindow: number;
   error: string | null;
   sessionId: string;
   thinkingBlocks: ThinkingBlock[];
@@ -147,6 +148,8 @@ export function createEventBus(
   setError: (e: string | null) => void,
   setTokenCount: (n: number) => void,
   getTokenCount: () => number,
+  setContextWindow: (n: number) => void,
+  getContextWindow: () => number,
   setCommandMessage?: (message: string) => void
 ): EventBus {
   let streamText = "";
@@ -245,6 +248,7 @@ export function createEventBus(
           // tokenCountingMiddleware listened for, so we read the live count
           // here instead.
           setTokenCount(getTokenCount());
+          setContextWindow(getContextWindow());
           break;
 
         case "context-compressed":
@@ -256,6 +260,7 @@ export function createEventBus(
             }）`
           );
           setTokenCount(getTokenCount());
+          setContextWindow(getContextWindow());
           break;
 
         case "error":
@@ -282,6 +287,7 @@ export function useConversation(
   const [streaming, setStreaming] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [tokenCount, setTokenCount] = useState(0);
+  const [contextWindow, setContextWindow] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState("");
   const [thinkingBlocks, setThinkingBlocks] = useState<ThinkingBlock[]>([]);
@@ -499,6 +505,8 @@ export function useConversation(
               setError,
               setTokenCount,
               () => manager.getTokenCount(),
+              setContextWindow,
+              () => manager.getBudgetInfo().contextWindow,
               setCommandMessage
             );
 
@@ -558,6 +566,8 @@ export function useConversation(
           setError,
           setTokenCount,
           () => manager.getTokenCount(),
+          setContextWindow,
+          () => manager.getBudgetInfo().contextWindow,
           setCommandMessage
         );
 
@@ -616,6 +626,7 @@ export function useConversation(
     streaming,
     isLoading,
     tokenCount,
+    contextWindow,
     error,
     sessionId,
     thinkingBlocks,

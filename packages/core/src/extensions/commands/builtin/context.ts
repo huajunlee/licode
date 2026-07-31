@@ -19,9 +19,11 @@ export const contextCommand: SlashCommand = {
     // Window/reserve are published by the AgentLoop each turn; before the
     // first turn they are 0 and we omit them.
     if (budget.contextWindow > 0) {
+      const pct = Math.round((budget.used / budget.contextWindow) * 100);
       info.push(
         `Window: ${budget.contextWindow} (reserve ${budget.outputReserve})`
       );
+      info.push(`Used: ${pct}% (${budget.used}/${budget.contextWindow})`);
       info.push(`Remaining: ${budget.remaining}`);
     }
 
