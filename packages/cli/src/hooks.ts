@@ -9,7 +9,6 @@ import {
   SystemPrompt,
   loadDefaultLayers,
   EventPipeline,
-  tokenCountingMiddleware,
   ToolRegistry,
   builtinTools,
   createAgentLoopMiddleware,
@@ -27,6 +26,8 @@ import {
   createMemoryDreamHook,
   createMemoryDreamState,
   emitAfterAgentLoop,
+  ContextCompressor,
+  Summarizer,
 } from "@licode/core";
 import type {
   Message,
@@ -87,11 +88,43 @@ function resolveSessionPath(sessionId: string): string | null {
   return null;
 }
 
-function createEventBus(
+/**
+ * Phase 2: build the structure-aware context compressor. Summarization runs
+ * on a cheap side model (default deepseek-chat) via a separate provider, so
+ * the main loop's provider is untouched. Summarizer failure degrades to trim
+ * inside the compressor - never breaks the loop.
+ */
+function createContextCompressor(
+  apiKey: string,
+  baseUrl: string | undefined,
+  model: string
+): ContextCompressor {
+  const sideProvider = new AnthropicProvider({ apiKey, baseUrl });
+  const summarizer = new Summarizer({
+    generate: async (prompt) => {
+      const res = await sideProvider.chat({
+        messages: [
+          { role: "user", content: prompt, timestamp: new Date().toISOString() },
+        ],
+        model,
+        maxTokens: 1024,
+      });
+      return res.content;
+    },
+  });
+  return new ContextCompressor({
+    summarizer: (msgs) => summarizer.summarize(msgs),
+  });
+}
+
+export function createEventBus(
   setStreaming: (s: string) => void,
   setThinkingBlocks: (blocks: ThinkingBlock[]) => void,
   setActiveToolCalls: Dispatch<SetStateAction<ToolCallState[]>>,
-  setError: (e: string | null) => void
+  setError: (e: string | null) => void,
+  setTokenCount: (n: number) => void,
+  getTokenCount: () => number,
+  setCommandMessage?: (message: string) => void
 ): EventBus {
   let streamText = "";
   const blocks: ThinkingBlock[] = [];
@@ -184,6 +217,22 @@ function createEventBus(
           setStreaming("");
           setThinkingBlocks([]);
           setActiveToolCalls([]);
+          // Refresh the status bar with the calibrated context size. The
+          // agent-loop path never emits the llm-response-complete event that
+          // tokenCountingMiddleware listened for, so we read the live count
+          // here instead.
+          setTokenCount(getTokenCount());
+          break;
+
+        case "context-compressed":
+          // Phase 2: surface that older turns were summarized/trimmed so the
+          // user understands why earlier detail is gone.
+          setCommandMessage?.(
+            `已压缩 ${event.removedMessages ?? 0} 条消息（${
+              event.method === "trim" ? "裁剪" : "摘要"
+            }）`
+          );
+          setTokenCount(getTokenCount());
           break;
 
         case "error":
@@ -261,12 +310,16 @@ export function useConversation(
             ),
         })
   );
+  // Phase 2: structure-aware context compressor (summarize older turns when
+  // near the context window). Constructed once the provider is ready.
+  const compressorRef = useRef<ContextCompressor | null>(null);
 
   useEffect(() => {
     if (!apiKey) return;
 
     const provider = new AnthropicProvider({ apiKey, baseUrl });
     providerRef.current = provider;
+    compressorRef.current = createContextCompressor(apiKey, baseUrl, model);
 
     // Initialize ToolRegistry with builtin tools
     const tools = new ToolRegistry();
@@ -379,6 +432,7 @@ export function useConversation(
       const provider = providerRef.current;
       const manager = managerRef.current;
       const tools = toolsRef.current;
+      const compressor = compressorRef.current;
       const router = commandRouterRef.current;
       if (!provider || !manager || !input.trim()) return;
 
@@ -419,20 +473,23 @@ export function useConversation(
               setStreaming,
               setThinkingBlocks,
               setActiveToolCalls,
-              setError
+              setError,
+              setTokenCount,
+              () => manager.getTokenCount(),
+              setCommandMessage
             );
 
             const pipeline = new EventPipeline();
             registerExtensionMiddleware(pipeline, extensionsRef.current!, "before:agentLoop");
 
             pipeline
-              .use(tokenCountingMiddleware((total) => setTokenCount(total)))
               .use(
                 createAgentLoopMiddleware({
                   llm: provider,
                   conversation: manager,
                   tools,
                   eventBus,
+                  compressor: compressor ?? undefined,
                   ...(process.env.LICODE_MEMORY_RECALL === "off"
                     ? {}
                     : { onTurnStart: memoryRecallHandlerRef.current }),
@@ -475,20 +532,23 @@ export function useConversation(
           setStreaming,
           setThinkingBlocks,
           setActiveToolCalls,
-          setError
+          setError,
+          setTokenCount,
+          () => manager.getTokenCount(),
+          setCommandMessage
         );
 
         const pipeline = new EventPipeline();
         registerExtensionMiddleware(pipeline, extensionsRef.current!, "before:agentLoop");
 
         pipeline
-          .use(tokenCountingMiddleware((total) => setTokenCount(total)))
           .use(
             createAgentLoopMiddleware({
               llm: provider,
               conversation: manager,
               tools,
               eventBus,
+              compressor: compressor ?? undefined,
               ...(process.env.LICODE_MEMORY_RECALL === "off"
                 ? {}
                 : { onTurnStart: memoryRecallHandlerRef.current }),

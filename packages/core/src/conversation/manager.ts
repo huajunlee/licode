@@ -35,6 +35,16 @@ export class ConversationManager {
   systemPrompt: SystemPrompt;
   metadata: ConversationMetadata;
   private tokenCounter = new TokenCounter();
+  /**
+   * Raw (uncalibrated) token estimate of the tool definitions, fed in by the
+   * AgentLoop each turn. Counted into getMessageTokenBase() so the calibrated
+   * getTokenCount() reflects the full request (system + tools + messages),
+   * not messages alone. (Phase 2 calibration upgrade.)
+   */
+  private toolTokenBase = 0;
+  /** Context window + output reserve, fed in by the AgentLoop for /context. */
+  private contextWindow = 0;
+  private outputReserve = 0;
 
   constructor(config: {
     id?: string;
@@ -128,59 +138,6 @@ export class ConversationManager {
     }
     messages.push(...this.messages);
     return messages;
-  }
-
-  /**
-   * 裁剪历史消息到指定 token 预算。
-   * 从最新的 user/assistant 消息对开始保留，直到预算耗尽。
-   * 处于中间的孤立 user 消息（无对应 assistant）会被丢弃。
-   */
-  trimToBudget(maxTokens: number): void {
-    let tokens = this.tokenCounter.estimate(
-      this.systemPrompt.assemble(Infinity)
-    );
-
-    const keep: Message[] = [];
-    const pairs: { user: Message; assistant?: Message }[] = [];
-    let currentUser: Message | null = null;
-
-    for (const msg of this.messages) {
-      if (msg.role === "user") {
-        currentUser = msg;
-      } else if (msg.role === "assistant" && currentUser) {
-        pairs.push({ user: currentUser, assistant: msg });
-        currentUser = null;
-      }
-    }
-
-    for (let i = pairs.length - 1; i >= 0; i--) {
-      const pair = pairs[i];
-      const pairTokens =
-        this.tokenCounter.estimateMessages([pair.user]) +
-        (pair.assistant
-          ? this.tokenCounter.estimateMessages([pair.assistant])
-          : 0);
-
-      if (tokens + pairTokens <= maxTokens) {
-        keep.unshift(pair.user);
-        if (pair.assistant) keep.unshift(pair.assistant);
-        tokens += pairTokens;
-      } else {
-        break;
-      }
-    }
-
-    // Put back in correct order
-    const result: Message[] = [];
-    for (const pair of pairs) {
-      if (keep.includes(pair.user)) {
-        result.push(pair.user);
-        if (pair.assistant && keep.includes(pair.assistant)) {
-          result.push(pair.assistant);
-        }
-      }
-    }
-    this.messages = result;
   }
 
   async save(filePath?: string): Promise<void> {
@@ -285,7 +242,74 @@ export class ConversationManager {
   }
 
   getTokenCount(): number {
-    return this.tokenCounter.estimateMessages(this.messages);
+    return Math.round(
+      this.getMessageTokenBase() * this.tokenCounter.ratio
+    );
+  }
+
+  /**
+   * Raw (uncalibrated) token estimate of the full request input: messages +
+   * system prompt + tool definitions. Used as the base for calibration
+   * against real usage. (Phase 2 upgrade: system + tools are now explicit so
+   * the learned ratio only corrects estimation error instead of absorbing
+   * whole missing components - eliminating the clamp-4 underestimate.)
+   */
+  getMessageTokenBase(): number {
+    const systemTokens = this.tokenCounter.estimate(
+      this.systemPrompt.assemble(Infinity)
+    );
+    return (
+      this.tokenCounter.estimateMessages(this.messages) +
+      systemTokens +
+      this.toolTokenBase
+    );
+  }
+
+  /**
+   * Feed a real input-token count (from the backend's usage) back into the
+   * calibrator, alongside the base estimate it was predicted from. Subsequent
+   * getTokenCount() calls reflect the learned ratio.
+   */
+  observeUsage(baseEstimate: number, realInputTokens: number): void {
+    this.tokenCounter.observe(baseEstimate, realInputTokens);
+  }
+
+  /**
+   * Set the raw token estimate of the tool definitions, so getMessageTokenBase
+   * and getTokenCount include tool overhead. Called by AgentLoop each turn
+   * (tools don't change within a session, but re-setting is cheap and safe).
+   * (Phase 2 calibration upgrade.)
+   */
+  setToolTokenBase(tokens: number): void {
+    this.toolTokenBase = tokens;
+  }
+
+  /**
+   * Set the context window and output reserve, fed in by the AgentLoop each
+   * turn so /context can display budget info. (Phase 2.)
+   */
+  setContextBudget(budget: {
+    contextWindow: number;
+    outputReserve: number;
+  }): void {
+    this.contextWindow = budget.contextWindow;
+    this.outputReserve = budget.outputReserve;
+  }
+
+  /** Budget snapshot for the /context command. (Phase 2.) */
+  getBudgetInfo(): {
+    contextWindow: number;
+    outputReserve: number;
+    used: number;
+    remaining: number;
+  } {
+    const used = this.getTokenCount();
+    return {
+      contextWindow: this.contextWindow,
+      outputReserve: this.outputReserve,
+      used,
+      remaining: Math.max(0, this.contextWindow - used),
+    };
   }
 
   getMessageCount(): number {
