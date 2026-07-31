@@ -215,11 +215,14 @@ describe("AgentLoop compression", () => {
       conversation.appendToAssistantMessage(`answer${i} ` + "y".repeat(800));
     }
     const { bus, events } = capturingEventBus();
-    let summarized: Message[] | null = null;
+    let summarized: unknown | null = null;
     const compressor = new ContextCompressor({
-      summarizer: async (msgs) => {
-        summarized = msgs;
-        return "SUMMARY";
+      workingDirectory: process.cwd(),
+      compressionAssistant: {
+        async assist(input) {
+          summarized = input.turns;
+          return { updatedSummary: "SUMMARY", classifications: [], fileChanges: [] };
+        },
       },
     });
     const loop = new AgentLoop({
@@ -259,7 +262,12 @@ describe("AgentLoop compression", () => {
     }
     const { bus, events } = capturingEventBus();
     const compressor = new ContextCompressor({
-      summarizer: async () => "SUMMARY",
+      workingDirectory: process.cwd(),
+      compressionAssistant: {
+        async assist() {
+          return { updatedSummary: "SUMMARY", classifications: [], fileChanges: [] };
+        },
+      },
     });
     const loop = new AgentLoop({
       llm: textLLM(1000),
@@ -283,9 +291,12 @@ describe("AgentLoop compression", () => {
     const { bus, events } = capturingEventBus();
     let summarized = false;
     const compressor = new ContextCompressor({
-      summarizer: async () => {
-        summarized = true;
-        return "S";
+      workingDirectory: process.cwd(),
+      compressionAssistant: {
+        async assist() {
+          summarized = true;
+          return { updatedSummary: "S", classifications: [], fileChanges: [] };
+        },
       },
     });
     const loop = new AgentLoop({

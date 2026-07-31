@@ -7,6 +7,23 @@ import { ContextCompressor, splitIntoTurns } from "./compressor.js";
 import { overflowToolResult } from "./overflow.js";
 import { TokenBudget } from "./token-budget.js";
 import type { Message } from "../llm/provider.js";
+import type { CompressionAssistResult } from "./summarizer.js";
+import { FILE_CHANGE_PREFIX } from "./file-change.js";
+
+/** A duck-typed CompressionAssistant that returns a canned result. */
+function fakeAssistant(over: Partial<CompressionAssistResult> = {}): {
+  assist: (input: { existingSummary: string | null; turns: unknown[] }) => Promise<CompressionAssistResult>;
+} {
+  return {
+    async assist(input) {
+      return {
+        updatedSummary: over.updatedSummary ?? `SUMMARY(${input.existingSummary ? "roll" : "new"})`,
+        classifications: over.classifications ?? [],
+        fileChanges: over.fileChanges ?? [],
+      };
+    },
+  };
+}
 
 const ts = () => new Date().toISOString();
 const U = (content: string): Message => ({ role: "user", content, timestamp: ts() });
@@ -16,9 +33,9 @@ const aT = (id: string, name: string, input: Record<string, unknown>): Message =
   content: [{ id, name, input }],
   timestamp: ts(),
 });
-const uR = (id: string, content: string): Message => ({
+const uR = (id: string, content: string, isError?: boolean): Message => ({
   role: "user",
-  content: [{ tool_use_id: id, content }],
+  content: [{ tool_use_id: id, content, is_error: isError }],
   timestamp: ts(),
 });
 
@@ -63,144 +80,157 @@ describe("splitIntoTurns", () => {
   });
 });
 
-describe("ContextCompressor", () => {
-  it("keeps first user + recent turns, summarizes the middle as an assistant SUMMARY", async () => {
-    const mgr = new ConversationManager({ model: "test-model" });
-    mgr.replaceMessages([
-      U("turn1 question"), A("turn1 answer"),
-      U("turn2 question"), A("turn2 answer"),
-      U("turn3 question"), A("turn3 answer"),
-      U("turn4 question"), A("turn4 answer"),
-    ]);
-
-    const compressor = new ContextCompressor({
-      summarizer: async (m) => `SUMMARY of ${m.length} msgs`,
-    });
-    const result = await compressor.compress(mgr, { keepRecentTurns: 2 });
-
-    expect(result.compressed).toBe(true);
-    expect(result.method).toBe("summarize");
-    const out = mgr.getMessages();
-    // [firstUser, SUMMARY(assistant), ...last 2 turns (4 msgs)]
-    expect(out[0]).toMatchObject({ role: "user", content: "turn1 question" });
-    expect(out[1]).toMatchObject({
-      role: "assistant",
-      content: expect.stringContaining("SUMMARY of"),
-    });
-    expect(out.slice(2)).toHaveLength(4);
-    expect(out.at(-1)).toMatchObject({ role: "assistant", content: "turn4 answer" });
-    // summarized region = turn1 answer + turn2 (U,A) = 3 msgs
-    expect(result.removedMessages).toBe(3);
-    // Role alternation: user, assistant, user, assistant, user, assistant
-    const roles = out.map((m) => m.role);
-    expect(roles).toEqual(["user", "assistant", "user", "assistant", "user", "assistant"]);
-  });
-
-  it("keeps recent tool pairs atomic (no orphan tool_result)", async () => {
-    const mgr = new ConversationManager({ model: "test-model" });
-    mgr.replaceMessages([
-      U("turn1"), aT("t1", "read", {}), uR("t1", "content1"),
-      U("turn2"), aT("t2", "read", {}), uR("t2", "content2"),
-      U("turn3 current"), aT("t3", "read", {}), uR("t3", "content3"),
-    ]);
-
-    const compressor = new ContextCompressor({ summarizer: async () => "S" });
-    const result = await compressor.compress(mgr, { keepRecentTurns: 2 });
-    expect(result.compressed).toBe(true);
-
-    const out = mgr.getMessages();
-    // Every tool_result block must have its tool_use present (no orphans).
-    for (const m of out) {
-      if (m.role === "user" && Array.isArray(m.content)) {
-        for (const block of m.content as { tool_use_id: string }[]) {
-          const hasUse = out.some(
-            (mm) =>
-              mm.role === "assistant" &&
-              Array.isArray(mm.content) &&
-              (mm.content as { id: string }[]).some((b) => b.id === block.tool_use_id)
-          );
-          expect(hasUse).toBe(true);
-        }
-      }
-    }
-    // The most recent tool pair (t3) is preserved intact.
-    expect(out.some((m) => m.role === "assistant" && Array.isArray(m.content) &&
-      (m.content as { id: string }[]).some((b) => b.id === "t3"))).toBe(true);
-  });
-
-  it("keeps a recall pair in the current turn intact", async () => {
-    const mgr = new ConversationManager({ model: "test-model" });
-    mgr.replaceMessages([
-      U("turn1"), A("answer1"),
-      U("turn2 current"),
-      aT("mrec_1", "memory_recall", { query: "turn2" }),
-      uR("mrec_1", "recalled memory"),
-    ]);
-
-    const compressor = new ContextCompressor({ summarizer: async () => "S" });
-    await compressor.compress(mgr, { keepRecentTurns: 1 });
-
-    const out = mgr.getMessages();
-    const hasRecallResult = out.some(
-      (m) =>
-        m.role === "user" &&
-        Array.isArray(m.content) &&
-        (m.content as { tool_use_id: string }[]).some((b) => b.tool_use_id === "mrec_1")
-    );
-    const hasRecallUse = out.some(
-      (m) =>
-        m.role === "assistant" &&
-        Array.isArray(m.content) &&
-        (m.content as { id: string }[]).some((b) => b.id === "mrec_1")
-    );
-    expect(hasRecallResult).toBe(true);
-    expect(hasRecallUse).toBe(true);
-  });
-
-  it("degrades to trim when the summarizer throws", async () => {
-    const mgr = new ConversationManager({ model: "test-model" });
+describe("ContextCompressor (Phase 5)", () => {
+  it("keeps firstUser + rolling SUMMARY + recent; folds the middle", async () => {
+    const mgr = new ConversationManager({ model: "m" });
     mgr.replaceMessages([
       U("turn1"), A("a1"),
       U("turn2"), A("a2"),
       U("turn3"), A("a3"),
+      U("turn4"), A("a4"),
     ]);
-
     const compressor = new ContextCompressor({
-      summarizer: async () => {
-        throw new Error("LLM down");
-      },
+      compressionAssistant: fakeAssistant({ updatedSummary: "rolled" }),
+      workingDirectory: process.cwd(),
     });
     const result = await compressor.compress(mgr, { keepRecentTurns: 2 });
 
     expect(result.compressed).toBe(true);
-    expect(result.method).toBe("trim");
-    expect(result.summary).toBeUndefined();
+    expect(result.method).toBe("summarize"); // first compression, no prior summary
+    expect(result.summaryUpdated).toBe(true);
     const out = mgr.getMessages();
-    // No SUMMARY message.
-    expect(
-      out.some(
-        (m) =>
-          m.role === "assistant" &&
-          typeof m.content === "string" &&
-          m.content.includes("Previous conversation summary")
-      )
-    ).toBe(false);
-    // firstUser intent folded into the first recent user message (still user-first).
-    expect(out[0]).toMatchObject({ role: "user" });
-    expect(out[0].content as string).toContain("Earlier task");
-    // last 2 turns kept (4 messages), no summary message.
-    expect(out).toHaveLength(4);
+    expect(out[0]).toMatchObject({ role: "user", content: "turn1" });
+    expect(out[1]).toMatchObject({ role: "assistant", content: "Previous conversation summary: rolled" });
+    expect(out.at(-1)).toMatchObject({ role: "assistant", content: "a4" });
+    const roles = out.map((m) => m.role);
+    // user, assistant, user, assistant, user, assistant
+    expect(roles).toEqual(["user", "assistant", "user", "assistant", "user", "assistant"]);
   });
 
-  it("does not compress when there are not enough turns to summarize", async () => {
-    const mgr = new ConversationManager({ model: "test-model" });
-    mgr.replaceMessages([U("only turn"), A("answer")]);
+  it("second compression is rolling (existing summary passed to the assistant)", async () => {
+    const mgr = new ConversationManager({ model: "m" });
+    mgr.replaceMessages([
+      U("t1"), A("a1"),
+      U("t2"), A("a2"),
+      U("t3"), A("a3"),
+      U("t4"), A("a4"),
+    ]);
+    const seen: (string | null)[] = [];
+    const compressor = new ContextCompressor({
+      workingDirectory: process.cwd(),
+      compressionAssistant: {
+        async assist(input: { existingSummary: string | null; turns: unknown[] }) {
+          seen.push(input.existingSummary);
+          return { updatedSummary: "S2", classifications: [], fileChanges: [] };
+        },
+      },
+    });
+    await compressor.compress(mgr, { keepRecentTurns: 1 });
+    // add more turns, compress again -> existing summary present
+    mgr.replaceMessages([...mgr.getMessages(), U("t5"), A("a5"), U("t6"), A("a6")]);
+    const r2 = await compressor.compress(mgr, { keepRecentTurns: 1 });
+    expect(seen[1]).toBe("S2"); // prior summary fed back in
+    expect(r2.method).toBe("rolling");
+  });
 
-    const compressor = new ContextCompressor({ summarizer: async () => "S" });
+  it("retains must-keep error + write turns; compacts write into a file_change note", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "licode-p5-"));
+    try {
+      const mgr = new ConversationManager({ model: "m" });
+      mgr.replaceMessages([
+        U("t1"), A("a1"),
+        U("t2"), aT("e1", "Bash", {}), uR("e1", "boom", true), A("fixed"),
+        U("t3"), aT("w1", "Write", { file_path: "a.txt", content: "hello\nworld" }), uR("w1", "ok"),
+        U("t4"), A("a4"),
+      ]);
+      const compressor = new ContextCompressor({
+        workingDirectory: dir,
+        compressionAssistant: fakeAssistant({
+          fileChanges: [{ index: 2, symbols: ["greet"], summary: { kind: "add greeting" } }],
+        }),
+      });
+      const result = await compressor.compress(mgr, { keepRecentTurns: 1 });
+      const out = mgr.getMessages();
+      // error turn retained verbatim
+      expect(out.some((m) => m.role === "user" && Array.isArray(m.content) &&
+        (m.content as { tool_use_id: string }[]).some((b) => b.tool_use_id === "e1"))).toBe(true);
+      // write turn compacted to a file_change note (no raw tool_use 'w1' remains)
+      expect(out.some((m) => m.role === "assistant" && Array.isArray(m.content) &&
+        (m.content as { id: string }[]).some((b) => b.id === "w1"))).toBe(false);
+      expect(out.some((m) => typeof m.content === "string" && m.content.startsWith(FILE_CHANGE_PREFIX))).toBe(true);
+      expect(result.compactedTurns).toBe(1);
+      expect(result.retainedTurns).toBeGreaterThanOrEqual(2); // error + recent at least
+      // no orphan tool_result
+      for (const m of out) {
+        if (m.role === "user" && Array.isArray(m.content)) {
+          for (const b of m.content as { tool_use_id: string }[]) {
+            expect(out.some((mm) => mm.role === "assistant" && Array.isArray(mm.content) &&
+              (mm.content as { id: string }[]).some((x) => x.id === b.tool_use_id))).toBe(true);
+          }
+        }
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps important candidate turns when budget allows; sheds them when over budget", async () => {
+    const mgr = new ConversationManager({ model: "m" });
+    mgr.replaceMessages([
+      U("t1"), A("a1"),
+      U("t2 important"), A("a2"),
+      U("t3"), A("a3"),
+      U("t4"), A("a4"),
+    ]);
+    const important = [{ index: 1, keep: "important" as const }];
+    // budget large -> important retained
+    const cBig = new ContextCompressor({
+      workingDirectory: process.cwd(),
+      compressionAssistant: fakeAssistant({ classifications: important }),
+    });
+    await cBig.compress(mgr, { keepRecentTurns: 1, budgetTokens: 1_000_000 });
+    expect(mgr.getMessages().some((m) => m.role === "user" && m.content === "t2 important")).toBe(true);
+
+    // reset and compress with tiny budget -> important shed (folded; only in summary)
+    mgr.replaceMessages([
+      U("t1"), A("a1"),
+      U("t2 important"), A("a2"),
+      U("t3"), A("a3"),
+      U("t4"), A("a4"),
+    ]);
+    const cSmall = new ContextCompressor({
+      workingDirectory: process.cwd(),
+      compressionAssistant: fakeAssistant({ classifications: important }),
+    });
+    await cSmall.compress(mgr, { keepRecentTurns: 1, budgetTokens: 1 });
+    expect(mgr.getMessages().some((m) => m.role === "user" && m.content === "t2 important")).toBe(false);
+  });
+
+  it("degrades to trim when the assistant throws", async () => {
+    const mgr = new ConversationManager({ model: "m" });
+    mgr.replaceMessages([U("t1"), A("a1"), U("t2"), A("a2"), U("t3"), A("a3")]);
+    const compressor = new ContextCompressor({
+      workingDirectory: process.cwd(),
+      compressionAssistant: { async assist() { throw new Error("down"); } } as never,
+    });
     const result = await compressor.compress(mgr, { keepRecentTurns: 2 });
+    expect(result.compressed).toBe(true);
+    expect(result.method).toBe("trim");
+    expect(result.summaryUpdated).toBe(false);
+    const out = mgr.getMessages();
+    expect(out[0]).toMatchObject({ role: "user" });
+    expect(out[0].content as string).toContain("Earlier task");
+  });
 
+  it("does not compress when there are not enough turns", async () => {
+    const mgr = new ConversationManager({ model: "m" });
+    mgr.replaceMessages([U("only"), A("ans")]);
+    const compressor = new ContextCompressor({
+      workingDirectory: process.cwd(),
+      compressionAssistant: fakeAssistant(),
+    });
+    const result = await compressor.compress(mgr, { keepRecentTurns: 2 });
     expect(result.compressed).toBe(false);
-    expect(result.removedMessages).toBe(0);
     expect(mgr.getMessages()).toHaveLength(2);
   });
 });
