@@ -12,8 +12,11 @@ export type PipelineEvent =
   | { type: "error"; error: Error; context: string }
   | {
       type: "context-compressed";
-      method: "trim" | "summarize";
+      method: "trim" | "summarize" | "rolling";
       removedMessages?: number;
+      retainedTurns?: number;
+      compactedTurns?: number;
+      summaryUpdated?: boolean;
     }
   // Phase 2 agent events
   | { type: "agent-loop-start" }
