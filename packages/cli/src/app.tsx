@@ -195,6 +195,7 @@ function ChatApp({
     streaming,
     isLoading,
     tokenCount,
+    contextWindow,
     error,
     sessionId: currentSessionId,
     thinkingBlocks,
@@ -259,6 +260,7 @@ function ChatApp({
       <StatusBar
         model={model ?? "deepseek-v4-pro"}
         tokens={tokenCount}
+        contextWindow={contextWindow}
         sessionId={currentSessionId}
       />
     </Box>

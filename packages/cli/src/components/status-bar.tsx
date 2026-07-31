@@ -5,16 +5,27 @@ import { COLORS, BORDERS, SPACING } from "../theme.js";
 interface StatusBarProps {
   model: string;
   tokens: number;
+  contextWindow: number;
   sessionId: string;
 }
 
-function formatTokens(n: number): string {
-  return n.toLocaleString();
+function formatK(n: number): string {
+  if (n < 1000) return `${n}`;
+  const k = n / 1000;
+  return `${k % 1 === 0 ? k.toFixed(0) : k.toFixed(1)}k`;
 }
 
-export function StatusBar({ model, tokens, sessionId }: StatusBarProps) {
+function tokenDisplay(tokens: number, contextWindow: number): string {
+  if (contextWindow > 0) {
+    const pct = Math.round((tokens / contextWindow) * 100);
+    return `${pct}% (${formatK(tokens)}/${formatK(contextWindow)})`;
+  }
+  return formatK(tokens);
+}
+
+export function StatusBar({ model, tokens, contextWindow, sessionId }: StatusBarProps) {
   const shortId = sessionId.length > 8 ? sessionId.slice(0, 8) : sessionId;
-  const formattedTokens = formatTokens(tokens);
+  const tokenStr = tokenDisplay(tokens, contextWindow);
 
   return (
     <Box
@@ -32,7 +43,7 @@ export function StatusBar({ model, tokens, sessionId }: StatusBarProps) {
         <Text dimColor>│</Text>
         <Text>
           <Text dimColor>tokens: </Text>
-          <Text>{formattedTokens}</Text>
+          <Text>{tokenStr}</Text>
         </Text>
         <Text dimColor>│</Text>
         <Text>
