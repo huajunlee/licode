@@ -5,6 +5,7 @@ import { ConversationManager } from "../conversation/manager.js";
 import { SystemPrompt } from "../conversation/system-prompt.js";
 import { ToolRegistry } from "../tools/registry.js";
 import { ContextCompressor } from "../context/compressor.js";
+import type { CompressionResult, CompressOptions } from "../context/compressor.js";
 import type { LLMProvider, StreamChunk, ChatRequest, Message } from "../llm/provider.js";
 import type { PipelineEvent } from "../events/types.js";
 
@@ -215,11 +216,14 @@ describe("AgentLoop compression", () => {
       conversation.appendToAssistantMessage(`answer${i} ` + "y".repeat(800));
     }
     const { bus, events } = capturingEventBus();
-    let summarized: Message[] | null = null;
+    let summarized: unknown | null = null;
     const compressor = new ContextCompressor({
-      summarizer: async (msgs) => {
-        summarized = msgs;
-        return "SUMMARY";
+      workingDirectory: process.cwd(),
+      compressionAssistant: {
+        async assist(input) {
+          summarized = input.turns;
+          return { updatedSummary: "SUMMARY", classifications: [], fileChanges: [] };
+        },
       },
     });
     const loop = new AgentLoop({
@@ -259,7 +263,12 @@ describe("AgentLoop compression", () => {
     }
     const { bus, events } = capturingEventBus();
     const compressor = new ContextCompressor({
-      summarizer: async () => "SUMMARY",
+      workingDirectory: process.cwd(),
+      compressionAssistant: {
+        async assist() {
+          return { updatedSummary: "SUMMARY", classifications: [], fileChanges: [] };
+        },
+      },
     });
     const loop = new AgentLoop({
       llm: textLLM(1000),
@@ -283,9 +292,12 @@ describe("AgentLoop compression", () => {
     const { bus, events } = capturingEventBus();
     let summarized = false;
     const compressor = new ContextCompressor({
-      summarizer: async () => {
-        summarized = true;
-        return "S";
+      workingDirectory: process.cwd(),
+      compressionAssistant: {
+        async assist() {
+          summarized = true;
+          return { updatedSummary: "S", classifications: [], fileChanges: [] };
+        },
       },
     });
     const loop = new AgentLoop({
@@ -299,6 +311,61 @@ describe("AgentLoop compression", () => {
 
     expect(summarized).toBe(false);
     expect(events.some((e) => e.type === "context-compressed")).toBe(false);
+  });
+
+  it("passes budgetTokens to compress() and emits rolling retention stats", async () => {
+    const conversation = makeManager();
+    // Seed enough tokens to trip the threshold (0.85 * 1000 = 850).
+    for (let i = 0; i < 4; i++) {
+      conversation.addUserMessage(`turn${i} ` + "x".repeat(800));
+      conversation.appendToAssistantMessage(`answer${i} ` + "y".repeat(800));
+    }
+    const { bus, events } = capturingEventBus();
+    const seen: { keepRecentTurns?: number; budgetTokens?: number } = {};
+    const fakeCompressor = {
+      async compress(
+        _conv: ConversationManager,
+        opts: CompressOptions
+      ): Promise<CompressionResult> {
+        seen.keepRecentTurns = opts.keepRecentTurns;
+        seen.budgetTokens = opts.budgetTokens;
+        return {
+          compressed: true,
+          removedMessages: 3,
+          method: "rolling",
+          retainedTurns: 2,
+          compactedTurns: 1,
+          summaryUpdated: true,
+        };
+      },
+    } as unknown as ContextCompressor;
+    const loop = new AgentLoop({
+      llm: textLLM(1000),
+      conversation,
+      tools: new ToolRegistry(),
+      context: { outputReserve: 100 },
+      compressor: fakeCompressor,
+      eventBus: bus,
+    });
+    const result = await loop.run("continue");
+
+    expect(result.type).toBe("stream-complete");
+    // compress() received a numeric budgetTokens = round(0.85 * 1000) = 850.
+    expect(seen.budgetTokens).toBe(850);
+    expect(seen.keepRecentTurns).toBe(2);
+    const evt = events.find(
+      (e): e is Extract<PipelineEvent, { type: "context-compressed" }> =>
+        e.type === "context-compressed"
+    );
+    expect(evt).toBeDefined();
+    expect(evt).toMatchObject({
+      type: "context-compressed",
+      method: "rolling",
+      removedMessages: 3,
+      retainedTurns: 2,
+      compactedTurns: 1,
+      summaryUpdated: true,
+    });
   });
 });
 

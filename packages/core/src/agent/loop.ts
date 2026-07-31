@@ -29,6 +29,14 @@ export interface ContextConfig {
   summarizerModel?: string;
   /** Max inline bytes for a tool's success output; larger spills to .licode/overflow/. Default 64KB. (Phase 4) */
   overflowMaxBytes?: number;
+  /** Max tokens for the rolling summary. Default 2048. (Phase 5) */
+  summaryMaxTokens?: number;
+  /** Soft budget fraction (0-1) for should-keep turns. Optional. (Phase 5) */
+  importantTurnsBudget?: number;
+  /** Phase 5 toggles (default all true). */
+  rollingSummary?: boolean;
+  selectiveRetention?: boolean;
+  fileChangeCompaction?: boolean;
 }
 
 export interface AgentConfig {
@@ -63,7 +71,12 @@ export class AgentLoop {
   private eventBus?: EventBus;
   private onTurnStart?: (conversation: ConversationManager) => Promise<void>;
   private tokenCounter = new TokenCounter();
-  private context: Required<ContextConfig>;
+  // `importantTurnsBudget` is intentionally kept out of `Required` so it can
+  // stay optional (read lazily from config where needed); everything else is
+  // defaulted and thus non-optional on this instance.
+  private context: Required<Omit<ContextConfig, "importantTurnsBudget">> & {
+    importantTurnsBudget?: number;
+  };
   private compressor?: ContextCompressor;
 
   constructor(config: AgentConfig) {
@@ -76,6 +89,11 @@ export class AgentLoop {
       keepRecentTurns: config.context?.keepRecentTurns ?? 2,
       summarizerModel: config.context?.summarizerModel ?? "deepseek-chat",
       overflowMaxBytes: config.context?.overflowMaxBytes ?? 64 * 1024,
+      summaryMaxTokens: config.context?.summaryMaxTokens ?? 2048,
+      rollingSummary: config.context?.rollingSummary ?? true,
+      selectiveRetention: config.context?.selectiveRetention ?? true,
+      fileChangeCompaction: config.context?.fileChangeCompaction ?? true,
+      // importantTurnsBudget intentionally omitted: stays optional, read lazily.
     };
     this.executor = new ToolExecutor(config.tools, {
       overflowMaxBytes: this.context.overflowMaxBytes,
@@ -126,12 +144,18 @@ export class AgentLoop {
         ) {
           const result = await this.compressor.compress(this.conversation, {
             keepRecentTurns: this.context.keepRecentTurns,
+            budgetTokens: Math.round(
+              this.context.compressThreshold * this.llm.maxContextTokens
+            ),
           });
           if (result.compressed) {
             this.eventBus?.emit({
               type: "context-compressed",
               method: result.method ?? "summarize",
               removedMessages: result.removedMessages,
+              retainedTurns: result.retainedTurns,
+              compactedTurns: result.compactedTurns,
+              summaryUpdated: result.summaryUpdated,
             });
           }
           compressedThisRun = true;
