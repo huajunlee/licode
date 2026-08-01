@@ -2,14 +2,18 @@ import type { JournalStore } from "../diary/store.js";
 import type { CuratedIndex } from "../diary/curated.js";
 import type { MemoryStore } from "../memory/store.js";
 import type { MemoryCuration } from "./memory-curation.js";
+import type { PersonProfileStore } from "../people/store.js";
+import type { ProfileCuration } from "../people/curation/profile-curation.js";
 import { CurationSession, type Selection } from "./session.js";
-import type { PendingCandidate } from "./types.js";
+import type { PendingCandidate, PendingPerson } from "./types.js";
 
 export interface CurationDispatchDeps {
   journalStore: JournalStore;
   memoryStore: MemoryStore;
   curatedIndex: CuratedIndex;
   memoryCuration: MemoryCuration;
+  profileStore: PersonProfileStore;
+  profileCuration: ProfileCuration;
   now: () => Date;
 }
 export interface CurationDispatchContext extends CurationDispatchDeps {
@@ -38,6 +42,20 @@ async function gatherPending(ctx: CurationDispatchDeps): Promise<PendingCandidat
       if (c.importance !== "high") continue;          // low/medium 留日记
       if (!NON_PERSON.has(c.type)) continue;          // person_trait/relationship 留给 Phase B
       out.push({ key, candidate: c });
+    }
+  }
+  return out;
+}
+
+async function gatherPendingPeople(ctx: CurationDispatchDeps): Promise<PendingPerson[]> {
+  const index = await ctx.curatedIndex.load();
+  const all = await ctx.journalStore.listAll();
+  const out: PendingPerson[] = [];
+  for (const e of all) {
+    for (let i = 0; i < e.people.length; i++) {
+      const key = `${e.meta.id}#p${i}`;
+      if (index.has(key)) continue;          // 已自动入档或已整理
+      out.push({ key, personRef: e.people[i], date: e.meta.date, entryId: e.meta.id });
     }
   }
   return out;
@@ -74,18 +92,22 @@ export async function handleCurationInput(
     if (sel === null) {
       return { result: { type: "error", message: "用法: /diary-curate apply 1,3,5 | apply all | reject" }, nextSession: ctx.session };
     }
-    const res = await ctx.session.apply(sel, { memoryStore: ctx.memoryStore, curatedIndex: ctx.curatedIndex });
+    const res = await ctx.session.apply(sel, { memoryStore: ctx.memoryStore, curatedIndex: ctx.curatedIndex, profileStore: ctx.profileStore });
     return { result: { type: "action", message: `✅ 已应用 ${res.applied} 项整理。` }, nextSession: null };
   }
 
   // /diary-curate (no sub) -> gather + curate + stash
-  const pending = await gatherPending(ctx);
-  if (pending.length === 0) {
+  const pendingC = await gatherPending(ctx);
+  const pendingP = await gatherPendingPeople(ctx);
+  if (pendingC.length === 0 && pendingP.length === 0) {
     return { result: { type: "action", message: "没有待整理的候选（高优候选已自动提升或已整理）。" }, nextSession: null };
   }
-  const proposals = await ctx.memoryCuration.curate(pending);
+  const memProps = pendingC.length ? await ctx.memoryCuration.curate(pendingC) : [];
+  const profiles = await ctx.profileStore.listAll();
+  const profProps = pendingP.length ? await ctx.profileCuration.resolveAmbiguous(pendingP, profiles) : [];
+  const proposals = [...memProps, ...profProps];
   if (proposals.length === 0) {
-    return { result: { type: "action", message: `⚠️ memory 整理未产出提议（${pending.length} 个候选，可能 side-call 失败），可重试 /diary-curate。` }, nextSession: null };
+    return { result: { type: "action", message: `⚠️ 整理未产出提议（候选 ${pendingC.length}、模糊人 ${pendingP.length}），可能 side-call 失败，可重试 /diary-curate。` }, nextSession: null };
   }
   const session = new CurationSession(proposals);
   return {

@@ -7,6 +7,8 @@ import { JournalStore } from "../diary/store.js";
 import { CuratedIndex } from "../diary/curated.js";
 import { MemoryStore } from "../memory/store.js";
 import { MemoryCuration } from "./memory-curation.js";
+import { PersonProfileStore } from "../people/store.js";
+import { ProfileCuration } from "../people/curation/profile-curation.js";
 import { emptyEntry } from "../diary/types.js";
 
 const NOW = () => new Date("2026-08-01T10:00:00.000Z");
@@ -27,14 +29,18 @@ describe("handleCurationInput", () => {
   beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), "cdisp-")); });
   afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
 
-  function ctx(session: null, journal: JournalStore, generate?: (p: string) => Promise<string>) {
+  function ctx(session: null, journal: JournalStore, memGenerate?: (p: string) => Promise<string>, profGenerate?: (p: string) => Promise<string>) {
     return {
       session,
       journalStore: journal,
       memoryStore: new MemoryStore(path.join(dir, "memory")),
       curatedIndex: new CuratedIndex(path.join(dir, "journal", ".curated.json")),
-      memoryCuration: new MemoryCuration({ generate: generate ?? (async () => JSON.stringify([
+      memoryCuration: new MemoryCuration({ generate: memGenerate ?? (async () => JSON.stringify([
         { slug: "project/arch", type: "project", name: "新架构", description: "d", content: "决定换架构", sources: [0] },
+      ])) }),
+      profileStore: new PersonProfileStore(path.join(dir, "people")),
+      profileCuration: new ProfileCuration({ generate: profGenerate ?? (async () => JSON.stringify([
+        { action: "new", index: 0, name: "李四", reason: "新人物" },
       ])) }),
       now: NOW,
     };
@@ -82,5 +88,16 @@ describe("handleCurationInput", () => {
     await handleCurationInput("/diary-curate apply all", { ...c, session: proposed!.nextSession });
     const again = await handleCurationInput("/diary-curate", c);
     expect(again!.result.message).toMatch(/没有待整理/);
+  });
+
+  it("/diary-curate also resolves ambiguous people into profile proposals", async () => {
+    const j = await seed(dir);
+    const e2 = emptyEntry("e2", "2026-08-01", "2026-08-01T11:00:00.000Z");
+    e2.people = [{ name: "朋友", relation: null, relationInferred: false, interaction: "吃饭", note: null, specific: false }];
+    await j.save(e2);
+    const c = ctx(null, j);
+    const out = await handleCurationInput("/diary-curate", c);
+    expect(out!.result.message).toContain("新档案");
+    expect(out!.nextSession).not.toBeNull();
   });
 });

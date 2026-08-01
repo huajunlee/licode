@@ -5,6 +5,7 @@ import { editTool } from "./edit.js";
 import { globTool } from "./glob.js";
 import { grepTool } from "./grep.js";
 import { journalRecallTool } from "./journal-recall.js";
+import { profileRecallTool } from "./profile-recall.js";
 import type { Tool } from "../types.js";
 
 export const builtinTools: Tool[] = [
@@ -15,6 +16,7 @@ export const builtinTools: Tool[] = [
   globTool,
   grepTool,
   journalRecallTool,
+  profileRecallTool,
 ];
 
-export { bashTool, readTool, writeTool, editTool, globTool, grepTool, journalRecallTool };
+export { bashTool, readTool, writeTool, editTool, globTool, grepTool, journalRecallTool, profileRecallTool };
