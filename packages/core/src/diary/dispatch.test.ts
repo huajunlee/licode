@@ -55,6 +55,8 @@ describe("handleDiaryInput", () => {
     const out = await handleDiaryInput("/diary end", { ...ctx(null), session });
     expect(out!.result.message).toContain("今日摘要");
     expect(out!.nextSession).toBeNull();
+    expect(out!.entry).toBeDefined();            // 刚保存的条目回传（hooks 用它跑自动提升/入档）
+    expect(out!.entry!.raw.segments.length).toBe(1);
     const list = await new JournalStore(dir).listByDate("2026-07-31");
     expect(list.length).toBe(1);
   });

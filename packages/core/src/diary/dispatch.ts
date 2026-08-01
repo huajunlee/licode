@@ -19,6 +19,8 @@ export interface DiaryDispatchResult {
 export interface DiaryDispatchOutcome {
   result: DiaryDispatchResult;
   nextSession: DiarySession | null;
+  /** /diary-end 时刚保存的条目；hooks 用它跑自动提升/入档（不要用 listRecent 重查，多条同日会取错）。 */
+  entry?: DiaryEntry;
 }
 
 const RECENT_LIMIT = 10;
@@ -60,6 +62,7 @@ export async function handleDiaryInput(
       return {
         result: { type: "action", message: `✅ 已保存今日日记：\n${entry.summary || "（无摘要）"}` },
         nextSession: null,
+        entry,
       };
     }
 

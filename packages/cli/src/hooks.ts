@@ -624,25 +624,23 @@ export function useConversation(
           setIsLoading(false);
           setCommandMessage(outcome.result.message);
           setMessages([...manager.getMessages()]);
-          if (wasEnd && diaryEnabledRef.current) {
+          if (wasEnd && diaryEnabledRef.current && outcome.entry) {
             try {
-              const recent = await diaryStoreRef.current.listRecent(1);
-              if (recent[0]) {
-                const pr = await autoPromoteEntry(recent[0], {
-                  memoryStore: memoryStoreRef.current,
-                  curatedIndex: curatedIndexRef.current,
-                  now: () => new Date(),
-                });
-                const fr = await autoFileEntry(recent[0], {
-                  profileStore: profileStoreRef.current,
-                  curatedIndex: curatedIndexRef.current,
-                  now: () => new Date(),
-                });
+              const entry = outcome.entry;
+              const pr = await autoPromoteEntry(entry, {
+                memoryStore: memoryStoreRef.current,
+                curatedIndex: curatedIndexRef.current,
+                now: () => new Date(),
+              });
+              const fr = await autoFileEntry(entry, {
+                profileStore: profileStoreRef.current,
+                curatedIndex: curatedIndexRef.current,
+                now: () => new Date(),
+              });
                 const notes: string[] = [];
                 if (pr.promoted.length) notes.push(`✨ 已自动提升 ${pr.promoted.length} 条到记忆`);
                 if (fr.filed.length) notes.push(`👤 已自动入档 ${fr.filed.length} 人`);
                 if (notes.length) setCommandMessage(outcome.result.message + "\n" + notes.join("；") + "。");
-              }
             } catch { /* 自动提升/入档失败不阻断；候选留待 /diary-curate */ }
           }
           return;
