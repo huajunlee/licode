@@ -56,6 +56,21 @@ export function loadDefaultLayers(
   return layers;
 }
 
+/**
+ * 动态层：当前日期（ISO）。always-on，priority 3（safety 与 memory-guide 之间）。
+ * 给主 Agent（Write 工具路径）提供相对日期换算锚点--memory-guide 里的
+ * "把相对日期转换为绝对日期"规则因此能真正执行。措辞与 diary 先例对齐。
+ */
+export function currentDateLayer(now: Date = new Date()): SystemPromptLayer {
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  return {
+    name: "current-date",
+    priority: 3,
+    always: true,
+    content: `今天是 ${today}。`,
+  };
+}
+
 export class SystemPrompt {
   private layers: SystemPromptLayer[] = [];
   private tokenCounter = new TokenCounter();
