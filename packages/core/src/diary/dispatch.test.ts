@@ -73,6 +73,8 @@ describe("handleDiaryInput", () => {
     await handleDiaryInput("/diary end", { ...ctx(null), session: started!.nextSession });
     const out = await handleDiaryInput("/diary list", ctx(null));
     expect(out!.result.message).toContain("2026-07-31");
+    expect(out!.result.message).toContain("今日标题");
+    expect(out!.result.message).toMatch(/\(\w+\)/); // (id) 句柄
   });
 
   it("/diary while session active is an error (end first)", async () => {
