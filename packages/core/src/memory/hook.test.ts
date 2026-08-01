@@ -22,6 +22,7 @@ function mockStore(hasChanges = false): MemoryStore {
     save: vi.fn(),
     loadIndex: vi.fn().mockResolvedValue(""),
     hasChangesSince: vi.fn().mockResolvedValue(hasChanges),
+    normalizeChangedSince: vi.fn().mockResolvedValue(undefined),
     rebuildIndex: vi.fn().mockResolvedValue(undefined),
   } as unknown as MemoryStore;
 }
@@ -140,6 +141,7 @@ describe("createMemoryExtractionHook", () => {
     await fn(agentLoopCompleteEvent());
 
     expect(store.hasChangesSince).toHaveBeenCalledWith(state.loopStartedAt);
+    expect(store.normalizeChangedSince).toHaveBeenCalledWith(state.loopStartedAt);
     expect(store.rebuildIndex).toHaveBeenCalled();
     expect(extractor.shouldExtract).not.toHaveBeenCalled();
     expect(extractor.extract).not.toHaveBeenCalled();

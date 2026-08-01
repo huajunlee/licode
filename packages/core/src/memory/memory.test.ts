@@ -606,4 +606,89 @@ describe("MemoryStore date normalization", () => {
     expect(raw).toContain("2025年启动");
     expect(raw).not.toContain("去年");
   });
+
+  it("save also normalizes the name field", async () => {
+    vi.useFakeTimers({ now: new Date(2026, 7, 1) });
+    dir = mkdtempSync(path.join(tmpdir(), "licode-norm-"));
+    const store = new MemoryStore(dir);
+    await store.save(makeMemory({
+      slug: "project/launch", type: "project",
+      name: "今年启动的项目",
+      content: "正文",
+      description: "desc",
+    }));
+    const raw = readFileSync(path.join(dir, "project", "launch.md"), "utf-8");
+    expect(raw).toContain("2026年启动的项目");
+    expect(raw).not.toContain("今年");
+  });
+});
+
+describe("MemoryStore.normalizeChangedSince (Write-path safety net)", () => {
+  let dir: string | null = null;
+  afterEach(() => {
+    if (dir) { rmSync(dir, { recursive: true, force: true }); dir = null; }
+    vi.useRealTimers();
+  });
+
+  const NOW = new Date(2026, 7, 1); // 2026-08-01 local
+  const PAST = new Date(2026, 0, 1); // 2026-01-01 local
+
+  // Simulate the agent writing a memory file directly with the Write tool
+  // (bypassing save), leaving "今年" unconverted in name/description/content.
+  function writeDirect(filePath: string, name: string, description: string, content: string, pinned = false): void {
+    mkdirSync(path.dirname(filePath), { recursive: true });
+    writeFileSync(
+      filePath,
+      `---\nname: ${name}\ndescription: ${description}\ntype: user\ncreatedAt: 2026-08-01\nupdatedAt: 2026-08-01\npinned: ${pinned}\n---\n\n${content}\n`,
+      "utf-8"
+    );
+  }
+
+  it("normalizes name+description+content of a directly-written file and preserves pinned", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-ncs-"));
+    const store = new MemoryStore(dir);
+    const filePath = path.join(dir, "user", "competition-goal.md");
+    writeDirect(filePath, "今年目标", "用户今年的核心目标", "用户今年的目标是夺得头等奖。", true);
+    utimesSync(filePath, NOW, NOW);
+    await store.normalizeChangedSince(NOW.getTime() - 1000, NOW);
+    const raw = readFileSync(filePath, "utf-8");
+    expect(raw).toContain("2026年");
+    expect(raw).not.toContain("今年");
+    expect(raw).toContain("pinned: true");
+  });
+
+  it("preserves mtime (invisible to hasChangesSince)", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-ncs-"));
+    const store = new MemoryStore(dir);
+    const filePath = path.join(dir, "user", "goal.md");
+    writeDirect(filePath, "今年目标", "d", "今年做事");
+    utimesSync(filePath, NOW, NOW);
+    const mtimeBefore = statSync(filePath).mtimeMs;
+    await store.normalizeChangedSince(NOW.getTime() - 1000, NOW);
+    expect(statSync(filePath).mtimeMs).toBe(mtimeBefore);
+  });
+
+  it("leaves unchanged files alone (mtime < tsMs)", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-ncs-"));
+    const store = new MemoryStore(dir);
+    const filePath = path.join(dir, "user", "old.md");
+    writeDirect(filePath, "今年目标", "d", "今年做事");
+    utimesSync(filePath, PAST, PAST); // old mtime
+    await store.normalizeChangedSince(NOW.getTime(), NOW); // tsMs > PAST -> unchanged
+    const raw = readFileSync(filePath, "utf-8");
+    expect(raw).toContain("今年"); // not normalized
+  });
+
+  it("skips files with no relative dates (no rewrite, mtime preserved)", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-ncs-"));
+    const store = new MemoryStore(dir);
+    const filePath = path.join(dir, "user", "clean.md");
+    writeDirect(filePath, "纯净标题", "无日期", "普通正文。");
+    utimesSync(filePath, NOW, NOW);
+    const mtimeBefore = statSync(filePath).mtimeMs;
+    await store.normalizeChangedSince(NOW.getTime() - 1000, NOW);
+    const raw = readFileSync(filePath, "utf-8");
+    expect(raw).toContain("纯净标题");
+    expect(statSync(filePath).mtimeMs).toBe(mtimeBefore);
+  });
 });

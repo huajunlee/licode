@@ -80,6 +80,7 @@ export function createMemoryExtractionHook(
     // rebuild the index (covers files written directly with the Write
     // tool, bypassing store.save) and skip the background extraction.
     if (state.loopStartedAt > 0 && (await store.hasChangesSince(state.loopStartedAt))) {
+      await store.normalizeChangedSince(state.loopStartedAt);
       await store.rebuildIndex();
       return;
     }
