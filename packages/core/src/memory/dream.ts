@@ -321,9 +321,11 @@ export class MemoryDream {
     candidateSlugs: Set<string>,
     now: number
   ): string {
+    const today = new Date(now);
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     const memParts: string[] = [];
     if (indexContent) memParts.push(indexContent.trim());
-    for (const m of all) memParts.push(`### ${m.slug}\ncontent:\n${m.content}`);
+    for (const m of all) memParts.push(`### ${m.slug}\ndescription: ${m.description}\ncontent:\n${m.content}`);
     const suspText =
       suspicions.map((s) => `- ${s.slug}: ${s.reason}`).join("\n") || "(无)";
     const eviText =
@@ -340,6 +342,7 @@ export class MemoryDream {
         .join("\n") || "(无)";
     return [
       "You are performing a dream - consolidate the memory system based on evidence.",
+      `今天是 ${todayStr}。`,
       "",
       "## Existing memories (index + full content)",
       memParts.join("\n\n"),
@@ -363,7 +366,7 @@ export class MemoryDream {
       "- 上面的归档候选将被自动归档（移入归档区，可经 /memory-restore 恢复），无需你输出 archive；pinned 记忆不会出现在候选中。若某候选内容同时失效/重复/矛盾，用 delete 优先删除（内容维度优先于热度）",
       "- 新信息与现有记忆矛盾时，用 update 重写或 delete 删除，禁止矛盾并存",
       "- 优先把新信息合并进已有 topic 文件，避免创建重复文件",
-      "- 把\"昨天\"\"上周\"等相对日期转换为绝对日期",
+      "- 把 description 与 content 中的相对日期转换为绝对日期；精确词（昨天/上周/去年）转确切日期，模糊词（最近/前阵子）转大致范围（如\"2026年7月前后\"）",
       "- 遵守 user/feedback/project/reference 四分类与\"What NOT to save\"（不存代码模式、git 历史、调试方案、任务进度）",
       "- 只使用上述证据中的内容；不要臆测",
     ].join("\n");
