@@ -9,6 +9,7 @@ describe("diary types + serialize", () => {
     expect(e.raw).toEqual({ content: "", segments: [] });
     expect(e.facts).toEqual([]);
     expect(e.futureMemory).toEqual([]);
+    expect(e.title).toBe("");
   });
 
   it("dateString formats YYYY-MM-DD in local time", () => {
@@ -23,6 +24,7 @@ describe("diary types + serialize", () => {
         content: "今天和老板聊了项目",
         segments: [{ timestamp: "2026-07-31T10:00:00.000Z", speaker: "user", content: "今天和老板聊了项目" }],
       },
+      title: "和老板聊项目",
       summary: "和老板讨论了项目技术方案",
       facts: [{ what: "和老板聊了项目", when: null, tags: ["work"] }],
       decisions: [{ decision: "换技术方案", reasoning: "老板建议", context: null }],
@@ -34,12 +36,14 @@ describe("diary types + serialize", () => {
     expect(raw).toContain("## 原文");
     expect(raw).toContain("## 结构化");
     expect(raw).toContain("id: id1");
+    expect(raw).toContain("title: 和老板聊项目");
     expect(raw).toContain("people: 老板");
 
     const parsed = parseEntry(raw);
     expect(parsed).not.toBeNull();
     expect(parsed!.meta).toEqual(entry.meta);
     expect(parsed!.summary).toBe(entry.summary);
+    expect(parsed!.title).toBe(entry.title);
     expect(parsed!.raw.segments).toEqual(entry.raw.segments);
     expect(parsed!.people).toEqual(entry.people);
     expect(parsed!.futureMemory).toEqual(entry.futureMemory);

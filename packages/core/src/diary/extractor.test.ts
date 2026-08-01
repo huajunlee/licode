@@ -15,6 +15,7 @@ const baseInput = {
 describe("DiaryExtractor", () => {
   it("extracts a full entry from valid JSON", async () => {
     const generate = async () => JSON.stringify({
+      title: "和老板聊项目",
       summary: "和老板讨论项目，建议换技术方案",
       facts: [{ what: "和老板聊了项目", when: null, tags: ["work"] }],
       decisions: [{ decision: "换技术方案", reasoning: "老板建议", context: null }],
@@ -29,6 +30,7 @@ describe("DiaryExtractor", () => {
     expect(entry.summary).toBe("和老板讨论项目，建议换技术方案");
     expect(entry.people[0].name).toBe("老板");
     expect(entry.futureMemory[0].importance).toBe("high");
+    expect(entry.title).toBe("和老板聊项目");
   });
 
   it("parses JSON wrapped in a code fence", async () => {
@@ -46,6 +48,7 @@ describe("DiaryExtractor", () => {
     expect(entry.summary).toMatch(/抽取失败/);
     expect(entry.facts).toEqual([]);
     expect(entry.futureMemory).toEqual([]);
+    expect(entry.title).toBe("");
   });
 
   it("degrades when generate returns non-JSON", async () => {
@@ -83,5 +86,6 @@ describe("DiaryExtractor", () => {
     expect(prompts[0]).toContain("2026-07-31");   // baseInput.date 作为相对时间基准
     expect(prompts[0]).toMatch(/相对时间/);
     expect(prompts[0]).toMatch(/绝对日期/);
+    expect(prompts[0]).toContain("title");
   });
 });

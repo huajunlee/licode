@@ -31,6 +31,7 @@ export function serializeEntry(entry: DiaryEntry): string {
   const fm = [
     "---",
     `id: ${entry.meta.id}`,
+    `title: ${entry.title}`,
     `date: ${entry.meta.date}`,
     `createdAt: ${entry.meta.createdAt}`,
     `endedAt: ${entry.meta.endedAt}`,
@@ -83,6 +84,7 @@ export function parseEntry(raw: string): DiaryEntry | null {
       createdAt: fm.createdAt ?? "",
       endedAt: fm.endedAt ?? "",
     },
+    title: fm.title ?? "",
     raw: rawField,
     summary: typeof obj.summary === "string" ? obj.summary : "",
     facts: Array.isArray(obj.facts) ? (obj.facts as DiaryEntry["facts"]) : [],
