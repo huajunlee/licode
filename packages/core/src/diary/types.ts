@@ -18,6 +18,7 @@ export interface DiaryEntryMeta { id: string; date: string; createdAt: string; e
 export interface DiaryEntry {
   meta: DiaryEntryMeta;
   raw: { content: string; segments: Segment[] };
+  title: string;
   summary: string;
   facts: Fact[];
   decisions: Decision[];
@@ -30,6 +31,7 @@ export function emptyEntry(id: string, date: string, createdAt: string): DiaryEn
   return {
     meta: { id, date, createdAt, endedAt: createdAt },
     raw: { content: "", segments: [] },
+    title: "",
     summary: "",
     facts: [], decisions: [], emotions: [], people: [], futureMemory: [],
   };

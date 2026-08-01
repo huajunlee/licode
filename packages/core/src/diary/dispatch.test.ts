@@ -13,6 +13,7 @@ function fakeExtractor(): DiaryExtractorLike {
       return {
         meta: { id: input.id, date: input.date, createdAt: input.createdAt, endedAt: input.endedAt },
         raw: { content: input.content, segments: input.segments },
+        title: "今日标题",
         summary: "今日摘要",
         facts: [], decisions: [], emotions: [], people: [], futureMemory: [],
       };
@@ -72,6 +73,8 @@ describe("handleDiaryInput", () => {
     await handleDiaryInput("/diary end", { ...ctx(null), session: started!.nextSession });
     const out = await handleDiaryInput("/diary list", ctx(null));
     expect(out!.result.message).toContain("2026-07-31");
+    expect(out!.result.message).toContain("今日标题");
+    expect(out!.result.message).toMatch(/\(\w+\)/); // (id) 句柄
   });
 
   it("/diary while session active is an error (end first)", async () => {

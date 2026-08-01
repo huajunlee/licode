@@ -9,6 +9,7 @@ function fakeExtractor(): DiaryExtractorLike {
       return {
         meta: { id: input.id, date: input.date, createdAt: input.createdAt, endedAt: input.endedAt },
         raw: { content: input.content, segments: input.segments },
+        title: "fake title",
         summary: "fake summary",
         facts: [], decisions: [], emotions: [], people: [], futureMemory: [],
       };

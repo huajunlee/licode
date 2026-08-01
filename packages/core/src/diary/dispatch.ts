@@ -1,5 +1,6 @@
 import type { DiaryEntry } from "./types.js";
 import { dateString } from "./types.js";
+import { hhmmFromISO } from "../memory/types.js";
 import { DiarySession } from "./session.js";
 import type { DiaryStore } from "./store.js";
 import type { DiaryExtractorLike } from "./extractor.js";
@@ -26,8 +27,9 @@ export interface DiaryDispatchOutcome {
 const RECENT_LIMIT = 10;
 
 function formatPreview(e: DiaryEntry): string {
-  const summary = e.summary.length > 60 ? e.summary.slice(0, 60) + "…" : e.summary;
-  return `[${e.meta.date} ${e.meta.id}] ${summary}`;
+  const title = e.title || (e.summary.length > 60 ? e.summary.slice(0, 60) + "…" : e.summary);
+  const hhmm = hhmmFromISO(e.meta.createdAt);
+  return `[${e.meta.date} ${hhmm}] ${title} (${e.meta.id})`;
 }
 
 export async function handleDiaryInput(

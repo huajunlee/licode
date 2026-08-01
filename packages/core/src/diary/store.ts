@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { DiaryEntry } from "./types.js";
 import { serializeEntry, parseEntry } from "./serialize.js";
+import { cleanName, hhmmFromISO } from "../memory/types.js";
 
 export interface DiaryStore {
   save(entry: DiaryEntry): Promise<void>;
@@ -24,27 +25,40 @@ async function readEntries(dir: string): Promise<DiaryEntry[]> {
   return out;
 }
 
+function entryFilename(entry: DiaryEntry): string {
+  const hhmm = hhmmFromISO(entry.meta.createdAt);
+  const title = cleanName(entry.title).slice(0, 12).replace(/-+$/, "") || "无标题";
+  return `${entry.meta.date}-${hhmm}-${title}.md`;
+}
+
 export class JournalStore implements DiaryStore {
   constructor(private dir: string) {}
 
   async save(entry: DiaryEntry): Promise<void> {
     const dateDir = path.join(this.dir, entry.meta.date);
     await fs.promises.mkdir(dateDir, { recursive: true });
-    const filePath = path.join(dateDir, `${entry.meta.id}.md`);
-    if (fs.existsSync(filePath)) {
-      throw new Error(`diary entry already exists: ${entry.meta.id}`);
-    }
+    const filePath = this.resolveUniquePath(dateDir, entry);
     await fs.promises.writeFile(filePath, serializeEntry(entry), "utf-8");
+  }
+
+  private resolveUniquePath(dateDir: string, entry: DiaryEntry): string {
+    const name = entryFilename(entry);
+    let candidate = path.join(dateDir, name);
+    if (!fs.existsSync(candidate)) return candidate;
+    const base = name.replace(/\.md$/, "");
+    let i = 2;
+    while (fs.existsSync(path.join(dateDir, `${base}-${i}.md`))) i++;
+    return path.join(dateDir, `${base}-${i}.md`);
   }
 
   async load(id: string): Promise<DiaryEntry | null> {
     if (!fs.existsSync(this.dir)) return null;
     for (const dateDir of await fs.promises.readdir(this.dir)) {
-      const filePath = path.join(this.dir, dateDir, `${id}.md`);
-      if (fs.existsSync(filePath)) {
-        const raw = await fs.promises.readFile(filePath, "utf-8");
-        return parseEntry(raw);
-      }
+      const full = path.join(this.dir, dateDir);
+      const stat = await fs.promises.stat(full);
+      if (!stat.isDirectory()) continue;
+      const found = (await readEntries(full)).find((e) => e.meta.id === id);
+      if (found) return found;
     }
     return null;
   }

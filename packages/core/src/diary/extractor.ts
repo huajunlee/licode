@@ -18,6 +18,7 @@ export interface DiaryExtractorLike {
 }
 
 interface ExtractedFields {
+  title: string;
   summary: string;
   facts: DiaryEntry["facts"];
   decisions: DiaryEntry["decisions"];
@@ -39,7 +40,7 @@ export class DiaryExtractor implements DiaryExtractorLike {
       const fields = this.parse(await this.config.generate(prompt));
       return { meta, raw, ...fields };
     } catch {
-      return { meta, raw, summary: FALLBACK_SUMMARY, facts: [], decisions: [], emotions: [], people: [], futureMemory: [] };
+      return { meta, raw, title: "", summary: FALLBACK_SUMMARY, facts: [], decisions: [], emotions: [], people: [], futureMemory: [] };
     }
   }
 
@@ -51,6 +52,7 @@ export class DiaryExtractor implements DiaryExtractorLike {
       `今天是 ${date}。所有相对时间（下个月、昨天、上周、下周等）一律转成绝对日期（基于今天 ${date}），写入 facts.when / futureMemory.content / decisions 等字段。`,
       "",
       "逐字段规则：",
+      "- title: 4-10 字中文短标题，概括本次日记主题，用作文件名，不含标点。",
       "- summary: 2-3 句叙事摘要，只叙事不解读。",
       "- facts: 离散事件，每条一句话，去重，跳过无关琐事。{what, when, tags}",
       "- decisions: 只收明确决定，不猜意图；有理由附 reasoning。{decision, reasoning, context}",
@@ -62,7 +64,7 @@ export class DiaryExtractor implements DiaryExtractorLike {
       transcript,
       "",
       "只返回一个 JSON 对象，不要任何额外文字：",
-      '{"summary":"...","facts":[...],"decisions":[...],"emotions":[...],"people":[{"name":"...","relation":null,"relationInferred":false,"interaction":"...","note":null,"specific":true}],"futureMemory":[...]}',
+      '{"title":"...","summary":"...","facts":[...],"decisions":[...],"emotions":[...],"people":[{"name":"...","relation":null,"relationInferred":false,"interaction":"...","note":null,"specific":true}],"futureMemory":[...]}',
     ].join("\n");
   }
 
@@ -82,6 +84,7 @@ export class DiaryExtractor implements DiaryExtractorLike {
       throw new Error(`invalid JSON in extractor response: ${(e as Error).message}`);
     }
     return {
+      title: typeof obj.title === "string" ? obj.title : "",
       summary: typeof obj.summary === "string" ? obj.summary : "",
       facts: Array.isArray(obj.facts) ? (obj.facts as ExtractedFields["facts"]) : [],
       decisions: Array.isArray(obj.decisions) ? (obj.decisions as ExtractedFields["decisions"]) : [],
