@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { normalizeDates } from "./normalize-dates.js";
 import type { Memory, MemoryType } from "./types.js";
 
 const INDEX_HEADER = "# User Memory\n\nThe following memories are from previous conversations:\n\n";
@@ -83,6 +84,17 @@ export class MemoryStore {
         lastUsedAt = existing.lastUsedAt ?? "";
         pinned = existing.pinned ?? false;
       }
+    }
+
+    // 程序化归一化：落盘前把 content+description 的精确相对词转绝对日期。
+    // 锚点 now（写入时间）；幂等；try/catch 兜底，绝不阻断 save。
+    // 对 description 也跑——从结构上封死 dream consolidate 看不到 description 的盲区。
+    const writeNow = new Date();
+    try {
+      finalContent = normalizeDates(finalContent, writeNow);
+      memory.description = normalizeDates(memory.description, writeNow);
+    } catch {
+      // best-effort: 归一化失败则保留原文
     }
 
     const frontmatter = [
