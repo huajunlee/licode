@@ -44,7 +44,8 @@ export async function autoPromoteEntry(entry: DiaryEntry, deps: AutoPromoteDeps)
   const errors: string[] = [];
   for (let i = 0; i < entry.futureMemory.length; i++) {
     const c = entry.futureMemory[i];
-    const auto = TYPE_MAP[c.type] && c.importance === "high" && c.promotability === "high";
+    // 自动提升门：type∈{preference,decision,goal} + importance:high + promotability∈{high,medium}（low 走 curation）
+    const auto = TYPE_MAP[c.type] && c.importance === "high" && c.promotability !== "low";
     if (!auto) continue;
     const key = `${entry.meta.id}#c${i}`;
     try {

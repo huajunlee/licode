@@ -101,12 +101,12 @@ phase-2：**提升桥 + 人物档案**。`/diary-end` 后，清晰的候选**自
 
 1. **`people` refs 无门**（无筛种子）：`specific` -> diary-end 自动入档案；模糊 -> curation 解歧义。
 2. **`futureMemory` 候选有门**（importance + promotability）：
-   - **high+high** -> 自动（非人物按类型映射入记忆；`other` / 模糊人物走 curation）
-   - **high + 非 high**（low/medium）-> curation（非人物再评估入记忆；人物解歧义入档案）
+   - **high + (high|medium)** -> 自动（非人物按类型映射入记忆；`other` / 模糊人物走 curation）
+   - **high + low** -> curation（非人物再评估入记忆；人物解歧义入档案）
    - **importance≠high** -> 留日记
 3. **对人物，「具体 vs 模糊」优先于 importance**：模糊人物候选即便 high+high 也走 curation（先解歧义）。
 
-> medium 档归 curation（与 low 同为「不确定 promotability」），可调。
+> 自动门放宽（2026-08-01）：从 high+high 放宽到 high+(high|medium)，medium 也自动提升；仅 high+low 走 curation。
 
 ### 路由表（常见情况）
 
@@ -114,10 +114,10 @@ phase-2：**提升桥 + 人物档案**。`/diary-end` 后，清晰的候选**自
 |---|---|---|---|---|
 | `people` ref | specific | 档案 | 自动追加 | diary-end |
 | `people` ref | 模糊 | curation 解歧义 | side-call | /diary-curate |
-| `futureMemory`：preference/decision/goal | high+high | 记忆 | 自动（类型映射） | diary-end |
-| `futureMemory`：other | high+high | curation（type 不清） | side-call | /diary-curate |
-| `futureMemory`：person_trait/relationship（specific） | high+high | 档案 | 自动追加 | diary-end |
-| `futureMemory`：非人物 | high+非high | curation 再评估 | side-call | /diary-curate |
+| `futureMemory`：preference/decision/goal | high+high/medium | 记忆 | 自动（类型映射） | diary-end |
+| `futureMemory`：other | high+high/medium | curation（type 不清） | side-call | /diary-curate |
+| `futureMemory`：person_trait/relationship（specific） | high+high/medium | 档案 | 自动追加 | diary-end |
+| `futureMemory`：非人物 | high+low | curation 再评估 | side-call | /diary-curate |
 | `futureMemory`：person_trait/relationship（模糊） | high | curation 解歧义 | side-call | /diary-curate |
 | `futureMemory`（任意） | importance≠high | 留日记 | - | - |
 

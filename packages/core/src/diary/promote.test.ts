@@ -32,12 +32,13 @@ describe("autoPromoteEntry", () => {
   beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), "pro-")); });
   afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
 
-  it("promotes only high+high preference/decision/goal, marks their keys, skips other/low", async () => {
+  it("promotes high+(high|medium) preference/decision/goal, skips high+low/other/person/low", async () => {
     const entry = emptyEntry("e1", "2026-08-01", "2026-08-01T10:00:00.000Z");
     entry.futureMemory = [
-      cand("我喜欢早起", "preference", "high", "high"),       // promote
-      cand("决定换架构", "decision", "high", "high"),          // promote
-      cand("今天和王总吵架", "relationship", "high", "low"),   // skip (not auto)
+      cand("我喜欢早起", "preference", "high", "high"),       // promote (high+high)
+      cand("决定换架构", "decision", "high", "medium"),       // promote (high+medium，放宽后自动)
+      cand("下月做好agents", "goal", "high", "low"),          // skip (high+low -> curation)
+      cand("今天和王总吵架", "relationship", "high", "low"),   // skip (relationship)
       cand("其它杂事", "other", "high", "high"),               // skip (other -> curation)
       cand("吃面", "decision", "low", "low"),                  // skip (low importance)
     ];
@@ -49,10 +50,11 @@ describe("autoPromoteEntry", () => {
     const all = await store.listAll();
     expect(all.length).toBe(2);
     const marked = await idx.load();
-    expect(marked.has("e1#c0")).toBe(true);
-    expect(marked.has("e1#c1")).toBe(true);
-    expect(marked.has("e1#c2")).toBe(false); // relationship high+low not marked -> curation
-    expect(marked.has("e1#c3")).toBe(false); // other high+high not marked -> curation
-    expect(marked.has("e1#c4")).toBe(false); // low not marked (curation predicate excludes by importance)
+    expect(marked.has("e1#c0")).toBe(true);  // preference high+high
+    expect(marked.has("e1#c1")).toBe(true);  // decision high+medium
+    expect(marked.has("e1#c2")).toBe(false); // goal high+low -> curation
+    expect(marked.has("e1#c3")).toBe(false); // relationship
+    expect(marked.has("e1#c4")).toBe(false); // other
+    expect(marked.has("e1#c5")).toBe(false); // low importance
   });
 });
