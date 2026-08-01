@@ -24,4 +24,14 @@ describe("readDiaryFlags", () => {
     process.env.LICODE_DIARY_MODEL = "gpt-4o-mini";
     expect(readDiaryFlags().model).toBe("gpt-4o-mini");
   });
+
+  it("curateModel defaults to LICODE_DIARY_MODEL then deepseek-chat", () => {
+    delete process.env.LICODE_DIARY_MODEL;
+    delete process.env.LICODE_DIARY_CURATE_MODEL;
+    expect(readDiaryFlags().curateModel).toBe("deepseek-chat");
+    process.env.LICODE_DIARY_MODEL = "gpt-4o-mini";
+    expect(readDiaryFlags().curateModel).toBe("gpt-4o-mini");
+    process.env.LICODE_DIARY_CURATE_MODEL = "stronger-model";
+    expect(readDiaryFlags().curateModel).toBe("stronger-model");
+  });
 });

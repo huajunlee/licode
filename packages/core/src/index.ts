@@ -159,6 +159,22 @@ export type {
   DiaryDispatchDeps, DiaryDispatchContext, DiaryDispatchResult, DiaryDispatchOutcome,
 } from "./diary/dispatch.js";
 
+// diary phase-2: promote + curated
+export { CuratedIndex } from "./diary/curated.js";
+export { deriveMemory, autoPromoteEntry } from "./diary/promote.js";
+export type { AutoPromoteDeps, AutoPromoteResult } from "./diary/promote.js";
+
+// curation/
+export { MemoryCuration } from "./curation/memory-curation.js";
+export type { MemoryCurationConfig } from "./curation/memory-curation.js";
+export { CurationSession } from "./curation/session.js";
+export type { Selection, ApplyDeps, ApplyResult } from "./curation/session.js";
+export { handleCurationInput } from "./curation/dispatch.js";
+export type {
+  CurationDispatchDeps, CurationDispatchContext, CurationDispatchResult, CurationDispatchOutcome,
+} from "./curation/dispatch.js";
+export type { PendingCandidate, MemoryCreateProposal, Proposal } from "./curation/types.js";
+
 // Phase 5: multi-agent
 export { createAgentTool } from "./multi-agent/agent-tool.js";
 export { SubAgentManager } from "./multi-agent/subagent.js";
