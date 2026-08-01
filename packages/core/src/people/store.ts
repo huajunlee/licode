@@ -2,33 +2,36 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { PersonProfile } from "./types.js";
 import { serializeProfile, parseProfile } from "./serialize.js";
+import { cleanName } from "../memory/types.js";
 
 export type ProfileAction = "create" | "update";
 
 export class PersonProfileStore {
   constructor(private dir: string) {}
 
-  private file(slug: string): string {
-    return path.join(this.dir, `${path.basename(slug)}.md`);
+  private file(canonicalName: string): string {
+    return path.join(this.dir, `${cleanName(canonicalName) || "untitled"}.md`);
   }
 
   async save(profile: PersonProfile, action: ProfileAction = "create"): Promise<void> {
     await fs.promises.mkdir(this.dir, { recursive: true });
-    const filePath = this.file(profile.meta.slug);
+    const filePath = this.file(profile.meta.canonicalName);
     if (action === "create" && fs.existsSync(filePath)) {
-      throw new Error(`profile already exists: ${profile.meta.slug}`);
+      throw new Error(`profile already exists: ${profile.meta.canonicalName}`);
     }
     await fs.promises.writeFile(filePath, serializeProfile(profile), "utf-8");
   }
 
   async load(slug: string): Promise<PersonProfile | null> {
-    const filePath = this.file(slug);
-    if (!fs.existsSync(filePath)) return null;
-    return parseProfile(await fs.promises.readFile(filePath, "utf-8"));
+    const all = await this.listAll();
+    return all.find((p) => p.meta.slug === slug) ?? null;
   }
 
   async delete(slug: string): Promise<void> {
-    const filePath = this.file(slug);
+    const all = await this.listAll();
+    const p = all.find((x) => x.meta.slug === slug);
+    if (!p) return;
+    const filePath = this.file(p.meta.canonicalName);
     if (fs.existsSync(filePath)) await fs.promises.unlink(filePath);
   }
 

@@ -4,7 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { PersonProfileStore } from "./store.js";
 import { emptyProfile } from "./types.js";
-import { toSlug } from "../memory/types.js";
+import { toSlug, cleanName } from "../memory/types.js";
 
 describe("PersonProfileStore", () => {
   let dir: string;
@@ -19,16 +19,20 @@ describe("PersonProfileStore", () => {
     return p;
   }
 
-  it("save(create) writes <slug>.md and load reads it back", async () => {
+  it("save(create) writes <canonicalName>.md and load reads it back", async () => {
     const s = new PersonProfileStore(dir);
     const p = profile("王总", ["老板"]);
     await s.save(p, "create");
+    const file = path.join(dir, `${cleanName("王总")}.md`);
+    expect(fs.existsSync(file)).toBe(true);
+    expect(fs.existsSync(path.join(dir, `${p.meta.slug}.md`))).toBe(false); // 文件名不再是 slug
+
     const loaded = await s.load(p.meta.slug);
     expect(loaded).not.toBeNull();
     expect(loaded!.meta.canonicalName).toBe("王总");
   });
 
-  it("save(create) refuses to overwrite existing slug", async () => {
+  it("save(create) refuses to overwrite existing canonicalName", async () => {
     const s = new PersonProfileStore(dir);
     await s.save(profile("王总"), "create");
     await expect(s.save(profile("王总"), "create")).rejects.toThrow(/already exists/);
@@ -59,5 +63,15 @@ describe("PersonProfileStore", () => {
     await s.save(a, "create"); await s.save(b, "create");
     const recent = await s.listRecent(2);
     expect(recent[0].meta.canonicalName).toBe("B");
+  });
+
+  it("delete(slug) 扫描定位并删除文件", async () => {
+    const s = new PersonProfileStore(dir);
+    const p = profile("王总");
+    await s.save(p, "create");
+    expect(fs.existsSync(path.join(dir, `${cleanName("王总")}.md`))).toBe(true);
+    await s.delete(p.meta.slug);
+    expect(fs.existsSync(path.join(dir, `${cleanName("王总")}.md`))).toBe(false);
+    expect(await s.load(p.meta.slug)).toBeNull();
   });
 });
