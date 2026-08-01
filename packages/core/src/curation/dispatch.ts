@@ -4,6 +4,7 @@ import type { MemoryStore } from "../memory/store.js";
 import type { MemoryCuration } from "./memory-curation.js";
 import type { PersonProfileStore } from "../people/store.js";
 import type { ProfileCuration } from "../people/curation/profile-curation.js";
+import { mergeProfiles } from "../people/profile-file.js";
 import { CurationSession, type Selection } from "./session.js";
 import type { PendingCandidate, PendingPerson } from "./types.js";
 
@@ -94,6 +95,18 @@ export async function handleCurationInput(
     }
     const res = await ctx.session.apply(sel, { memoryStore: ctx.memoryStore, curatedIndex: ctx.curatedIndex, profileStore: ctx.profileStore });
     return { result: { type: "action", message: `✅ 已应用 ${res.applied} 项整理。` }, nextSession: null };
+  }
+
+  // /diary-curate merge <from> <into> -- 手动合并（补漏并）
+  if (rest.startsWith("merge")) {
+    const parts = rest.slice("merge".length).split(/[\s,，]+/).filter(Boolean);
+    if (parts.length < 2) {
+      return { result: { type: "error", message: "用法: /diary-curate merge <fromName> <intoName>（把 from 档案并入 into）" }, nextSession: ctx.session };
+    }
+    const [fromName, intoName] = parts;
+    const mr = await mergeProfiles(fromName, intoName, { profileStore: ctx.profileStore });
+    if (mr.error) return { result: { type: "error", message: mr.error }, nextSession: ctx.session };
+    return { result: { type: "action", message: `✅ 已合并「${mr.merged!.from}」->「${mr.merged!.into}」（前者档案已删除，后者 aliases 已补充）。` }, nextSession: ctx.session };
   }
 
   // /diary-curate (no sub) -> gather + curate + stash

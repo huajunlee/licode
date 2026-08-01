@@ -2,8 +2,10 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { autoFileEntry } from "./profile-file.js";
+import { autoFileEntry, mergeProfiles } from "./profile-file.js";
 import { PersonProfileStore } from "./store.js";
+import { emptyProfile } from "./types.js";
+import { toSlug } from "../memory/types.js";
 import { CuratedIndex } from "../diary/curated.js";
 import { emptyEntry, type PersonRef } from "../diary/types.js";
 
@@ -60,5 +62,30 @@ describe("autoFileEntry", () => {
     expect(res.filed).toEqual([]);
     expect((await store.listAll()).length).toBe(0);
     expect((await idx.load()).has("e1#p0")).toBe(false); // unmarked -> curation
+  });
+
+  it("mergeProfiles combines two profiles and deletes the from-profile", async () => {
+    const store = new PersonProfileStore(path.join(dir, "people"));
+    const wz = emptyProfile("王总", "2026-08-01"); wz.meta.slug = toSlug("王总"); wz.traits = ["果断"]; wz.meta.mentionCount = 1;
+    await store.save(wz, "create");
+    const lw = emptyProfile("老王", "2026-08-02"); lw.meta.slug = toSlug("老王"); lw.traits = ["爱喝茶"]; lw.meta.mentionCount = 1;
+    await store.save(lw, "create");
+
+    const res = await mergeProfiles("老王", "王总", { profileStore: store });
+    expect(res.merged).toEqual({ from: "老王", into: "王总" });
+    expect(res.error).toBeNull();
+    expect(await store.load(toSlug("老王"))).toBeNull(); // 老王 档案文件已删除
+    expect((await store.findByName("老王"))?.meta.canonicalName).toBe("王总"); // 老王 作别名命中王总
+    const merged = await store.findByName("王总");
+    expect(merged!.meta.aliases).toContain("老王");
+    expect(merged!.traits).toEqual(expect.arrayContaining(["果断", "爱喝茶"]));
+    expect(merged!.meta.mentionCount).toBe(2);
+  });
+
+  it("mergeProfiles reports error when a profile is not found", async () => {
+    const store = new PersonProfileStore(path.join(dir, "people"));
+    const res = await mergeProfiles("不存在", "也没", { profileStore: store });
+    expect(res.merged).toBeNull();
+    expect(res.error).toMatch(/找不到/);
   });
 });

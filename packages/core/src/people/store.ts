@@ -27,6 +27,11 @@ export class PersonProfileStore {
     return parseProfile(await fs.promises.readFile(filePath, "utf-8"));
   }
 
+  async delete(slug: string): Promise<void> {
+    const filePath = this.file(slug);
+    if (fs.existsSync(filePath)) await fs.promises.unlink(filePath);
+  }
+
   async listAll(): Promise<PersonProfile[]> {
     if (!fs.existsSync(this.dir)) return [];
     const out: PersonProfile[] = [];

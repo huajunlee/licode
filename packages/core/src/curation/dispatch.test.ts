@@ -9,6 +9,8 @@ import { MemoryStore } from "../memory/store.js";
 import { MemoryCuration } from "./memory-curation.js";
 import { PersonProfileStore } from "../people/store.js";
 import { ProfileCuration } from "../people/curation/profile-curation.js";
+import { emptyProfile } from "../people/types.js";
+import { toSlug } from "../memory/types.js";
 import { emptyEntry } from "../diary/types.js";
 
 const NOW = () => new Date("2026-08-01T10:00:00.000Z");
@@ -99,5 +101,22 @@ describe("handleCurationInput", () => {
     const out = await handleCurationInput("/diary-curate", c);
     expect(out!.result.message).toContain("新档案");
     expect(out!.nextSession).not.toBeNull();
+  });
+
+  it("/diary-curate merge <from> <into> merges two profiles", async () => {
+    const j = await seed(dir);
+    const c = ctx(null, j);
+    const wz = emptyProfile("王总", "2026-08-01"); wz.meta.slug = toSlug("王总"); wz.traits = ["果断"];
+    await c.profileStore.save(wz, "create");
+    const lw = emptyProfile("老王", "2026-08-02"); lw.meta.slug = toSlug("老王"); lw.traits = ["爱喝茶"];
+    await c.profileStore.save(lw, "create");
+
+    const out = await handleCurationInput("/diary-curate merge 老王 王总", c);
+    expect(out!.result.message).toMatch(/已合并/);
+    expect(await c.profileStore.load(toSlug("老王"))).toBeNull(); // 老王 档案文件已删除
+    expect((await c.profileStore.findByName("老王"))?.meta.canonicalName).toBe("王总"); // 老王 作别名命中王总
+    const merged = await c.profileStore.findByName("王总");
+    expect(merged!.meta.aliases).toContain("老王");
+    expect(merged!.traits).toEqual(expect.arrayContaining(["果断", "爱喝茶"]));
   });
 });
