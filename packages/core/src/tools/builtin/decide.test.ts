@@ -1,9 +1,14 @@
 // packages/core/src/tools/builtin/decide.test.ts
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { gatherDecisionContext } from "./decide.js";
 import { emptyEntry } from "../../diary/types.js";
 import { emptyProfile } from "../../people/types.js";
 import type { DiaryEntry } from "../../diary/types.js";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { decideTool } from "./decide.js";
+import { JournalStore } from "../../diary/store.js";
 
 function entry(id: string, date: string, opts: Partial<DiaryEntry> = {}): DiaryEntry {
   const e = emptyEntry(id, date, `${date}T10:00:00.000Z`);
@@ -69,5 +74,35 @@ describe("gatherDecisionContext", () => {
     expect(out).toContain("降级 C");
     expect(out).toContain("必须询问");
     expect(out).toContain("decide_save");
+  });
+});
+
+describe("decideTool execute", () => {
+  let dir: string;
+  beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), "decide-")); });
+  afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
+
+  it("从 workingDirectory 加载 store 并返回上下文", async () => {
+    const store = new JournalStore(path.join(dir, ".licode", "journal"));
+    const e = emptyEntry("e1", "2026-07-30", "2026-07-30T10:00:00.000Z");
+    e.decisions = [{ decision: "决定换架构", reasoning: "贵", context: null }];
+    await store.save(e);
+
+    const res = await decideTool.execute({ topic: "换架构" }, { workingDirectory: dir, sessionId: "s" });
+    expect(res.status).toBe("success");
+    if (res.status === "success") expect(res.content).toContain("决定换架构");
+  });
+
+  it("空目录返回 success 且含暂无提示", async () => {
+    const res = await decideTool.execute({ topic: "换工作" }, { workingDirectory: dir, sessionId: "s" });
+    expect(res.status).toBe("success");
+    if (res.status === "success") expect(res.content).toContain("暂无");
+  });
+
+  it("store 读错时返回 error", async () => {
+    fs.mkdirSync(path.join(dir, ".licode"));
+    fs.writeFileSync(path.join(dir, ".licode", "journal"), "x"); // journal 是文件而非目录 -> readdir 抛错
+    const res = await decideTool.execute({ topic: "x" }, { workingDirectory: dir, sessionId: "s" });
+    expect(res.status).toBe("error");
   });
 });

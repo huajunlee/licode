@@ -2,6 +2,11 @@
 import type { DiaryEntry, Decision, Fact } from "../../diary/types.js";
 import type { PersonProfile } from "../../people/types.js";
 import { hhmmFromISO } from "../../memory/types.js";
+import { z } from "zod";
+import * as path from "node:path";
+import type { Tool } from "../types.js";
+import { JournalStore } from "../../diary/store.js";
+import { PersonProfileStore } from "../../people/store.js";
 
 const RECENT_LIMIT = 5;
 const MAX_CHARS = 10000;
@@ -123,3 +128,52 @@ export function gatherDecisionContext(input: GatherInput): string {
 
   return content.length > MAX_CHARS ? content.slice(0, MAX_CHARS) + "\n... (truncated)" : content;
 }
+
+const DecideParams = z.object({
+  topic: z
+    .string()
+    .describe("需要做决定或征求意见的事情/问题（尽量写关键词，如'换工作'，便于匹配历史）"),
+  people: z
+    .array(z.string())
+    .optional()
+    .describe("特别相关的人名（可选；不填则自动从话题与历史中找）"),
+});
+
+export const decideTool: Tool<typeof DecideParams> = {
+  name: "decide",
+  description:
+    "当用户请你帮忙做决定、拿主意，或征求意见/建议时调用（如\"帮我决定要不要…\"\"你觉得我该不该…\"\"给我点建议\"）。" +
+    "汇聚历史决定/事实/人物/近期日记供你给依据分析。闲聊、问事实、执行任务时不要调用。用户确认记下决策时用 decide_save。话题尽量写关键词便于匹配。",
+  parameters: DecideParams,
+  async execute(input, context) {
+    try {
+      const journalStore = new JournalStore(
+        path.join(context.workingDirectory, ".licode", "journal")
+      );
+      const profileStore = new PersonProfileStore(
+        path.join(context.workingDirectory, ".licode", "people")
+      );
+      const [entries, profiles] = await Promise.all([
+        journalStore.listAll(),
+        profileStore.listAll(),
+      ]);
+      const content = gatherDecisionContext({
+        entries,
+        profiles,
+        topic: input.topic,
+        people: input.people,
+      });
+      return {
+        status: "success",
+        content,
+        metadata: { entries: entries.length, profiles: profiles.length },
+      };
+    } catch (err) {
+      return {
+        status: "error",
+        error: err instanceof Error ? err.message : String(err),
+        errorType: "execution",
+      };
+    }
+  },
+};
