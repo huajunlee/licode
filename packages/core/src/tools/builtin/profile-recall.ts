@@ -22,7 +22,8 @@ function formatProfile(p: PersonProfile): string {
 export const profileRecallTool: Tool<typeof ProfileRecallParams> = {
   name: "profile_recall",
   description:
-    "查询用户的人物档案（人际关系的结构化记录）。当用户问“王总是谁”“某人什么样”“我和某人关系怎样”等关于人的问题时调用。可按人名/别名查，或不带参数返回最近档案。",
+    "查询用户的人物档案（人际关系的结构化记录）。仅当用户明确询问某个人时调用（如“王总是谁”“某人什么样”“我和某人关系怎样”），" +
+    "不要在用户没问人物时主动调用。查过去发生的事件用 journal_recall。可按人名/别名查，或不带参数返回最近档案。",
   parameters: ProfileRecallParams,
   async execute(input, context) {
     const store = new PersonProfileStore(path.join(context.workingDirectory, ".licode", "people"));
