@@ -35,7 +35,7 @@ export class DiaryExtractor implements DiaryExtractorLike {
     const meta = { id: input.id, date: input.date, createdAt: input.createdAt, endedAt: input.endedAt };
     const raw = { content: input.content, segments: input.segments };
     try {
-      const prompt = this.buildPrompt(input.segments);
+      const prompt = this.buildPrompt(input.segments, input.date);
       const fields = this.parse(await this.config.generate(prompt));
       return { meta, raw, ...fields };
     } catch {
@@ -43,11 +43,12 @@ export class DiaryExtractor implements DiaryExtractorLike {
     }
   }
 
-  private buildPrompt(segments: Segment[]): string {
+  private buildPrompt(segments: Segment[], date: string): string {
     const transcript = segments.map((s) => `[${s.timestamp}] ${s.speaker}: ${s.content}`).join("\n");
     return [
       "你是一个日记结构化抽取器。从下面的用户日记原文抽取结构化字段。",
       "总原则：不臆造（没说留 null）、推断必标注、宁可少收不要错收、语言跟随用户（中文）。",
+      `今天是 ${date}。所有相对时间（下个月、昨天、上周、下周等）一律转成绝对日期（基于今天 ${date}），写入 facts.when / futureMemory.content / decisions 等字段。`,
       "",
       "逐字段规则：",
       "- summary: 2-3 句叙事摘要，只叙事不解读。",

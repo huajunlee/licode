@@ -140,10 +140,11 @@ phase-2 给 `PersonRef` 增 `specific: boolean`（extractor 设；专有名字=t
 
 ### phase-1 扩展（extractor prompt 收紧）
 
-phase-2 修改 `DiaryExtractor` prompt 两点（不改 `DiaryEntry` 结构，只增 `PersonRef.specific`）：
+phase-2 修改 `DiaryExtractor` prompt 三点（不改 `DiaryEntry` 结构，只增 `PersonRef.specific`）：
 
 1. `PersonRef` 增 `specific` 字段（见上）。
 2. `preference` type 明确 = **用户自己的偏好**（"我喜欢早起"）；一个人的喜好（"王总爱喝茶"）归 `person_trait`。避免「王总爱喝茶」误打成 `preference` 误路由到记忆。
+3. 把日记日期喂进 prompt（`今天是 {date}`），指示把相对时间（下个月/昨天/上周）转成绝对日期，写入 `facts.when`/`futureMemory.content`/`decisions`。这样 candidate 直接带绝对时间，autoPromote（机械复制）和 curation（合并）都覆盖，不必等 dream 转换。
 
 ---
 

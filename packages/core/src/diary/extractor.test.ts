@@ -74,4 +74,14 @@ describe("DiaryExtractor", () => {
     expect(entry.people[1].specific).toBe(false);
     expect(entry.futureMemory[0].type).toBe("person_trait");
   });
+
+  it("prompt includes the diary date and absolute-time conversion instruction", async () => {
+    const prompts: string[] = [];
+    const generate = async (p: string) => { prompts.push(p); return JSON.stringify({ summary: "x", facts: [], decisions: [], emotions: [], people: [], futureMemory: [] }); };
+    const ex = new DiaryExtractor({ generate });
+    await ex.extract(baseInput);
+    expect(prompts[0]).toContain("2026-07-31");   // baseInput.date 作为相对时间基准
+    expect(prompts[0]).toMatch(/相对时间/);
+    expect(prompts[0]).toMatch(/绝对日期/);
+  });
 });
