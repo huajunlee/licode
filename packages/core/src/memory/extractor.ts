@@ -156,7 +156,7 @@ export class MemoryExtractor {
       const recent = this.selectMessages(messages, options);
       const conversationText = this.formatMessages(pruneRecallMessages([...recent]));
 
-      const prompt = this.buildPrompt(indexContent, existingMemories, conversationText);
+      const prompt = this.buildPrompt(indexContent, existingMemories, conversationText, new Date());
 
       const response = await this.llm.chat({
         messages: [{ role: "user", content: prompt, timestamp: new Date().toISOString() }],
@@ -238,7 +238,8 @@ export class MemoryExtractor {
   private buildPrompt(
     indexContent: string,
     existingMemories: readonly Memory[],
-    conversationText: string
+    conversationText: string,
+    now: Date
   ): string {
     let existingSection: string;
     if (existingMemories.length === 0) {
@@ -256,6 +257,7 @@ export class MemoryExtractor {
 
     return [
       "Analyze the most recent conversation messages and update the persistent memory system.",
+      `今天是 ${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}。`,
       "",
       "## Existing memories (index + full content)",
       existingSection,
@@ -274,7 +276,7 @@ export class MemoryExtractor {
       "- feedback 类型只记录用户明确纠正过的行为或确认过的非显然做法，content 中必须包含规则、原因（Why:）和适用范围（How to apply:）",
       "- 不要保存：代码模式与架构、git 历史、调试方案、当前任务进度、一次性问答、琐碎闲聊",
       "- 用户在提问而非陈述事实时，跳过",
-      "- 把相对日期（\"昨天\"\"上周\"）转换为绝对日期",
+      "- 把 description 与 content 中的相对日期转换为绝对日期；精确词（昨天/上周/去年）转确切日期，模糊词（最近/前阵子）转大致范围（如\"2026年7月前后\")",
       "- 只使用上述最近对话中的内容；不要臆测或补充对话中不存在的信息",
     ].join("\n");
   }
