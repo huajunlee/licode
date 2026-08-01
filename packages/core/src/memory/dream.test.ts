@@ -582,21 +582,15 @@ describe("MemoryDream consolidate archive (Phase 4)", () => {
 
 describe("MemoryDream.buildConsolidatePrompt date injection", () => {
   it("includes today's date, the field-explicit rule, and per-memory description", () => {
-    const dir = mkdtempSync(path.join(tmpdir(), "dream-cons-"));
-    try {
-      const store = new MemoryStore(dir);
-      const dream = new MemoryDream();
-      const mem = makeMemory("user/food");
-      mem.description = "去年定的口味";
-      const prompt = (dream as any).buildConsolidatePrompt(
-        "## index", [mem], [], new Map(), new Set(), new Date(2026, 7, 1).getTime()
-      );
-      expect(prompt).toContain("2026-08-01");
-      expect(prompt).toMatch(/相对日期/);
-      expect(prompt).toContain("description");
-      expect(prompt).toContain("去年定的口味"); // description 现在可见
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+    const dream = new MemoryDream();
+    const mem = makeMemory("user/food");
+    mem.description = "去年定的口味";
+    const prompt = (dream as any).buildConsolidatePrompt(
+      "## index", [mem], [], new Map(), new Set(), new Date(2026, 7, 1).getTime()
+    );
+    expect(prompt).toContain("2026-08-01");
+    expect(prompt).toMatch(/相对日期/);
+    expect(prompt).toContain("description");
+    expect(prompt).toContain("去年定的口味"); // description 现在可见
   });
 });

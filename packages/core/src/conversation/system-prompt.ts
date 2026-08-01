@@ -2,6 +2,7 @@ import { TokenCounter } from "../llm/token-counter.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { formatLocalDate } from "../util/date.js";
 
 /**
  * System Prompt 分层定义。
@@ -62,7 +63,7 @@ export function loadDefaultLayers(
  * "把相对日期转换为绝对日期"规则因此能真正执行。措辞与 diary 先例对齐。
  */
 export function currentDateLayer(now: Date = new Date()): SystemPromptLayer {
-  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const today = formatLocalDate(now);
   return {
     name: "current-date",
     priority: 3,

@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { AnthropicProvider } from "../llm/anthropic.js";
 import { pruneRecallMessages } from "./recall.js";
+import { formatLocalDate } from "../util/date.js";
 import type { LLMProvider, Message } from "../llm/provider.js";
 import type { MemoryStore } from "./store.js";
 import type { Memory, MemoryType } from "./types.js";
@@ -257,7 +258,7 @@ export class MemoryExtractor {
 
     return [
       "Analyze the most recent conversation messages and update the persistent memory system.",
-      `今天是 ${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}。`,
+      `今天是 ${formatLocalDate(now)}。`,
       "",
       "## Existing memories (index + full content)",
       existingSection,

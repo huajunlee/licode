@@ -7,6 +7,8 @@
  * - 最长匹配优先：大前年先于前年、上上个月先于上个月，正则按长度降序交替。
  * - 无新依赖：用 Date 构造函数做年/月/日进位（`new Date(y, m±n, d)` 自动跨年跨月）。
  */
+import { formatLocalDate } from "../util/date.js";
+
 export function normalizeDates(text: string, now: Date = new Date()): string {
   if (!text) return text;
 
@@ -17,8 +19,7 @@ export function normalizeDates(text: string, now: Date = new Date()): string {
   const fmtY = (yy: number) => `${yy}年`;
   const fmtM = (date: Date) => `${date.getFullYear()}年${date.getMonth() + 1}月`;
   const fmtD = (date: Date) => `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
-  const iso = (date: Date) =>
-    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  const iso = (date: Date) => formatLocalDate(date);
   // 周一为首日：本周一 = 今天 - (day+6)%7
   const day = now.getDay(); // 0=Sun..6=Sat
   const thisMonday = new Date(y, m, d - ((day + 6) % 7));
@@ -62,6 +63,8 @@ export function normalizeDates(text: string, now: Date = new Date()): string {
   ];
 
   const lookup = new Map(entries);
+  // 触发词均为 CJK 字符，无正则元字符，故 join("|") 无需转义；
+  // 若将来加入含标点的 token，需重新审视此处的转义。
   const pattern = new RegExp(entries.map(([k]) => k).join("|"), "g");
   return text.replace(pattern, (match) => lookup.get(match) ?? match);
 }

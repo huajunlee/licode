@@ -188,7 +188,7 @@ describe("loadDefaultLayers", () => {
 
 describe("currentDateLayer", () => {
   it("returns an always-on layer at priority 3 with today's ISO date", () => {
-    const layer = currentDateLayer(new Date("2026-08-01T12:00:00Z"));
+    const layer = currentDateLayer(new Date(2026, 7, 1));
     expect(layer.name).toBe("current-date");
     expect(layer.priority).toBe(3);
     expect(layer.always).toBe(true);

@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { AnthropicProvider } from "../llm/anthropic.js";
 import { ConversationManager } from "../conversation/manager.js";
+import { formatLocalDate } from "../util/date.js";
 import type { MemoryStore, MemoryAction } from "./store.js";
 import type { Memory, MemoryType } from "./types.js";
 import type { PipelineEvent } from "../events/types.js";
@@ -321,8 +322,7 @@ export class MemoryDream {
     candidateSlugs: Set<string>,
     now: number
   ): string {
-    const today = new Date(now);
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const todayStr = formatLocalDate(new Date(now));
     const memParts: string[] = [];
     if (indexContent) memParts.push(indexContent.trim());
     for (const m of all) memParts.push(`### ${m.slug}\ndescription: ${m.description}\ncontent:\n${m.content}`);

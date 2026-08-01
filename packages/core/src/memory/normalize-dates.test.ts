@@ -42,6 +42,7 @@ describe("normalizeDates · 周", () => {
   });
   it("本周 @ 2026-08-05 -> 2026-08-03~2026-08-09（周一首日）", () => {
     expect(normalizeDates("本周", AUG5)).toBe("2026-08-03~2026-08-09");
+    expect(normalizeDates("这周", AUG5)).toBe("2026-08-03~2026-08-09");
   });
   it("上上周/下周", () => {
     expect(normalizeDates("上上周 下周", AUG5)).toBe("2026-07-20~2026-07-26 2026-08-10~2026-08-16");
