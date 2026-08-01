@@ -91,9 +91,11 @@ export class MemoryStore {
     // 对 description 也跑——从结构上封死 dream consolidate 看不到 description 的盲区。
     const writeNow = new Date();
     let finalDescription = memory.description;
+    let finalName = memory.name;
     try {
       finalContent = normalizeDates(finalContent, writeNow);
       finalDescription = normalizeDates(memory.description, writeNow);
+      finalName = normalizeDates(memory.name, writeNow);
     } catch (err) {
       // best-effort: 归一化失败则保留原文，绝不阻断 save
       console.warn("[MemoryStore] date normalize failed, saving original:", err);
@@ -101,7 +103,7 @@ export class MemoryStore {
 
     const frontmatter = [
       "---",
-      `name: ${memory.name}`,
+      `name: ${finalName}`,
       `description: ${finalDescription}`,
       `type: ${memory.type}`,
       `createdAt: ${createdAt}`,
@@ -227,6 +229,65 @@ export class MemoryStore {
       }
     }
     return false;
+  }
+
+  /**
+   * Write-path safety net: normalize relative dates in memory files the agent
+   * wrote directly with the Write tool (which bypasses {@link save}). Scans the
+   * type dirs for files with mtime >= `tsMs` and rewrites name+description+
+   * content via {@link normalizeDates}, preserving all other frontmatter
+   * (type/createdAt/updatedAt/usageCount/lastUsedAt/pinned) and the original
+   * mtime (invisible to {@link hasChangesSince}, same pattern as
+   * {@link recordUsage}). Best-effort: parse/rewrite failures are skipped.
+   *
+   * Called by the extraction hook when `hasChangesSince` detects agent-wrote
+   * memory files - closes the gap where the Write tool bypasses save()'s
+   * normalize and the LLM didn't convert relative dates itself.
+   */
+  async normalizeChangedSince(tsMs: number, now: Date = new Date()): Promise<void> {
+    for (const type of MEMORY_TYPES) {
+      const typeDir = path.join(this.dir, type);
+      if (!fs.existsSync(typeDir)) continue;
+      const files = (await fs.promises.readdir(typeDir)).filter((f) => f.endsWith(".md"));
+      for (const file of files) {
+        const filePath = path.join(typeDir, file);
+        const stat = await fs.promises.stat(filePath).catch(() => null);
+        if (!stat || stat.mtimeMs < tsMs) continue; // not changed this loop
+        try {
+          const atimeMs = stat.atimeMs;
+          const mtimeMs = stat.mtimeMs;
+          const raw = await fs.promises.readFile(filePath, "utf-8");
+          const slug = `${type}/${path.basename(file, ".md")}`;
+          const m = this.parse(raw, slug, type);
+          const name = normalizeDates(m.name, now);
+          const description = normalizeDates(m.description, now);
+          const content = normalizeDates(m.content, now);
+          if (name === m.name && description === m.description && content === m.content) continue;
+          const frontmatter = [
+            "---",
+            `name: ${name}`,
+            `description: ${description}`,
+            `type: ${m.type}`,
+            `createdAt: ${m.createdAt}`,
+            `updatedAt: ${m.updatedAt}`,
+            `usageCount: ${m.usageCount ?? 0}`,
+            `lastUsedAt: ${m.lastUsedAt ?? ""}`,
+            `pinned: ${m.pinned ?? false}`,
+            "---",
+            "",
+            content,
+            "",
+          ].join("\n");
+          await fs.promises.writeFile(filePath, frontmatter, "utf-8");
+          // Restore original mtime -> invisible to hasChangesSince.
+          await fs.promises
+            .utimes(filePath, atimeMs / 1000, mtimeMs / 1000)
+            .catch(() => {});
+        } catch {
+          // best-effort: skip files that fail to parse/rewrite
+        }
+      }
+    }
   }
 
   /**
