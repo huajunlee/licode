@@ -45,6 +45,7 @@ export {
   journalRecallTool,
   profileRecallTool,
   decideTool,
+  decideSaveTool,
 } from "./tools/builtin/index.js";
 
 // Phase 2: agent/

@@ -1,6 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { buildDecisionEntry } from "./decide-save.js";
 import { serializeEntry, parseEntry } from "../../diary/serialize.js";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { decideSaveTool } from "./decide-save.js";
+import { JournalStore } from "../../diary/store.js";
 
 const NOW = () => new Date("2026-08-01T10:00:00.000Z");
 
@@ -39,5 +44,35 @@ describe("buildDecisionEntry", () => {
     expect(parsed.people[0].name).toBe("王总");
     expect(parsed.futureMemory).toEqual([]);
     expect(parsed.raw.content).toContain("先不动");
+  });
+});
+
+describe("decideSaveTool execute", () => {
+  let dir: string;
+  beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), "dsave-")); });
+  afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
+
+  it("写入 journal 且能读回", async () => {
+    const res = await decideSaveTool.execute(
+      { topic: "换工作", decision: "先不动", reasoning: "等年终" },
+      { workingDirectory: dir, sessionId: "s" }
+    );
+    expect(res.status).toBe("success");
+    if (res.status === "success") {
+      const meta = res.metadata as { id: string; date: string };
+      const store = new JournalStore(path.join(dir, ".licode", "journal"));
+      const loaded = await store.load(meta.id);
+      expect(loaded).not.toBeNull();
+      expect(loaded!.decisions[0].decision).toBe("先不动");
+      expect(loaded!.title).toBe("【决策】换工作");
+    }
+  });
+
+  it("gating：不产生 memory 文件", async () => {
+    await decideSaveTool.execute(
+      { topic: "换工作", decision: "先不动", reasoning: "等年终" },
+      { workingDirectory: dir, sessionId: "s" }
+    );
+    expect(fs.existsSync(path.join(dir, ".licode", "memory"))).toBe(false);
   });
 });
