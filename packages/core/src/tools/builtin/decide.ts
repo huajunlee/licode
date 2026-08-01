@@ -112,7 +112,7 @@ export function gatherDecisionContext(input: GatherInput): string {
     ? `## 近期日记\n${recent.map(formatRecent).join("\n")}`
     : "## 近期日记\n暂无日记";
 
-  const content = [
+  const bulk = [
     `# 决策上下文：${topic}`,
     "",
     decisionsBlock,
@@ -122,11 +122,12 @@ export function gatherDecisionContext(input: GatherInput): string {
     peopleBlock,
     "",
     recentBlock,
-    "",
-    FRAMING,
   ].join("\n");
-
-  return content.length > MAX_CHARS ? content.slice(0, MAX_CHARS) + "\n... (truncated)" : content;
+  const framing = "\n\n" + FRAMING;
+  // 仅截断 bulk，FRAMING 始终保留在末尾（含 B/C 指引与 decide_save 询问指令）
+  const maxBulk = Math.max(0, MAX_CHARS - framing.length);
+  const body = bulk.length > maxBulk ? bulk.slice(0, maxBulk) + "\n... (truncated)" : bulk;
+  return body + framing;
 }
 
 const DecideParams = z.object({

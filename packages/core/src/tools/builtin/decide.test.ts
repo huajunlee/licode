@@ -75,6 +75,17 @@ describe("gatherDecisionContext", () => {
     expect(out).toContain("必须询问");
     expect(out).toContain("decide_save");
   });
+
+  it("截断时保留 framing（不截断掉分析指引）", () => {
+    const big = "x".repeat(12000);
+    const e = entry("e1", "2026-07-30", {
+      summary: "聊x",
+      decisions: [{ decision: big, reasoning: null, context: null }],
+    });
+    const out = gatherDecisionContext({ entries: [e], profiles: [], topic: "x" });
+    expect(out).toContain("... (truncated)");
+    expect(out).toContain("## 分析指引");
+  });
 });
 
 describe("decideTool execute", () => {
