@@ -54,3 +54,22 @@ function hashString(value: string): string {
   }
   return hash.toString(36);
 }
+
+/**
+ * 可读文件名清洗：保留中文(一-鿿)/字母/数字，其余(空格、标点、/ \ : * ? " < > | 等)转 -，
+ * 去首尾与重复 -。不截断（截断由调用方定）。空或全标点返回空。
+ */
+export function cleanName(s: string): string {
+  return s
+    .replace(/[^一-鿿a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-+/g, "-");
+}
+
+/** 从 ISO 字符串取本地时区的 HHmm（如 "1430"），用于文件名，与本地 date 对齐。 */
+export function hhmmFromISO(iso: string): string {
+  const d = new Date(iso);
+  const h = String(d.getHours()).padStart(2, "0");
+  const m = String(d.getMinutes()).padStart(2, "0");
+  return `${h}${m}`;
+}
