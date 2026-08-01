@@ -11,7 +11,7 @@ function makeEntry(id: string, date: string, text: string, person?: string) {
   const seg: Segment = { timestamp: `${date}T10:00:00.000Z`, speaker: "user", content: text };
   e.raw = { content: text, segments: [seg] };
   e.summary = text;
-  if (person) e.people = [{ name: person, relation: null, relationInferred: false, interaction: text, note: null }];
+  if (person) e.people = [{ name: person, relation: null, relationInferred: false, interaction: text, note: null, specific: true }];
   return e;
 }
 

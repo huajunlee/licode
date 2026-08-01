@@ -10,7 +10,7 @@ function entry(id: string, date: string, text: string, person?: string): DiaryEn
   const seg: Segment = { timestamp: `${date}T10:00:00.000Z`, speaker: "user", content: text };
   e.raw = { content: text, segments: [seg] };
   e.summary = text;
-  e.people = person ? [{ name: person, relation: null, relationInferred: false, interaction: text, note: null }] : [];
+  e.people = person ? [{ name: person, relation: null, relationInferred: false, interaction: text, note: null, specific: true }] : [];
   return e;
 }
 

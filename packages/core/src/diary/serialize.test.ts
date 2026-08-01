@@ -27,7 +27,7 @@ describe("diary types + serialize", () => {
       facts: [{ what: "和老板聊了项目", when: null, tags: ["work"] }],
       decisions: [{ decision: "换技术方案", reasoning: "老板建议", context: null }],
       emotions: [{ state: "焦虑", intensity: 3, trigger: "项目方向不确定", inferred: true }],
-      people: [{ name: "老板", relation: "上级", relationInferred: true, interaction: "聊了项目方案", note: "建议换技术方案" }],
+      people: [{ name: "老板", relation: "上级", relationInferred: true, interaction: "聊了项目方案", note: "建议换技术方案", specific: false }],
       futureMemory: [{ content: "老板倾向换技术方案", type: "decision", importance: "high", promotability: "medium", reason: "影响后续技术选型" }],
     };
     const raw = serializeEntry(entry);

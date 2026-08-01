@@ -54,14 +54,14 @@ export class DiaryExtractor implements DiaryExtractorLike {
       "- facts: 离散事件，每条一句话，去重，跳过无关琐事。{what, when, tags}",
       "- decisions: 只收明确决定，不猜意图；有理由附 reasoning。{decision, reasoning, context}",
       "- emotions: 从内容推断，标 inferred=true，必带 trigger。{state, intensity:1-5, trigger, inferred}",
-      "- people: 每个被提到的人都收；关系能推断就填并标 relationInferred；interaction 写这次互动；note 收暴露的喜好/特质。{name, relation, relationInferred, interaction, note}",
-      "- futureMemory: 只收“今天之后还可能重要”且“非例行流水账”的。{content, type:person_trait|preference|relationship|decision|goal|other, importance:low|medium|high, promotability:low|medium|high, reason}",
+      "- people: 每个被提到的人都收；关系能推断就填并标 relationInferred；interaction 写这次互动；note 收暴露的喜好/特质；specific=true 表示专有名字（王总/妈妈/张三），false 表示泛称（朋友/同事/老板）。{name, relation, relationInferred, interaction, note, specific}",
+      "- futureMemory: 只收“今天之后还可能重要”且“非例行流水账”的。type 语义：person_trait=某人的特质或喜好（王总爱喝茶）；preference=用户自己的偏好（我喜欢早起）；relationship=关系状态；decision=决定；goal=目标；other=其它。{content, type:person_trait|preference|relationship|decision|goal|other, importance:low|medium|high, promotability:low|medium|high, reason}",
       "",
       "原文：",
       transcript,
       "",
       "只返回一个 JSON 对象，不要任何额外文字：",
-      '{"summary":"...","facts":[...],"decisions":[...],"emotions":[...],"people":[...],"futureMemory":[...]}',
+      '{"summary":"...","facts":[...],"decisions":[...],"emotions":[...],"people":[{"name":"...","relation":null,"relationInferred":false,"interaction":"...","note":null,"specific":true}],"futureMemory":[...]}',
     ].join("\n");
   }
 

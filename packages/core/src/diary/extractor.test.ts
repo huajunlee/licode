@@ -19,7 +19,7 @@ describe("DiaryExtractor", () => {
       facts: [{ what: "和老板聊了项目", when: null, tags: ["work"] }],
       decisions: [{ decision: "换技术方案", reasoning: "老板建议", context: null }],
       emotions: [{ state: "焦虑", intensity: 3, trigger: "项目方向", inferred: true }],
-      people: [{ name: "老板", relation: "上级", relationInferred: true, interaction: "聊了方案", note: "建议换技术方案" }],
+      people: [{ name: "老板", relation: "上级", relationInferred: true, interaction: "聊了方案", note: "建议换技术方案", specific: false }],
       futureMemory: [{ content: "老板倾向换方案", type: "decision", importance: "high", promotability: "medium", reason: "影响选型" }],
     });
     const ex = new DiaryExtractor({ generate });
@@ -54,5 +54,24 @@ describe("DiaryExtractor", () => {
     const entry = await ex.extract(baseInput);
     expect(entry.summary).toMatch(/抽取失败/);
     expect(entry.raw.content).toBe(segments[0].content);
+  });
+
+  it("populates PersonRef.specific and routes a person's liking to person_trait", async () => {
+    const generate = async () => JSON.stringify({
+      summary: "和王总开会",
+      facts: [],
+      decisions: [],
+      emotions: [],
+      people: [
+        { name: "王总", relation: "上级", relationInferred: true, interaction: "开会", note: "爱喝茶", specific: true },
+        { name: "朋友", relation: null, relationInferred: false, interaction: "吃饭", note: null, specific: false },
+      ],
+      futureMemory: [{ content: "王总爱喝茶", type: "person_trait", importance: "high", promotability: "high", reason: "稳定偏好" }],
+    });
+    const ex = new DiaryExtractor({ generate });
+    const entry = await ex.extract(baseInput);
+    expect(entry.people[0].specific).toBe(true);
+    expect(entry.people[1].specific).toBe(false);
+    expect(entry.futureMemory[0].type).toBe("person_trait");
   });
 });

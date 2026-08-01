@@ -10,7 +10,7 @@ export interface Segment {
 export interface Fact { what: string; when: string | null; tags: string[]; }
 export interface Decision { decision: string; reasoning: string | null; context: string | null; }
 export interface Emotion { state: string; intensity: 1 | 2 | 3 | 4 | 5; trigger: string | null; inferred: boolean; }
-export interface PersonRef { name: string; relation: string | null; relationInferred: boolean; interaction: string; note: string | null; }
+export interface PersonRef { name: string; relation: string | null; relationInferred: boolean; interaction: string; note: string | null; specific: boolean; }
 export interface Candidate { content: string; type: FutureMemoryType; importance: Importance; promotability: Promotability; reason: string; }
 
 export interface DiaryEntryMeta { id: string; date: string; createdAt: string; endedAt: string; }
