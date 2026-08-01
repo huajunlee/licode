@@ -8,6 +8,7 @@ import {
   ConversationManager,
   SystemPrompt,
   loadDefaultLayers,
+  currentDateLayer,
   EventPipeline,
   ToolRegistry,
   builtinTools,
@@ -480,6 +481,7 @@ export function useConversation(
       for (const layer of layers) {
         systemPrompt.addLayer(layer);
       }
+      systemPrompt.addLayer(currentDateLayer());
       await loadCLAUDE(systemPrompt, { cwd: process.cwd() });
       await loadSpecFiles(systemPrompt, { cwd: process.cwd() });
       manager.systemPrompt = systemPrompt;

@@ -37,9 +37,8 @@ export function emptyEntry(id: string, date: string, createdAt: string): DiaryEn
   };
 }
 
+import { formatLocalDate } from "../util/date.js";
+
 export function dateString(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return formatLocalDate(d);
 }

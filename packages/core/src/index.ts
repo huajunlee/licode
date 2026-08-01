@@ -20,7 +20,7 @@ export { TokenCounter } from "./llm/token-counter.js";
 export { collectStream, mergeChunks } from "./llm/stream.js";
 export { ConversationManager } from "./conversation/manager.js";
 export type { ConversationMetadata } from "./conversation/manager.js";
-export { SystemPrompt, loadDefaultLayers } from "./conversation/system-prompt.js";
+export { SystemPrompt, loadDefaultLayers, currentDateLayer } from "./conversation/system-prompt.js";
 export type { SystemPromptLayer } from "./conversation/system-prompt.js";
 export { EventPipeline } from "./events/pipeline.js";
 export type { MiddlewareEntry } from "./events/pipeline.js";

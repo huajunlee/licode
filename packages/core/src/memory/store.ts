@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { normalizeDates } from "./normalize-dates.js";
 import type { Memory, MemoryType } from "./types.js";
 
 const INDEX_HEADER = "# User Memory\n\nThe following memories are from previous conversations:\n\n";
@@ -85,10 +86,23 @@ export class MemoryStore {
       }
     }
 
+    // 程序化归一化：落盘前把 content+description 的精确相对词转绝对日期。
+    // 锚点 now（写入时间）；幂等；try/catch 兜底，绝不阻断 save。
+    // 对 description 也跑——从结构上封死 dream consolidate 看不到 description 的盲区。
+    const writeNow = new Date();
+    let finalDescription = memory.description;
+    try {
+      finalContent = normalizeDates(finalContent, writeNow);
+      finalDescription = normalizeDates(memory.description, writeNow);
+    } catch (err) {
+      // best-effort: 归一化失败则保留原文，绝不阻断 save
+      console.warn("[MemoryStore] date normalize failed, saving original:", err);
+    }
+
     const frontmatter = [
       "---",
       `name: ${memory.name}`,
-      `description: ${memory.description}`,
+      `description: ${finalDescription}`,
       `type: ${memory.type}`,
       `createdAt: ${createdAt}`,
       `updatedAt: ${updatedAt}`,

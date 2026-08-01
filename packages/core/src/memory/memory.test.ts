@@ -1,7 +1,7 @@
-import { mkdtempSync, rmSync, existsSync, utimesSync, writeFileSync, mkdirSync, statSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, utimesSync, writeFileSync, mkdirSync, statSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SystemPrompt } from "../conversation/system-prompt.js";
 import { MemoryLoader } from "./loader.js";
 import { MemoryStore } from "./store.js";
@@ -543,5 +543,67 @@ describe("MemoryStore archive/restore (Phase 4)", () => {
   it("restore on missing slug returns null", async () => {
     const store = new MemoryStore(dir);
     expect(await store.restore("user/ghost")).toBeNull();
+  });
+});
+
+describe("MemoryStore date normalization", () => {
+  let dir: string | null = null;
+  afterEach(() => {
+    if (dir) { rmSync(dir, { recursive: true, force: true }); dir = null; }
+    vi.useRealTimers();
+  });
+
+  it("save normalizes relative dates in content AND description", async () => {
+    vi.useFakeTimers({ now: new Date(2026, 7, 1) });
+    dir = mkdtempSync(path.join(tmpdir(), "licode-norm-"));
+    const store = new MemoryStore(dir);
+    const mem = makeMemory({
+      slug: "project/launch",
+      type: "project",
+      content: "用户去年启动了项目，上个月完成评审。",
+      description: "去年定的方案",
+    });
+    await store.save(mem);
+    const raw = readFileSync(path.join(dir, "project", "launch.md"), "utf-8");
+    expect(raw).toContain("2025年");
+    expect(raw).toContain("2026年7月");
+    expect(raw).not.toContain("去年");
+    expect(raw).not.toContain("上个月");
+  });
+
+  it("save seals the description blind spot (description-only relative date)", async () => {
+    vi.useFakeTimers({ now: new Date(2026, 7, 5) }); // 2026-08-05 Wed
+    dir = mkdtempSync(path.join(tmpdir(), "licode-norm-"));
+    const store = new MemoryStore(dir);
+    const mem = makeMemory({
+      slug: "project/progress",
+      type: "project",
+      content: "无相对日期的正文。",
+      description: "上周的进展",
+    });
+    await store.save(mem);
+    const raw = readFileSync(path.join(dir, "project", "progress.md"), "utf-8");
+    // 上周 of 2026-08-05 -> 2026-07-27~2026-08-02
+    expect(raw).toContain("2026-07-27~2026-08-02");
+    expect(raw).not.toContain("上周");
+  });
+
+  it("save is idempotent across rewrites (no drift with later now)", async () => {
+    vi.useFakeTimers({ now: new Date(2026, 7, 1) });
+    dir = mkdtempSync(path.join(tmpdir(), "licode-norm-"));
+    const store = new MemoryStore(dir);
+    await store.save(makeMemory({
+      slug: "project/launch", type: "project",
+      content: "去年启动", description: "去年方案",
+    }), "create");
+    // 6 个月后 update 同一文件，旧已绝对化的日期不被新 now 重算
+    vi.useFakeTimers({ now: new Date(2027, 1, 1) });
+    await store.save(makeMemory({
+      slug: "project/launch", type: "project",
+      content: "2025年启动，新增内容", description: "2025年方案",
+    }), "update");
+    const raw = readFileSync(path.join(dir, "project", "launch.md"), "utf-8");
+    expect(raw).toContain("2025年启动");
+    expect(raw).not.toContain("去年");
   });
 });

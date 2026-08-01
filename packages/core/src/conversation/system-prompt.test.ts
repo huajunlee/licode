@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { SystemPrompt, SystemPromptLayer, loadDefaultLayers } from "./system-prompt.js";
+import { SystemPrompt, SystemPromptLayer, loadDefaultLayers, currentDateLayer } from "./system-prompt.js";
 
 function makeLayer(
   name: string,
@@ -183,5 +183,20 @@ describe("loadDefaultLayers", () => {
     expect(layer?.priority).toBe(4);
     expect(layer?.always).toBe(false);
     expect(layer?.content).toBe("Memory guidance.");
+  });
+});
+
+describe("currentDateLayer", () => {
+  it("returns an always-on layer at priority 3 with today's ISO date", () => {
+    const layer = currentDateLayer(new Date(2026, 7, 1));
+    expect(layer.name).toBe("current-date");
+    expect(layer.priority).toBe(3);
+    expect(layer.always).toBe(true);
+    expect(layer.content).toContain("2026-08-01");
+  });
+
+  it("defaults to real now when omitted", () => {
+    const layer = currentDateLayer();
+    expect(layer.content).toMatch(/今天是 \d{4}-\d{2}-\d{2}。/);
   });
 });
