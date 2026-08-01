@@ -34,7 +34,10 @@ import {
   DiarySession,
   CurationSession,
   autoPromoteEntry,
+  autoFileEntry,
   MemoryCuration,
+  ProfileCuration,
+  PersonProfileStore,
   handleDiaryInput,
   handleCurationInput,
 } from "@licode/core";
@@ -185,6 +188,26 @@ function createMemoryCuration(
 ): MemoryCuration {
   const sideProvider = new AnthropicProvider({ apiKey, baseUrl });
   return new MemoryCuration({
+    generate: async (prompt) => {
+      const res = await sideProvider.chat({
+        messages: [
+          { role: "user", content: prompt, timestamp: new Date().toISOString() },
+        ],
+        model,
+        maxTokens: 2048,
+      });
+      return res.content;
+    },
+  });
+}
+
+function createProfileCuration(
+  apiKey: string,
+  baseUrl: string | undefined,
+  model: string
+): ProfileCuration {
+  const sideProvider = new AnthropicProvider({ apiKey, baseUrl });
+  return new ProfileCuration({
     generate: async (prompt) => {
       const res = await sideProvider.chat({
         messages: [
@@ -411,6 +434,10 @@ export function useConversation(
   );
   const memoryCurationRef = useRef<MemoryCuration | null>(null);
   const curationSessionRef = useRef<CurationSession | null>(null);
+  const profileStoreRef = useRef<PersonProfileStore>(
+    new PersonProfileStore(path.join(process.cwd(), ".licode", "people"))
+  );
+  const profileCurationRef = useRef<ProfileCuration | null>(null);
 
   useEffect(() => {
     if (!apiKey) return;
@@ -423,6 +450,7 @@ export function useConversation(
     if (diaryFlags.enabled) {
       diaryExtractorRef.current = createDiaryExtractor(apiKey, baseUrl, diaryFlags.model);
       memoryCurationRef.current = createMemoryCuration(apiKey, baseUrl, diaryFlags.curateModel);
+      profileCurationRef.current = createProfileCuration(apiKey, baseUrl, diaryFlags.curateModel);
     }
 
     // Initialize ToolRegistry with builtin tools
@@ -562,13 +590,15 @@ export function useConversation(
       setCommandMessage(null);
 
       // ── curation: /diary-curate（须在 /diary 之前判，因 /diary-curate 也以 /diary 开头）──
-      if (diaryEnabledRef.current && memoryCurationRef.current && input.trim().startsWith("/diary-curate")) {
+      if (diaryEnabledRef.current && memoryCurationRef.current && profileCurationRef.current && input.trim().startsWith("/diary-curate")) {
         const outcome = await handleCurationInput(input, {
           session: curationSessionRef.current,
           journalStore: diaryStoreRef.current,
           memoryStore: memoryStoreRef.current,
           curatedIndex: curatedIndexRef.current,
           memoryCuration: memoryCurationRef.current,
+          profileStore: profileStoreRef.current,
+          profileCuration: profileCurationRef.current,
           now: () => new Date(),
         });
         if (outcome) {
@@ -603,11 +633,17 @@ export function useConversation(
                   curatedIndex: curatedIndexRef.current,
                   now: () => new Date(),
                 });
-                if (pr.promoted.length) {
-                  setCommandMessage(outcome.result.message + `\n✨ 已自动提升 ${pr.promoted.length} 条到记忆。`);
-                }
+                const fr = await autoFileEntry(recent[0], {
+                  profileStore: profileStoreRef.current,
+                  curatedIndex: curatedIndexRef.current,
+                  now: () => new Date(),
+                });
+                const notes: string[] = [];
+                if (pr.promoted.length) notes.push(`✨ 已自动提升 ${pr.promoted.length} 条到记忆`);
+                if (fr.filed.length) notes.push(`👤 已自动入档 ${fr.filed.length} 人`);
+                if (notes.length) setCommandMessage(outcome.result.message + "\n" + notes.join("；") + "。");
               }
-            } catch { /* 自动提升失败不阻断；候选留待 /diary-curate */ }
+            } catch { /* 自动提升/入档失败不阻断；候选留待 /diary-curate */ }
           }
           return;
         }

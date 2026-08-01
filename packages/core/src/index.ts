@@ -43,6 +43,7 @@ export {
   globTool,
   grepTool,
   journalRecallTool,
+  profileRecallTool,
 } from "./tools/builtin/index.js";
 
 // Phase 2: agent/
@@ -174,6 +175,18 @@ export type {
   CurationDispatchDeps, CurationDispatchContext, CurationDispatchResult, CurationDispatchOutcome,
 } from "./curation/dispatch.js";
 export type { PendingCandidate, MemoryCreateProposal, Proposal } from "./curation/types.js";
+
+// people/
+export type { PersonProfile, PersonProfileMeta, Interaction, RelationshipState } from "./people/types.js";
+export { emptyProfile } from "./people/types.js";
+export { serializeProfile, parseProfile } from "./people/serialize.js";
+export { PersonProfileStore } from "./people/store.js";
+export type { ProfileAction } from "./people/store.js";
+export { autoFileEntry } from "./people/profile-file.js";
+export type { AutoFileDeps, AutoFileResult } from "./people/profile-file.js";
+export { ProfileCuration } from "./people/curation/profile-curation.js";
+export type { ProfileCurationConfig } from "./people/curation/profile-curation.js";
+export type { PendingPerson, ProfileMergeProposal, ProfileNewProposal } from "./curation/types.js";
 
 // Phase 5: multi-agent
 export { createAgentTool } from "./multi-agent/agent-tool.js";
