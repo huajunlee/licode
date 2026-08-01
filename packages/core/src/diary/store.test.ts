@@ -62,4 +62,12 @@ describe("JournalStore", () => {
     const hits = await store.search("老板");
     expect(hits.map((e) => e.meta.id)).toEqual(["a1"]);
   });
+
+  it("listAll returns every entry across all dates", async () => {
+    const store = new JournalStore(dir);
+    await store.save(entry("a1", "2026-07-31", "x"));
+    await store.save(entry("b1", "2026-07-30", "y"));
+    const all = await store.listAll();
+    expect(all.map((e) => e.meta.id).sort()).toEqual(["a1", "b1"]);
+  });
 });

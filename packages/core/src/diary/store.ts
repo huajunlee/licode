@@ -8,6 +8,7 @@ export interface DiaryStore {
   load(id: string): Promise<DiaryEntry | null>;
   listByDate(date: string): Promise<DiaryEntry[]>;
   listRecent(limit: number): Promise<DiaryEntry[]>;
+  listAll(): Promise<DiaryEntry[]>;
   search(query: string): Promise<DiaryEntry[]>;
 }
 
@@ -65,6 +66,18 @@ export class JournalStore implements DiaryStore {
       if (out.length >= limit) break;
     }
     return out.slice(0, limit);
+  }
+
+  async listAll(): Promise<DiaryEntry[]> {
+    if (!fs.existsSync(this.dir)) return [];
+    const out: DiaryEntry[] = [];
+    for (const date of await fs.promises.readdir(this.dir)) {
+      const dateDir = path.join(this.dir, date);
+      const stat = await fs.promises.stat(dateDir);
+      if (!stat.isDirectory()) continue;
+      out.push(...(await readEntries(dateDir)));
+    }
+    return out;
   }
 
   async search(query: string): Promise<DiaryEntry[]> {
