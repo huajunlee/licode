@@ -4,6 +4,7 @@ import { ConversationManager } from "@licode/core";
 import { ChatView } from "./components/chat-view.js";
 import { StreamRenderer } from "./components/stream-renderer.js";
 import { WaitingIndicator } from "./components/waiting-indicator.js";
+import { DreamIndicator } from "./components/dream-indicator.js";
 import { ThinkingAccordion } from "./components/thinking-accordion.js";
 import { InputBox } from "./components/input-box.js";
 import { StatusBar } from "./components/status-bar.js";
@@ -195,12 +196,15 @@ function ChatApp({
     streaming,
     isLoading,
     tokenCount,
+    contextWindow,
     error,
     sessionId: currentSessionId,
     thinkingBlocks,
     activeToolCalls,
     commandMessage,
     slashCommands,
+    isDreaming,
+    archivedNotice,
     handleSubmit,
   } = useConversation({ apiKey, model, sessionId, baseUrl, existingSessions });
 
@@ -233,6 +237,16 @@ function ChatApp({
   return (
     <Box flexDirection="column" padding={1}>
       <ChatView messages={messages} />
+      {isDreaming && (
+        <Box marginBottom={1}>
+          <DreamIndicator />
+        </Box>
+      )}
+      {archivedNotice && (
+        <Box marginBottom={1}>
+          <Text color="yellow">{archivedNotice}</Text>
+        </Box>
+      )}
       {hasThinking && (
         <ThinkingAccordion blocks={thinkingBlocks} focusedIndex={focusedIndex} />
       )}
@@ -259,6 +273,7 @@ function ChatApp({
       <StatusBar
         model={model ?? "deepseek-v4-pro"}
         tokens={tokenCount}
+        contextWindow={contextWindow}
         sessionId={currentSessionId}
       />
     </Box>

@@ -16,6 +16,12 @@ export interface CommandContext {
     clear(): void;
     getTokenCount(): number;
     getMessageCount(): number;
+    getBudgetInfo(): {
+      contextWindow: number;
+      outputReserve: number;
+      used: number;
+      remaining: number;
+    };
   };
   toolRegistry: {
     getTools(): unknown[];

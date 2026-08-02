@@ -8,8 +8,8 @@ import {
   ConversationManager,
   SystemPrompt,
   loadDefaultLayers,
+  currentDateLayer,
   EventPipeline,
-  tokenCountingMiddleware,
   ToolRegistry,
   builtinTools,
   createAgentLoopMiddleware,
@@ -19,8 +19,28 @@ import {
   MemoryStore,
   MemoryLoader,
   MemoryExtractor,
+  MemoryRecall,
+  createMemoryRecallHandler,
   createMemoryExtractionHook,
+  createMemoryExtractionState,
+  MemoryDream,
+  createMemoryDreamHook,
+  createMemoryDreamState,
   emitAfterAgentLoop,
+  ContextCompressor,
+  CompressionAssistant,
+  JournalStore,
+  CuratedIndex,
+  DiaryExtractor,
+  DiarySession,
+  CurationSession,
+  autoPromoteEntry,
+  autoFileEntry,
+  MemoryCuration,
+  ProfileCuration,
+  PersonProfileStore,
+  handleDiaryInput,
+  handleCurationInput,
 } from "@licode/core";
 import type {
   Message,
@@ -28,6 +48,8 @@ import type {
   AgentConfig,
   EventBus,
   InitializedExtensions,
+  MemoryExtractionState,
+  DreamState,
 } from "@licode/core";
 import type { ThinkingBlock } from "./components/thinking-accordion.js";
 import { inferPurpose } from "./components/thinking-accordion.js";
@@ -46,6 +68,7 @@ export interface UseConversationResult {
   streaming: string;
   isLoading: boolean;
   tokenCount: number;
+  contextWindow: number;
   error: string | null;
   sessionId: string;
   thinkingBlocks: ThinkingBlock[];
@@ -53,6 +76,10 @@ export interface UseConversationResult {
   commandMessage: string | null;
   /** Available slash commands and skills for autocomplete */
   slashCommands: Array<{ name: string; description: string }>;
+  /** True while a memory dream consolidation is running in the background. */
+  isDreaming: boolean;
+  /** Phase 4: notice shown after a dream archives memories (null = none). */
+  archivedNotice: string | null;
   handleSubmit: (input: string) => Promise<void>;
 }
 
@@ -75,11 +102,136 @@ function resolveSessionPath(sessionId: string): string | null {
   return null;
 }
 
-function createEventBus(
+/**
+ * Phase 2: build the structure-aware context compressor. Summarization runs
+ * on a cheap side model (default deepseek-chat) via a separate provider, so
+ * the main loop's provider is untouched. Summarizer failure degrades to trim
+ * inside the compressor - never breaks the loop.
+ */
+export function readContextFlags(): {
+  rollingSummary: boolean;
+  selectiveRetention: boolean;
+  fileChangeCompaction: boolean;
+  summaryMaxTokens: number;
+} {
+  const off = (v?: string) => v === "off";
+  return {
+    rollingSummary: !off(process.env.LICODE_CONTEXT_ROLLING),
+    selectiveRetention: !off(process.env.LICODE_CONTEXT_SELECTIVE),
+    fileChangeCompaction: !off(process.env.LICODE_CONTEXT_FILECHANGE),
+    summaryMaxTokens: Number(process.env.LICODE_CONTEXT_SUMMARY_MAX_TOKENS) || 2048,
+  };
+}
+
+function createContextCompressor(
+  apiKey: string,
+  baseUrl: string | undefined,
+  model: string,
+  workingDirectory: string
+): ContextCompressor {
+  const flags = readContextFlags();
+  const sideProvider = new AnthropicProvider({ apiKey, baseUrl });
+  const assistant = new CompressionAssistant({
+    generate: async (prompt) => {
+      const res = await sideProvider.chat({
+        messages: [
+          { role: "user", content: prompt, timestamp: new Date().toISOString() },
+        ],
+        model,
+        maxTokens: 2048,
+      });
+      return res.content;
+    },
+    summaryMaxTokens: flags.summaryMaxTokens,
+  });
+  return new ContextCompressor({
+    compressionAssistant: assistant,
+    workingDirectory,
+    rollingSummary: flags.rollingSummary,
+    selectiveRetention: flags.selectiveRetention,
+    fileChangeCompaction: flags.fileChangeCompaction,
+    summaryMaxTokens: flags.summaryMaxTokens,
+  });
+}
+
+export function readDiaryFlags(): { enabled: boolean; model: string; curateModel: string } {
+  return {
+    enabled: process.env.LICODE_DIARY !== "off",
+    model: process.env.LICODE_DIARY_MODEL || "deepseek-chat",
+    curateModel: process.env.LICODE_DIARY_CURATE_MODEL || process.env.LICODE_DIARY_MODEL || "deepseek-chat",
+  };
+}
+
+function createDiaryExtractor(
+  apiKey: string,
+  baseUrl: string | undefined,
+  model: string
+): DiaryExtractor {
+  const sideProvider = new AnthropicProvider({ apiKey, baseUrl });
+  return new DiaryExtractor({
+    generate: async (prompt) => {
+      const res = await sideProvider.chat({
+        messages: [
+          { role: "user", content: prompt, timestamp: new Date().toISOString() },
+        ],
+        model,
+        maxTokens: 2048,
+      });
+      return res.content;
+    },
+  });
+}
+
+function createMemoryCuration(
+  apiKey: string,
+  baseUrl: string | undefined,
+  model: string
+): MemoryCuration {
+  const sideProvider = new AnthropicProvider({ apiKey, baseUrl });
+  return new MemoryCuration({
+    generate: async (prompt) => {
+      const res = await sideProvider.chat({
+        messages: [
+          { role: "user", content: prompt, timestamp: new Date().toISOString() },
+        ],
+        model,
+        maxTokens: 2048,
+      });
+      return res.content;
+    },
+  });
+}
+
+function createProfileCuration(
+  apiKey: string,
+  baseUrl: string | undefined,
+  model: string
+): ProfileCuration {
+  const sideProvider = new AnthropicProvider({ apiKey, baseUrl });
+  return new ProfileCuration({
+    generate: async (prompt) => {
+      const res = await sideProvider.chat({
+        messages: [
+          { role: "user", content: prompt, timestamp: new Date().toISOString() },
+        ],
+        model,
+        maxTokens: 2048,
+      });
+      return res.content;
+    },
+  });
+}
+
+export function createEventBus(
   setStreaming: (s: string) => void,
   setThinkingBlocks: (blocks: ThinkingBlock[]) => void,
   setActiveToolCalls: Dispatch<SetStateAction<ToolCallState[]>>,
-  setError: (e: string | null) => void
+  setError: (e: string | null) => void,
+  setTokenCount: (n: number) => void,
+  getTokenCount: () => number,
+  setContextWindow: (n: number) => void,
+  getContextWindow: () => number,
+  setCommandMessage?: (message: string) => void
 ): EventBus {
   let streamText = "";
   const blocks: ThinkingBlock[] = [];
@@ -172,6 +324,24 @@ function createEventBus(
           setStreaming("");
           setThinkingBlocks([]);
           setActiveToolCalls([]);
+          // Refresh the status bar with the calibrated context size. The
+          // agent-loop path never emits the llm-response-complete event that
+          // tokenCountingMiddleware listened for, so we read the live count
+          // here instead.
+          setTokenCount(getTokenCount());
+          setContextWindow(getContextWindow());
+          break;
+
+        case "context-compressed":
+          // Phase 2: surface that older turns were summarized/trimmed so the
+          // user understands why earlier detail is gone.
+          setCommandMessage?.(
+            `已压缩 ${event.removedMessages ?? 0} 条消息（${
+              event.method === "trim" ? "裁剪" : "摘要"
+            }）`
+          );
+          setTokenCount(getTokenCount());
+          setContextWindow(getContextWindow());
           break;
 
         case "error":
@@ -198,12 +368,15 @@ export function useConversation(
   const [streaming, setStreaming] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [tokenCount, setTokenCount] = useState(0);
+  const [contextWindow, setContextWindow] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState("");
   const [thinkingBlocks, setThinkingBlocks] = useState<ThinkingBlock[]>([]);
   const [activeToolCalls, setActiveToolCalls] = useState<ToolCallState[]>([]);
   const [commandMessage, setCommandMessage] = useState<string | null>(null);
   const [slashCommands, setSlashCommands] = useState<Array<{ name: string; description: string }>>([]);
+  const [isDreaming, setIsDreaming] = useState(false);
+  const [archivedNotice, setArchivedNotice] = useState<string | null>(null);
 
   const commandRouterRef = useRef<CommandRouter>(new CommandRouter());
   const memoryStoreRef = useRef<MemoryStore>(
@@ -212,12 +385,74 @@ export function useConversation(
   const memoryExtractorRef = useRef<MemoryExtractor>(
     new MemoryExtractor({ apiKey, baseUrl, model })
   );
+  // Shared with the memory extraction hook (registered once) — must be a
+  // stable object identity, so the ref's .current is passed by reference.
+  const memoryExtractionStateRef = useRef<MemoryExtractionState>(
+    createMemoryExtractionState()
+  );
+  // Phase 3: dream consolidation (after:agentLoop, fire-and-forget).
+  // Shared with the extraction hook AND the recall handler (yield-while-dreaming).
+  const memoryDreamStateRef = useRef<DreamState>(createMemoryDreamState());
+  // Phase 2: per-turn memory recall (side query -> synthetic tool_call pair).
+  // Phase 4: dreamState passed in so recordUsage yields while dreaming.
+  const memoryRecallHandlerRef = useRef(
+    createMemoryRecallHandler({
+      recall: new MemoryRecall({ apiKey, baseUrl, model }),
+      store: memoryStoreRef.current,
+      dreamState: memoryDreamStateRef.current,
+    })
+  );
+  const dreamMemoryDir = path.join(process.cwd(), ".licode", "memory");
+  const dreamSessionsDir = path.join(process.cwd(), ".licode", "sessions");
+  const memoryDreamHookRef = useRef(
+    process.env.LICODE_MEMORY_DREAM === "off"
+      ? null
+      : createMemoryDreamHook({
+          dream: new MemoryDream({ apiKey, baseUrl, model }),
+          store: memoryStoreRef.current,
+          state: memoryDreamStateRef.current,
+          sessionsDir: dreamSessionsDir,
+          memoryDir: dreamMemoryDir,
+          onStateChange: setIsDreaming,
+          onArchived: (slugs) =>
+            setArchivedNotice(
+              `🌙 记忆整理完成：已归档 ${slugs.length} 条 [${slugs.join(", ")}]，可用 /memory-restore <slug> 恢复`
+            ),
+        })
+  );
+  // Phase 2: structure-aware context compressor (summarize older turns when
+  // near the context window). Constructed once the provider is ready.
+  const compressorRef = useRef<ContextCompressor | null>(null);
+  // diary capture: independent journal store + side-model extractor + session
+  const diaryStoreRef = useRef<JournalStore>(
+    new JournalStore(path.join(process.cwd(), ".licode", "journal"))
+  );
+  const diaryEnabledRef = useRef<boolean>(readDiaryFlags().enabled);
+  const diaryExtractorRef = useRef<DiaryExtractor | null>(null);
+  const diarySessionRef = useRef<DiarySession | null>(null);
+  const curatedIndexRef = useRef<CuratedIndex>(
+    new CuratedIndex(path.join(process.cwd(), ".licode", "journal", ".curated.json"))
+  );
+  const memoryCurationRef = useRef<MemoryCuration | null>(null);
+  const curationSessionRef = useRef<CurationSession | null>(null);
+  const profileStoreRef = useRef<PersonProfileStore>(
+    new PersonProfileStore(path.join(process.cwd(), ".licode", "people"))
+  );
+  const profileCurationRef = useRef<ProfileCuration | null>(null);
 
   useEffect(() => {
     if (!apiKey) return;
 
     const provider = new AnthropicProvider({ apiKey, baseUrl });
     providerRef.current = provider;
+    compressorRef.current = createContextCompressor(apiKey, baseUrl, model, process.cwd());
+    const diaryFlags = readDiaryFlags();
+    diaryEnabledRef.current = diaryFlags.enabled;
+    if (diaryFlags.enabled) {
+      diaryExtractorRef.current = createDiaryExtractor(apiKey, baseUrl, diaryFlags.model);
+      memoryCurationRef.current = createMemoryCuration(apiKey, baseUrl, diaryFlags.curateModel);
+      profileCurationRef.current = createProfileCuration(apiKey, baseUrl, diaryFlags.curateModel);
+    }
 
     // Initialize ToolRegistry with builtin tools
     const tools = new ToolRegistry();
@@ -246,6 +481,7 @@ export function useConversation(
       for (const layer of layers) {
         systemPrompt.addLayer(layer);
       }
+      systemPrompt.addLayer(currentDateLayer());
       await loadCLAUDE(systemPrompt, { cwd: process.cwd() });
       await loadSpecFiles(systemPrompt, { cwd: process.cwd() });
       manager.systemPrompt = systemPrompt;
@@ -270,11 +506,25 @@ export function useConversation(
         fn: createMemoryExtractionHook(
           memoryExtractorRef.current,
           memoryStoreRef.current,
-          manager
+          manager,
+          memoryExtractionStateRef.current,
+          memoryDreamStateRef.current
         ),
         resolvedPosition: "after:agentLoop",
         blocking: false,
       });
+
+      // Register in-process memory dream hook (Phase 3)
+      // Fires after each agent loop, fire-and-forget; disabled via LICODE_MEMORY_DREAM=off.
+      if (memoryDreamHookRef.current) {
+        extensions.hooks.register({
+          name: "memory-dream",
+          events: ["agent-loop-complete"],
+          fn: memoryDreamHookRef.current,
+          resolvedPosition: "after:agentLoop",
+          blocking: false,
+        });
+      }
 
       // Populate slash commands for autocomplete (commands + skills)
       const cmds = extensions.commands.list().map((c) => ({
@@ -285,7 +535,16 @@ export function useConversation(
         name: `/${s.name}`,
         description: s.description.slice(0, 80),
       }));
-      setSlashCommands([...cmds, ...skillItems]);
+      setSlashCommands([
+        ...cmds,
+        ...skillItems,
+        { name: "/diary", description: "日记捕获（进入模式）" },
+        { name: "/diary-end", description: "结束日记会话并保存" },
+        { name: "/diary-list", description: "列出日记条目（/diary-list 日期）" },
+        { name: "/diary-find", description: "搜索日记（/diary-find 关键词）" },
+        { name: "/diary-show", description: "查看某条日记（/diary-show id）" },
+        { name: "/diary-curate", description: "整理日记候选到记忆/档案（/diary-curate apply 确认）" },
+      ]);
 
       // Register skills as prompt-pass-through commands so /skill-name
       // is recognized by the router and forwarded to the LLM
@@ -316,15 +575,79 @@ export function useConversation(
       const provider = providerRef.current;
       const manager = managerRef.current;
       const tools = toolsRef.current;
+      const compressor = compressorRef.current;
       const router = commandRouterRef.current;
       if (!provider || !manager || !input.trim()) return;
+
+      // Mark the start of this agent loop so the memory extraction hook
+      // can detect memory files written by the main agent mid-loop.
+      memoryExtractionStateRef.current.loopStartedAt = Date.now();
 
       setIsLoading(true);
       setStreaming("");
       setError(null);
+      setArchivedNotice(null);
       setThinkingBlocks([]);
       setActiveToolCalls([]);
       setCommandMessage(null);
+
+      // ── curation: /diary-curate（须在 /diary 之前判，因 /diary-curate 也以 /diary 开头）──
+      if (diaryEnabledRef.current && memoryCurationRef.current && profileCurationRef.current && input.trim().startsWith("/diary-curate")) {
+        const outcome = await handleCurationInput(input, {
+          session: curationSessionRef.current,
+          journalStore: diaryStoreRef.current,
+          memoryStore: memoryStoreRef.current,
+          curatedIndex: curatedIndexRef.current,
+          memoryCuration: memoryCurationRef.current,
+          profileStore: profileStoreRef.current,
+          profileCuration: profileCurationRef.current,
+          now: () => new Date(),
+        });
+        if (outcome) {
+          curationSessionRef.current = outcome.nextSession;
+          setCommandMessage(outcome.result.message);
+        }
+        setIsLoading(false);
+        setMessages([...manager.getMessages()]);
+        return;
+      }
+
+      // ── diary capture: /diary commands + capture during active session ──
+      if (diaryEnabledRef.current && diaryExtractorRef.current) {
+        const outcome = await handleDiaryInput(input, {
+          session: diarySessionRef.current,
+          extractor: diaryExtractorRef.current,
+          store: diaryStoreRef.current,
+          now: () => new Date(),
+        });
+        if (outcome !== null) {
+          const wasEnd = diarySessionRef.current !== null && outcome.nextSession === null && outcome.result.type === "action";
+          diarySessionRef.current = outcome.nextSession;
+          setIsLoading(false);
+          setCommandMessage(outcome.result.message);
+          setMessages([...manager.getMessages()]);
+          if (wasEnd && diaryEnabledRef.current && outcome.entry) {
+            try {
+              const entry = outcome.entry;
+              const pr = await autoPromoteEntry(entry, {
+                memoryStore: memoryStoreRef.current,
+                curatedIndex: curatedIndexRef.current,
+                now: () => new Date(),
+              });
+              const fr = await autoFileEntry(entry, {
+                profileStore: profileStoreRef.current,
+                curatedIndex: curatedIndexRef.current,
+                now: () => new Date(),
+              });
+                const notes: string[] = [];
+                if (pr.promoted.length) notes.push(`✨ 已自动提升 ${pr.promoted.length} 条到记忆`);
+                if (fr.filed.length) notes.push(`👤 已自动入档 ${fr.filed.length} 人`);
+                if (notes.length) setCommandMessage(outcome.result.message + "\n" + notes.join("；") + "。");
+            } catch { /* 自动提升/入档失败不阻断；候选留待 /diary-curate */ }
+          }
+          return;
+        }
+      }
 
       // Phase 3: route / commands before pipeline
       const cmdResult = await router.route(input.trim(), {
@@ -351,20 +674,28 @@ export function useConversation(
               setStreaming,
               setThinkingBlocks,
               setActiveToolCalls,
-              setError
+              setError,
+              setTokenCount,
+              () => manager.getTokenCount(),
+              setContextWindow,
+              () => manager.getBudgetInfo().contextWindow,
+              setCommandMessage
             );
 
             const pipeline = new EventPipeline();
             registerExtensionMiddleware(pipeline, extensionsRef.current!, "before:agentLoop");
 
             pipeline
-              .use(tokenCountingMiddleware((total) => setTokenCount(total)))
               .use(
                 createAgentLoopMiddleware({
                   llm: provider,
                   conversation: manager,
                   tools,
                   eventBus,
+                  compressor: compressor ?? undefined,
+                  ...(process.env.LICODE_MEMORY_RECALL === "off"
+                    ? {}
+                    : { onTurnStart: memoryRecallHandlerRef.current }),
                 })
               )
               // after:agentLoop fires shell hooks + in-process function hooks (e.g. memory extraction)
@@ -404,20 +735,28 @@ export function useConversation(
           setStreaming,
           setThinkingBlocks,
           setActiveToolCalls,
-          setError
+          setError,
+          setTokenCount,
+          () => manager.getTokenCount(),
+          setContextWindow,
+          () => manager.getBudgetInfo().contextWindow,
+          setCommandMessage
         );
 
         const pipeline = new EventPipeline();
         registerExtensionMiddleware(pipeline, extensionsRef.current!, "before:agentLoop");
 
         pipeline
-          .use(tokenCountingMiddleware((total) => setTokenCount(total)))
           .use(
             createAgentLoopMiddleware({
               llm: provider,
               conversation: manager,
               tools,
               eventBus,
+              compressor: compressor ?? undefined,
+              ...(process.env.LICODE_MEMORY_RECALL === "off"
+                ? {}
+                : { onTurnStart: memoryRecallHandlerRef.current }),
             })
           )
           // after:agentLoop fires shell hooks + in-process function hooks (e.g. memory extraction)
@@ -459,12 +798,15 @@ export function useConversation(
     streaming,
     isLoading,
     tokenCount,
+    contextWindow,
     error,
     sessionId,
     thinkingBlocks,
     activeToolCalls,
     commandMessage,
     slashCommands,
+    isDreaming,
+    archivedNotice,
     handleSubmit,
   };
 }

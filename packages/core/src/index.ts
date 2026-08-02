@@ -20,7 +20,7 @@ export { TokenCounter } from "./llm/token-counter.js";
 export { collectStream, mergeChunks } from "./llm/stream.js";
 export { ConversationManager } from "./conversation/manager.js";
 export type { ConversationMetadata } from "./conversation/manager.js";
-export { SystemPrompt, loadDefaultLayers } from "./conversation/system-prompt.js";
+export { SystemPrompt, loadDefaultLayers, currentDateLayer } from "./conversation/system-prompt.js";
 export type { SystemPromptLayer } from "./conversation/system-prompt.js";
 export { EventPipeline } from "./events/pipeline.js";
 export type { MiddlewareEntry } from "./events/pipeline.js";
@@ -42,6 +42,10 @@ export {
   editTool,
   globTool,
   grepTool,
+  journalRecallTool,
+  profileRecallTool,
+  decideTool,
+  decideSaveTool,
 } from "./tools/builtin/index.js";
 
 // Phase 2: agent/
@@ -75,7 +79,7 @@ export type { SlashCommand, CommandContext, CommandResult } from "./extensions/c
 export { helpCommand, helpRecipesCommand, helpShortcutsCommand, helpToolsCommand } from "./extensions/commands/builtin/help.js";
 export { clearCommand } from "./extensions/commands/builtin/clear.js";
 export { contextCommand } from "./extensions/commands/builtin/context.js";
-export { memoryCommand, memoryListCommand, memoryAddCommand, memoryDeleteCommand } from "./extensions/commands/builtin/memory.js";
+export { memoryCommand, memoryListCommand, memoryAddCommand, memoryDeleteCommand, memoryArchiveCommand, memoryRestoreCommand, memoryPinCommand, memoryUnpinCommand } from "./extensions/commands/builtin/memory.js";
 
 // Phase 3: Hook
 export { HookManager, hookMiddleware, resolvePosition } from "./extensions/hooks/manager.js";
@@ -100,8 +104,7 @@ export type {
 } from "./safety/types.js";
 export { TokenBudget } from "./context/token-budget.js";
 export { ContextCompressor } from "./context/compressor.js";
-export { Summarizer } from "./context/summarizer.js";
-export { contextMiddleware } from "./context/middleware.js";
+export { Summarizer, CompressionAssistant } from "./context/summarizer.js";
 export { overflowToolResult } from "./context/overflow.js";
 export type {
   TokenBudgetConfig,
@@ -111,18 +114,81 @@ export type {
   ContextCompressorConfig,
   CompressionResult,
 } from "./context/compressor.js";
+// Phase 5: context-compression building blocks
+export { getRecoveryPointer } from "./context/git-pointer.js";
+export type { RecoveryPointer } from "./context/git-pointer.js";
+export {
+  computeStats,
+  buildFileChangeMessage,
+  isFileChangeMessage,
+  parseFileChangeMessage,
+  WRITE_TOOL_NAMES,
+  EDIT_TOOL_NAMES,
+} from "./context/file-change.js";
+export type { FileChangeNote, FileChangeStats, FileChangeOperation } from "./context/file-change.js";
+export { classifyMiddleTurns, extractExistingSummary, isSummaryMessage } from "./context/compressor.js";
 export { MemoryStore } from "./memory/store.js";
+export type { MemoryAction } from "./memory/store.js";
 export { MemoryLoader } from "./memory/loader.js";
 export { MemoryExtractor } from "./memory/extractor.js";               // Step 2: LLM-based
 export { RegexMemoryExtractor } from "./memory/extractor-regex.js";    // @deprecated
 export { memoryMiddleware } from "./memory/middleware.js";             // @deprecated
-export { createMemoryExtractionHook } from "./memory/hook.js";         // Step 2: in-process hook
-export type { MemoryExtractionHookFn } from "./memory/hook.js";
+export { createMemoryExtractionHook, createMemoryExtractionState } from "./memory/hook.js"; // in-process hook
+export type { MemoryExtractionHookFn, MemoryExtractionState } from "./memory/hook.js";
+export { MemoryRecall, MEMORY_RECALL_TOOL_NAME, pruneRecallMessages, buildRecallPair, createMemoryRecallHandler } from "./memory/recall.js"; // Phase 2: side-query recall
+export type { MemoryRecallConfig } from "./memory/recall.js";
+export { MemoryDream, createMemoryDreamHook, createMemoryDreamState, acquireLock, releaseLock, readState, writeState } from "./memory/dream.js"; // Phase 3: dream consolidation
+export type { DreamConfig, DreamState, Suspicion } from "./memory/dream.js";
 export type { Memory, MemoryType, MemoryEntry } from "./memory/types.js";
 export { toSlug } from "./memory/types.js";
 export { SessionManager } from "./session/manager.js";
 export type { SessionSummary } from "./session/manager.js";
 export { recoverLatestSession } from "./session/recovery.js";
+
+// diary/
+export type {
+  DiaryEntry, DiaryEntryMeta, Segment, Fact, Decision, Emotion, PersonRef,
+  Candidate, FutureMemoryType, Importance, Promotability,
+} from "./diary/types.js";
+export { emptyEntry, dateString } from "./diary/types.js";
+export { serializeEntry, parseEntry } from "./diary/serialize.js";
+export { JournalStore } from "./diary/store.js";
+export type { DiaryStore } from "./diary/store.js";
+export { DiaryExtractor } from "./diary/extractor.js";
+export type { DiaryExtractorLike, ExtractInput, DiaryExtractorConfig } from "./diary/extractor.js";
+export { DiarySession } from "./diary/session.js";
+export { handleDiaryInput } from "./diary/dispatch.js";
+export type {
+  DiaryDispatchDeps, DiaryDispatchContext, DiaryDispatchResult, DiaryDispatchOutcome,
+} from "./diary/dispatch.js";
+
+// diary phase-2: promote + curated
+export { CuratedIndex } from "./diary/curated.js";
+export { deriveMemory, autoPromoteEntry } from "./diary/promote.js";
+export type { AutoPromoteDeps, AutoPromoteResult } from "./diary/promote.js";
+
+// curation/
+export { MemoryCuration } from "./curation/memory-curation.js";
+export type { MemoryCurationConfig } from "./curation/memory-curation.js";
+export { CurationSession } from "./curation/session.js";
+export type { Selection, ApplyDeps, ApplyResult } from "./curation/session.js";
+export { handleCurationInput } from "./curation/dispatch.js";
+export type {
+  CurationDispatchDeps, CurationDispatchContext, CurationDispatchResult, CurationDispatchOutcome,
+} from "./curation/dispatch.js";
+export type { PendingCandidate, MemoryCreateProposal, Proposal } from "./curation/types.js";
+
+// people/
+export type { PersonProfile, PersonProfileMeta, Interaction, RelationshipState } from "./people/types.js";
+export { emptyProfile } from "./people/types.js";
+export { serializeProfile, parseProfile } from "./people/serialize.js";
+export { PersonProfileStore } from "./people/store.js";
+export type { ProfileAction } from "./people/store.js";
+export { autoFileEntry } from "./people/profile-file.js";
+export type { AutoFileDeps, AutoFileResult } from "./people/profile-file.js";
+export { ProfileCuration } from "./people/curation/profile-curation.js";
+export type { ProfileCurationConfig } from "./people/curation/profile-curation.js";
+export type { PendingPerson, ProfileMergeProposal, ProfileNewProposal } from "./curation/types.js";
 
 // Phase 5: multi-agent
 export { createAgentTool } from "./multi-agent/agent-tool.js";

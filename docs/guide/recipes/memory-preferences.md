@@ -1,159 +1,167 @@
 # Recipe 6：跨会话记忆偏好
 
-> **目标**：让 LICode 记住你的编码偏好和项目习惯，跨会话生效。
+> **目标**：让 LICode 记住你的编码偏好和项目习惯，跨会话生效、按需召回、自动整理。
 >
-> **使用功能**：Memory 系统、MemoryExtractor、会话恢复
+> **使用功能**：Memory 系统（生产 + 召回 + 做梦整理）、`/memory-*` 命令
 
 ---
 
 ## 场景描述
 
-你在多个项目中使用 LICode，希望它记住你的技术栈偏好和代码风格，不用每个新会话都重复说明。
+你在多个项目中使用 LICode，希望它记住你的技术栈偏好和代码风格，不用每个新会话都重复说明；并且希望无关问题不被记忆打扰，长期不用的记忆自动归档不堆积。
+
+> 💡 本 Recipe 对应的原理见 [架构原理 §17](../user-guide.md#17-memory记忆系统)、[亮点 1](../user-guide.md#亮点-1跨会话持久记忆系统生产-召回-做梦整理三层闭环) 与 [面试 Q1-Q7](../user-guide.md#记忆召回recall)。
+
+---
 
 ## 步骤
 
-### 1. 在日常对话中自然表达偏好
+### 1. 两种方式让 LICode 记住偏好
+
+**方式 A：明确指令（主 Agent 当场直写）**
 
 ```
 > 记住：我习惯用 pnpm 而不是 npm，运行测试用 vitest 而不是 jest
 ```
 
-LICode 的 MemoryExtractor 会自动匹配 "记住" 关键词：
+主 Agent 按 memory-guide 指引，当场用 Write 工具写入记忆文件，无需等后台提取。
+
+**方式 B：日常对话（后台自动提取，不再依赖关键词）**
 
 ```
-🧠 已记录偏好：
-  - 包管理器：pnpm（而非 npm）
-  - 测试框架：vitest（而非 jest）
+> 不对，以后都用 pnpm
+> 我一般用 Node.js 22，部署到 Vercel
 ```
 
-### 2. 记录更多偏好
+这些不含"记住"关键词的话，也会在每轮对话结束后由 `after:agentLoop` hook 的后台 LLM 自动提取（5 分钟冷却、问句不提取、互斥锁防并发）。旧版靠关键词匹配会漏掉这类纠正，Phase 1 起改为冷却 + 问句排除，不再依赖关键词。
+
+### 2. 改口不用怕：矛盾自动消解
 
 ```
-> 我喜欢用 zod 做参数校验，项目里统一用 camelCase 命名
-> 记住：我一般用 Node.js 22，部署到 Vercel
-> 记住：我的项目缩进用 2 空格，不用 tab
+> （之前）记住：我喜欢红烧排骨
+> （后来）红烧排骨不喜欢了
 ```
 
-每条都会被自动提取和存储。
+提取时 LICode 把**已有的记忆全文**都给 LLM 看。LLM 发现"不喜欢了"和旧的"喜欢"冲突，输出 `update` 整体改写旧文件（保留 createdAt、刷新 updatedAt），以最新为准--不会出现"喜欢/不喜欢"两条矛盾并存。
 
-### 3. 查看已存储的记忆
+### 3. 相关记忆按需召回（无关问题不打扰）
 
-```
-> /context
-  Model: deepseek-v4-pro
-  Tokens: 1,250
-  Messages: 12
-  Session: abc123-def456
-
-  已存储的记忆：
-  - 包管理器：pnpm
-  - 测试框架：vitest
-  - 参数校验：zod
-  - 命名风格：camelCase
-  - Node 版本：22
-  - 部署平台：Vercel
-  - 缩进：2 空格
-```
-
-### 4. 记忆跨会话生效
-
-关闭 LICode，第二天新开会话：
+每轮对话开始时（首次调用大模型之前），LICode 用 side-query 小模型从索引中选 ≤5 条**相关**记忆，把**正文**注入当轮上下文：
 
 ```
-> 帮我新建一个 API 路由文件
+你说"今晚吃什么好？"
+   -> side query 选中 user/食物偏好
+   -> 对话流显示 [调用工具: memory_recall] 卡片（召回透明可见）
+   -> LICode 回答时避开你不喜欢的、推荐你偏好的
 ```
 
-LICode 会自动：
-- 用 `write` 创建文件（文件内容使用 2 空格缩进、camelCase 命名）
-- 用 `bash` 执行 `pnpm vitest`（而不是 `npm jest`）
-- 参数校验用 `zod`
+**无关问题零召回零成本**：问"帮我重构这个函数"时，一条记忆都不会选（严格过滤 prompt：默认不召回，需满足明确的相关性条件）。
 
-不需要你再次说明这些偏好。
+### 4. 查看与管理记忆
+
+```
+> /memory-list          ← 列出所有记忆（按类型分组）
+> /memory-delete <slug> ← 删除某条
+> /memory-pin <slug>    ← 置顶：永不被 dream 自动归档
+> /memory-archive <slug>← 手动归档（软删除）
+> /memory-restore <slug>← 恢复已归档的记忆
+```
+
+### 5. 做梦整理：旧记忆自动归档不堆积
+
+记忆库会定期"做梦"整理（`MemoryDream`，零 LLM 门：距上次 ≥24h 且 ≥5 个新会话才触发，fire-and-forget 不阻塞你）：
+
+- **Orient**：审现有记忆，找漂移/重复/失效/相对日期
+- **Gather**：grep 近期会话找证据
+- **Consolidate**：基于证据合并/改写/删除 + 自动归档 >30 天未被召回的记忆
+- **Prune**：重建索引
+
+被归档的记忆移到 `archive/` 区，可用 `/memory-restore` 恢复；`/memory-pin` 标记的永不归档。
 
 ---
 
 ## 产物说明
 
-| 产物 | 类型 | 存放位置 | 说明 |
-|------|------|---------|------|
-| 记忆文件 | 自动创建 | `.licode/memory/prefer-pnpm.md` | 包管理器偏好 |
-| 记忆文件 | 自动创建 | `.licode/memory/prefer-vitest.md` | 测试框架偏好 |
-| 记忆文件 | 自动创建 | `.licode/memory/prefer-zod.md` | 参数校验偏好 |
-| 记忆文件 | 自动创建 | `.licode/memory/naming-camelCase.md` | 命名风格偏好 |
-| 记忆文件 | 自动创建 | `.licode/memory/node-version-22.md` | Node 版本偏好 |
-| 记忆文件 | 自动创建 | `.licode/memory/deploy-vercel.md` | 部署平台偏好 |
-| 记忆文件 | 自动创建 | `.licode/memory/indent-2spaces.md` | 缩进偏好 |
+### 记忆目录结构（四类分目录）
 
-> 💡 每条"记住"指令自动创建一个 `.md` 文件（含 YAML frontmatter + 偏好描述）。**文件内容是人类可读的**，你可以直接打开编辑或删除。
+```
+.licode/memory/
+├── MEMORY.md                    ← 索引（每条一行 "- [名称](path) - 描述"，自动重建，勿手改）
+├── .dream.state                 ← 做梦整理状态（lastConsolidatedAt）
+├── user/                        ← 用户偏好/角色/目标
+│   └── 食物偏好.md
+├── feedback/                    ← 协作纠正（必含 Why / How to apply）
+│   └── 用pnpm.md
+├── project/                     ← 项目背景/决策
+├── reference/                   ← 外部系统入口
+└── archive/                     ← dream 自动归档区（可恢复）
+```
 
----
+### 单条记忆文件格式
 
-## 记忆文件格式详解
-
-`.licode/memory/prefer-pnpm.md` 的实际内容：
+`.licode/memory/feedback/用pnpm.md` 的实际内容（YAML frontmatter + 正文）：
 
 ```markdown
 ---
-name: prefer-pnpm
+name: 用pnpm
 description: 用户偏好使用 pnpm 作为包管理器
-metadata:
-  type: user
+type: feedback
+createdAt: 2026-08-01
+updatedAt: 2026-08-01
+usageCount: 3
+lastUsedAt: 2026-08-02T10:00:00.000Z
+pinned: false
 ---
 
-用户习惯用 pnpm 而不是 npm 来管理依赖。
-**Why:** pnpm 更快且节省磁盘空间。
-**How to apply:** 所有包管理命令使用 pnpm，而不是 npm 或 yarn。
-关联：[[prefer-vitest]]
+所有包管理命令使用 pnpm，而不是 npm 或 yarn。
+**Why:** 用户明确要求过；pnpm 更快且节省磁盘空间。
+**How to apply:** 安装、添加、移除依赖时一律使用 pnpm。
+关联：[[用vitest]]
 ```
 
 **字段说明**：
 
 | 字段 | 作用 |
 |------|------|
-| `name` | 唯一标识符（kebab-case） |
-| `description` | 一行摘要，用于判断何时加载这条记忆 |
-| `metadata.type` | `user`（用户偏好）/ `project`（项目约束）/ `feedback`（用户反馈） |
-| 正文 | 具体偏好说明 + **Why**（原因）+ **How to apply**（应用方式） |
-| `[[link]]` | 关联其他记忆（如 prefer-pnpm 关联 prefer-vitest） |
+| `name` | 简短名称（可用中文，如"用pnpm"） |
+| `description` | 一行摘要，用于 MEMORY.md 索引行与召回判断 |
+| `type` | `user`/`feedback`/`project`/`reference` 四分类 |
+| `createdAt`/`updatedAt` | 时间戳（相对日期已归一化为绝对日期） |
+| `usageCount`/`lastUsedAt` | 被召回注入的累计次数与最近时间（dream 归档判定依据） |
+| `pinned` | `true` 时永不被 dream 自动归档 |
+| 正文 | 具体说明 + **Why**（原因）+ **How to apply**（应用方式）+ `[[link]]` 关联 |
 
----
-
-## 记忆目录结构
-
-```
-.licode/memory/
-├── MEMORY.md                    ← 记忆索引文件
-├── prefer-pnpm.md               ← 包管理器偏好
-├── prefer-vitest.md             ← 测试框架偏好
-├── prefer-zod.md                ← 参数校验偏好
-├── naming-camelCase.md          ← 命名风格偏好
-├── node-version-22.md           ← Node 版本偏好
-├── deploy-vercel.md             ← 部署平台偏好
-└── indent-2spaces.md            ← 缩进偏好
-```
+> 💡 **文件名与 slug 解耦**：文件名用 `cleanName`（保留中文，人可读），程序内部用 slug（`toSlug`，中文 hash 兜底）。所以文件名是"用pnpm.md"而 slug 可能是"feedback/jx3k"。重命名文件不破坏程序引用。
 
 ---
 
 ## 关键要点
 
-- 使用 "记住" / "remember" / "我习惯" / "我喜欢" 等关键词触发自动记忆
-- 记忆存储在 `.licode/memory/` 下，每个偏好一个 `.md` 文件
-- 下次会话启动时自动注入为 system prompt 层（priority 8）
-- 如果某条记忆不再适用，可以手动删除对应的 `.md` 文件，或编辑修改内容
+- **两种写入路径**：明确指令主 Agent 直写 / 日常对话后台自动提取（不再依赖关键词）
+- **矛盾自动消解**：提取携带现有记忆正文，冲突时 update 整体改写
+- **召回严格过滤**：默认不召回，仅相关记忆注入正文，无关问题零成本
+- **每轮剪除防累积**：历史里任意时刻最多一对召回消息，token 不膨胀
+- **失败零干扰**：side query 失败/超时退回仅索引模式，对话不受影响
+- **做梦整理**：>30 天未用自动归档（可恢复），pinned 永不归档
+- **四类分目录**：user/feedback/project/reference，一个主题一个 .md 文件
 
 ---
 
 ## 常见问题排查
 
-**Q: 说了"记住"但没有保存？**
-- 确保触发词在句首或独立成句："记住：xxx"（不是"你记住啊 xxx 很重要"）
-- 用 `/context` 查看已存储的记忆列表确认是否成功
+**Q: 说了偏好但没记住？**
+- 明确指令确保"记住：xxx"独立成句
+- 日常对话提取有 5 分钟冷却，且全是问句不提取；稍等或用"记住："直写
+- 用 `/memory-list` 确认是否成功
 
-**Q: 记忆没有在新会话中生效？**
-- 确认 `.licode/memory/` 目录下有对应的 `.md` 文件
-- 记忆注入 priority 为 8，如果 system prompt 的 token 预算不足，低优先级内容可能被裁剪
-- 重启 LICode 重新加载记忆
+**Q: 记忆没在新会话中生效？**
+- 确认 `.licode/memory/{type}/` 下有对应 .md 文件且 MEMORY.md 索引已重建
+- 召回是"按需"的：只有相关问题才会注入，无关问题不注入是正常行为
+- `LICODE_MEMORY_RECALL=off` 会关闭召回（退回仅索引模式），检查是否误设
 
 **Q: 如何修改/删除已存储的记忆？**
-- 直接编辑或删除 `.licode/memory/` 下的 `.md` 文件
-- 编辑后下次会话自动生效，无需重启
+- 直接编辑或删除 `.licode/memory/{type}/` 下的 .md 文件，索引会自动重建
+- 或用 `/memory-delete`、`/memory-archive` 命令
+
+**Q: 想让某条记忆永久保留不被归档？**
+- 用 `/memory-pin <slug>` 置顶，pinned 记忆硬条件排除，永不被 dream 自动归档

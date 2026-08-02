@@ -1,5 +1,21 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import * as path from "node:path";
+import { MemoryExtractor } from "./extractor.js";
+import { MemoryStore } from "./store.js";
 import { RegexMemoryExtractor } from "./extractor-regex.js";
+
+// 与 dream.test.ts 同款 mock，使 new MemoryExtractor() 不走真实 API：
+vi.mock("../llm/anthropic.js", () => ({
+  AnthropicProvider: vi.fn().mockImplementation(() => ({
+    name: "mock",
+    maxContextTokens: 200000,
+    chat: vi.fn(),
+    stream: vi.fn(),
+    countTokens: vi.fn(() => 0),
+  })),
+}));
 
 describe("RegexMemoryExtractor (deprecated, regex-based)", () => {
   const extractor = new RegexMemoryExtractor();
@@ -181,5 +197,31 @@ describe("RegexMemoryExtractor (deprecated, regex-based)", () => {
     const entries = extractor.extract("记住我喜欢吃辣");
     expect(entries).toHaveLength(1);
     expect(entries[0].type).toBe("user");
+  });
+});
+
+describe("MemoryExtractor prompt date injection", () => {
+  it("buildPrompt includes today's date and the field-explicit absolute-date rule", async () => {
+    vi.useFakeTimers({ now: new Date(2026, 7, 1) });
+    const dir = mkdtempSync(path.join(tmpdir(), "licode-extr-"));
+    try {
+      const store = new MemoryStore(dir);
+      const ex = new MemoryExtractor();
+      let captured = "";
+      (ex as unknown as { llm: { chat: (req: { messages: Array<{ content: string }> }) => Promise<unknown> } })
+        .llm.chat = vi.fn(async (req) => {
+          captured = req.messages[0].content;
+          return { content: "[]", usage: { input: 1, output: 1 }, model: "mock", stopReason: "end_turn" };
+        });
+      await ex.extract([
+        { role: "user", content: "记住我喜欢深色主题", timestamp: new Date().toISOString() },
+      ] as any, store);
+      expect(captured).toContain("2026-08-01");
+      expect(captured).toMatch(/相对日期/);
+      expect(captured).toContain("description");
+    } finally {
+      vi.useRealTimers();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

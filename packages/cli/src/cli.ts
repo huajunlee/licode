@@ -16,6 +16,7 @@ import {
   ConversationManager,
   initializeExtensions,
   loadDefaultLayers,
+  currentDateLayer,
   MemoryStore,
   MemoryLoader,
   SystemPrompt,
@@ -173,6 +174,7 @@ export async function initializeConversationRuntime(
   for (const layer of loadDefaultLayers()) {
     systemPrompt.addLayer(layer);
   }
+  systemPrompt.addLayer(currentDateLayer());
   await loadCLAUDE(systemPrompt, { cwd: options.cwd });
   await loadSpecFiles(systemPrompt, { cwd: options.cwd });
   manager.systemPrompt = systemPrompt;

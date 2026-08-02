@@ -2,6 +2,7 @@ import { TokenCounter } from "../llm/token-counter.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { formatLocalDate } from "../util/date.js";
 
 /**
  * System Prompt 分层定义。
@@ -22,6 +23,7 @@ const LAYER_DEFINITIONS: Array<{
 }> = [
   { name: "role", priority: 0, always: true, file: "role.md" },
   { name: "safety", priority: 1, always: true, file: "safety.md" },
+  { name: "memory-guide", priority: 4, always: false, file: "memory-guide.md" },
   { name: "tool-use", priority: 10, always: false, file: "tool-use.md" },
 ];
 
@@ -53,6 +55,21 @@ export function loadDefaultLayers(
     }
   }
   return layers;
+}
+
+/**
+ * 动态层：当前日期（ISO）。always-on，priority 3（safety 与 memory-guide 之间）。
+ * 给主 Agent（Write 工具路径）提供相对日期换算锚点--memory-guide 里的
+ * "把相对日期转换为绝对日期"规则因此能真正执行。措辞与 diary 先例对齐。
+ */
+export function currentDateLayer(now: Date = new Date()): SystemPromptLayer {
+  const today = formatLocalDate(now);
+  return {
+    name: "current-date",
+    priority: 3,
+    always: true,
+    content: `今天是 ${today}。`,
+  };
 }
 
 export class SystemPrompt {

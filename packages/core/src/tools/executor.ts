@@ -2,6 +2,7 @@ import type { Tool, ToolResult, ToolContext } from "./types.js";
 import type { ToolUseBlock } from "../llm/provider.js";
 import { ToolRegistry } from "./registry.js";
 import type { ToolPermissionGuard } from "../safety/types.js";
+import { overflowToolResult } from "../context/overflow.js";
 
 export interface ExecutorOptions {
   signal?: AbortSignal;
@@ -11,13 +12,24 @@ export interface ExecutorOptions {
 
 export interface ToolExecutorConfig {
   permissionGuard?: ToolPermissionGuard;
+  /**
+   * Max inline bytes for a tool's success output. Larger output spills to
+   * .licode/overflow/ and a pointer+preview is returned instead of flooding
+   * the context. Default 64KB. (Phase 4)
+   */
+  overflowMaxBytes?: number;
 }
 
 export class ToolExecutor {
-  constructor(
-    private registry: ToolRegistry,
-    private config: ToolExecutorConfig = {}
-  ) {}
+  private registry: ToolRegistry;
+  private config: ToolExecutorConfig;
+  private overflowMaxBytes: number;
+
+  constructor(registry: ToolRegistry, config: ToolExecutorConfig = {}) {
+    this.registry = registry;
+    this.config = config;
+    this.overflowMaxBytes = config.overflowMaxBytes ?? 64 * 1024;
+  }
 
   async executeParallel(
     toolUses: ToolUseBlock[],
@@ -68,7 +80,19 @@ export class ToolExecutor {
           errorType: "execution",
         };
       }
-      return await tool.execute(parsed.data, context);
+      let result = await tool.execute(parsed.data, context);
+      // Phase 4: spill oversized success output to disk so it never floods the
+      // conversation; a pointer + head preview is returned instead.
+      if (
+        result.status === "success" &&
+        Buffer.byteLength(result.content, "utf-8") > this.overflowMaxBytes
+      ) {
+        result = await overflowToolResult(result.content, {
+          workingDirectory: context.workingDirectory,
+          maxInlineBytes: this.overflowMaxBytes,
+        });
+      }
+      return result;
     } catch (err) {
       return {
         status: "error",

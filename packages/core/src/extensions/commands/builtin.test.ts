@@ -1,8 +1,14 @@
 import { describe, it, expect } from "vitest";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { helpCommand, helpRecipesCommand, helpShortcutsCommand, helpToolsCommand } from "./builtin/help.js";
 import { clearCommand } from "./builtin/clear.js";
 import { contextCommand } from "./builtin/context.js";
-import { memoryCommand, memoryListCommand, memoryAddCommand, memoryDeleteCommand } from "./builtin/memory.js";
+import { memoryCommand, memoryListCommand, memoryAddCommand, memoryDeleteCommand, memoryRestoreCommand, memoryArchiveCommand, memoryPinCommand, memoryUnpinCommand } from "./builtin/memory.js";
+import { MemoryStore } from "../../memory/store.js";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import type { CommandContext } from "./registry.js";
 
 function mockContext(overrides?: Partial<CommandContext>): CommandContext {
@@ -22,6 +28,9 @@ function mockContext(overrides?: Partial<CommandContext>): CommandContext {
       },
       getMessageCount() {
         return 12;
+      },
+      getBudgetInfo() {
+        return { contextWindow: 0, outputReserve: 0, used: 5000, remaining: 0 };
       },
     } as unknown as CommandContext["conversation"],
     toolRegistry: {} as CommandContext["toolRegistry"],
@@ -93,6 +102,23 @@ describe("context command", () => {
     expect(msg).toContain("12");
     expect(msg).toContain("test-session-123");
   });
+
+  it("shows overflow file count when overflow files exist", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "licode-ctx-"));
+    fs.mkdirSync(path.join(dir, ".licode", "overflow"), { recursive: true });
+    fs.writeFileSync(path.join(dir, ".licode", "overflow", "a.txt"), "x");
+    fs.writeFileSync(path.join(dir, ".licode", "overflow", "b.txt"), "y");
+    try {
+      const result = await contextCommand.execute(
+        [],
+        mockContext({ workingDirectory: dir })
+      );
+      const msg = (result as { message: string }).message;
+      expect(msg).toContain("Overflow: 2 files");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("memory command", () => {
@@ -129,5 +155,78 @@ describe("memory-delete command", () => {
     const result = await memoryDeleteCommand.execute([], mockContext());
     expect(result.type).toBe("error");
     expect((result as { message: string }).message).toContain("使用方式");
+  });
+});
+
+describe("memory-restore command", () => {
+  it("errors when no slug provided", async () => {
+    const result = await memoryRestoreCommand.execute([], mockContext());
+    expect(result.type).toBe("error");
+    expect((result as { message: string }).message).toContain("使用方式");
+  });
+
+  it("errors when slug not in archive", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "mem-cmd-"));
+    try {
+      const result = await memoryRestoreCommand.execute(["user/ghost"], mockContext({ workingDirectory: dir }));
+      expect(result.type).toBe("error");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("restores an archived memory", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "mem-cmd-"));
+    try {
+      const store = new MemoryStore(`${dir}/.licode/memory`);
+      await store.save({
+        slug: "user/x",
+        type: "user",
+        name: "X",
+        description: "d",
+        content: "c",
+        createdAt: "2026-07-01T00:00:00Z",
+        updatedAt: "2026-07-01T00:00:00Z",
+      });
+      await store.archive("user/x");
+      const result = await memoryRestoreCommand.execute(["user/x"], mockContext({ workingDirectory: dir }));
+      expect(result.type).toBe("action");
+      expect(await store.load("user/x")).not.toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("memory-archive command", () => {
+  it("lists archived memories (empty message when none)", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "mem-arc-cmd-"));
+    try {
+      const result = await memoryArchiveCommand.execute([], mockContext({ workingDirectory: dir }));
+      expect(result.type).toBe("action");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("memory-pin / memory-unpin commands", () => {
+  it("errors when no slug provided", async () => {
+    expect((await memoryPinCommand.execute([], mockContext())).type).toBe("error");
+    expect((await memoryUnpinCommand.execute([], mockContext())).type).toBe("error");
+  });
+
+  it("pins and unpins a memory", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "mem-pin-cmd-"));
+    try {
+      const store = new MemoryStore(`${dir}/.licode/memory`);
+      await store.save({ slug: "user/x", type: "user", name: "X", description: "d", content: "c", createdAt: "2026-07-01T00:00:00Z", updatedAt: "2026-07-01T00:00:00Z" });
+      const r1 = await memoryPinCommand.execute(["user/x"], mockContext({ workingDirectory: dir }));
+      expect(r1.type).toBe("action");
+      expect((await store.load("user/x"))?.pinned).toBe(true);
+      const r2 = await memoryUnpinCommand.execute(["user/x"], mockContext({ workingDirectory: dir }));
+      expect(r2.type).toBe("action");
+      expect((await store.load("user/x"))?.pinned).toBe(false);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });

@@ -15,6 +15,12 @@ export interface Memory {
   createdAt: string;
   /** 更新时间 ISO */
   updatedAt: string;
+  /** 被 recall 注入上下文的累计次数（Phase 4）。未用过为 0。 */
+  usageCount?: number;
+  /** 最近一次被 recall 注入的 ISO 时间（Phase 4）。未用过为 ""。 */
+  lastUsedAt?: string;
+  /** Phase 4: 用户/Agent 标记的"永不归档"。pinned 记忆不进归档候选。 */
+  pinned?: boolean;
 }
 
 /** @deprecated 使用 Memory 替代 */
@@ -47,4 +53,23 @@ function hashString(value: string): string {
     hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
   }
   return hash.toString(36);
+}
+
+/**
+ * 可读文件名清洗：保留中文(一-鿿)/字母/数字，其余(空格、标点、/ \ : * ? " < > | 等)转 -，
+ * 去首尾与重复 -。不截断（截断由调用方定）。空或全标点返回空。
+ */
+export function cleanName(s: string): string {
+  return s
+    .replace(/[^一-鿿a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-+/g, "-");
+}
+
+/** 从 ISO 字符串取本地时区的 HHmm（如 "1430"），用于文件名，与本地 date 对齐。 */
+export function hhmmFromISO(iso: string): string {
+  const d = new Date(iso);
+  const h = String(d.getHours()).padStart(2, "0");
+  const m = String(d.getMinutes()).padStart(2, "0");
+  return `${h}${m}`;
 }

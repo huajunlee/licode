@@ -72,6 +72,9 @@ describe("subagentCommand", () => {
         getMessageCount() {
           return 0;
         },
+        getBudgetInfo() {
+          return { contextWindow: 0, outputReserve: 0, used: 0, remaining: 0 };
+        },
       },
       toolRegistry: new ToolRegistry(),
       workingDirectory: "/tmp",
