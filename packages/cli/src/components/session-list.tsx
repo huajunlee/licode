@@ -1,8 +1,9 @@
 import React from "react";
-import { Box, Text } from "ink";
+import { Box, Text, useStdout } from "ink";
 import type { VisibleItem } from "./use-session-selector.js";
 import type { SessionInfo } from "./use-session-selector.js";
-import { COLORS } from "../theme.js";
+import { formatSessionRow } from "./session-row.js";
+import { COLORS, ICONS } from "../theme.js";
 
 interface SessionListProps {
   visibleItems: VisibleItem<SessionInfo>[];
@@ -21,47 +22,55 @@ export function SessionList({
   showCreateNew = false,
   isOnNewSession = false,
 }: SessionListProps) {
+  const { stdout } = useStdout();
+  // App padding (1 col each side) + list indent (2 cols each side)
+  const width = (stdout?.columns ?? 80) - 6;
+  const now = new Date();
+
   const truncatedTop = windowStart > 0;
   const truncatedBottom = windowStart + visibleItems.length < totalCount;
 
   return (
     <Box flexDirection="column" marginBottom={1}>
-      <Text bold>历史会话 (↑↓ 选择, Enter 进入):</Text>
+      <Box marginLeft={2} marginBottom={1}>
+        <Text color={COLORS.faint}>最近会话</Text>
+      </Box>
 
-      {/* "+ 新建会话" virtual item */}
       {showCreateNew && (
-        <>
-          <Box marginLeft={2}>
-            <Text color={isOnNewSession ? COLORS.primary : undefined}>
-              {isOnNewSession ? "> " : "  "}
-              🆕 新建会话
-            </Text>
-          </Box>
-          <Box marginLeft={2}>
-            <Text dimColor>──────────────────────────────</Text>
-          </Box>
-        </>
+        <Box marginLeft={2}>
+          <Text color={isOnNewSession ? COLORS.accent : undefined} bold={isOnNewSession}>
+            {isOnNewSession ? `${ICONS.prompt} ` : "  "}
+            {ICONS.newSession} 新建会话
+          </Text>
+        </Box>
       )}
 
       {truncatedTop && (
         <Box marginLeft={2}>
-          <Text dimColor>... 上方还有 {windowStart} 个会话</Text>
+          <Text color={COLORS.faint}>… 上方还有 {windowStart} 个会话</Text>
         </Box>
       )}
-      {visibleItems.map(({ item: s, isCursor }) => (
-        <Box key={s.id} marginLeft={2}>
-          <Text color={isCursor ? COLORS.primary : undefined}>
-            {isCursor ? "> " : "  "}
-            {s.id} · {s.model} · {s.messageCount} 条消息 ·{" "}
-            {new Date(s.updatedAt).toLocaleDateString()}
-            {s.title ? ` · ${s.title}` : ""}
-          </Text>
-        </Box>
-      ))}
+
+      {visibleItems.map(({ item: s, isCursor }) => {
+        const row = formatSessionRow(s, width, now);
+        return (
+          <Box key={s.id} marginLeft={2}>
+            <Text color={isCursor ? COLORS.accent : undefined} bold={isCursor}>
+              {isCursor ? `${ICONS.prompt} ` : "  "}
+              <Text color={COLORS.faint} bold={false}>{row.idText}</Text>
+              {"   "}
+              {row.titleText}
+              {" ".repeat(row.titlePad + 2)}
+              <Text color={COLORS.faint} bold={false}>{row.rightText}</Text>
+            </Text>
+          </Box>
+        );
+      })}
+
       {truncatedBottom && (
         <Box marginLeft={2}>
-          <Text dimColor>
-            ... 下方还有 {totalCount - windowStart - visibleItems.length} 个会话
+          <Text color={COLORS.faint}>
+            … 下方还有 {totalCount - windowStart - visibleItems.length} 个会话
           </Text>
         </Box>
       )}

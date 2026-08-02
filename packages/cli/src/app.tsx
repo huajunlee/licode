@@ -9,6 +9,7 @@ import { ThinkingAccordion } from "./components/thinking-accordion.js";
 import { InputBox } from "./components/input-box.js";
 import { StatusBar } from "./components/status-bar.js";
 import { SessionList } from "./components/session-list.js";
+import { BANNER_LINES, TAGLINE } from "./banner.js";
 import { WelcomeInput } from "./components/welcome-input.js";
 import { ToolCallCards } from "./components/tool-call-card.js";
 import { useConversation } from "./hooks.js";
@@ -134,8 +135,11 @@ function App({ apiKey, model, sessionId: initialSessionId, baseUrl, existingSess
   if (isWelcome) {
     return (
       <Box flexDirection="column" padding={1}>
-        <Box marginBottom={1}>
-          <Text bold>LICode v0.1.0</Text>
+        <Box flexDirection="column" marginBottom={1}>
+          {BANNER_LINES.map((line, i) => (
+            <Text key={i} color={COLORS.accent}>{line}</Text>
+          ))}
+          <Text color={COLORS.faint}>  {TAGLINE} · v0.1.0</Text>
         </Box>
         <SessionList
           visibleItems={visibleItems}
@@ -145,13 +149,8 @@ function App({ apiKey, model, sessionId: initialSessionId, baseUrl, existingSess
           isOnNewSession={isOnNewSession}
         />
         <Box marginTop={1}>
-          <Text dimColor>
-            ↑↓ 选择 · Enter 进入 · Ctrl+N 新建会话 · --session {"<id>"} 恢复 · 输入文字新建
-          </Text>
-        </Box>
-        <Box marginTop={1}>
-          <Text dimColor>
-            📖 新用户？查看用户指南：docs/guide/user-guide.md
+          <Text color={COLORS.faint}>
+            ↑↓ 选择 · enter 进入 · ctrl+n 新建 · --session {"<id>"} 恢复
           </Text>
         </Box>
         {welcomeError && (
