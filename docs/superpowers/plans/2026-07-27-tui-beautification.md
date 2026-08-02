@@ -1,5 +1,22 @@
 # TUI 美化（极简现代）Implementation Plan
 
+> ## ⚠ 修订状态（2026-08-02）
+>
+> 本计划初版基于 2026-07-27 的 master。2026-08-02 已将 master（+126 commit，含日记系统 / decide / memory / context）合并进本分支（merge commit `938cc2c`，无冲突），并据此重新裁定。详见 spec `2026-07-27-tui-beautification-design.md` §9。
+>
+> **任务状态**：
+> - Task 0–4：✅ 已完成并提交（marked 依赖 / 主题 v2 / banner / markdown 视图模型 / MarkdownText 渲染器）
+> - Task 5：🟡 半完成（`relative-time.test.ts` 已写未跟踪，缺 `relative-time.ts` 实现 -> 当前 `pnpm build` 唯一红点）
+> - Task 6–13、15：❌ 未做，按原计划执行
+> - **Task 14 修订**：在原 Task 14 基础上新增"Enter 选中"（见文末"Task 14 修订"）
+> - **Task B（新增）**：`/diary` 日记模式风格切换（见文末"Task B"）
+> - **Task A（基线）**：merge 已解决 dream-indicator 缺失；`startup.test.ts` 的 MCP mock 失败为 master 既有 / 环境依赖，与本计划无关、不阻断
+>
+> **基线**：`pnpm build` 仅 `relative-time.test.ts` 红（Task 5 完成即绿）；`pnpm test` 615 绿 / 1 红（startup MCP，既有）。
+>
+> 下方原计划正文（Task 0–15）保留作参考；执行以本修订状态 + spec §9–§12 为准。
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 将 LICode CLI 的欢迎屏与对话屏重设计为"极简现代"风格——ASCII Art 横幅、Markdown 真渲染、布局降噪、几何图标替代 emoji。
@@ -2201,3 +2218,157 @@ git commit -m "refactor(cli): remove legacy theme tokens and last emoji"
 - core summary → Task 6 ✓
 
 **类型一致性：** `MdSpan/MdLine/buildViewModel`（Task 3→4）；`BANNER_LINES/TAGLINE`（Task 2→8）；`relativeTime`（5→7）；`displayWidth/truncateToWidth/formatSessionRow`（7→8、7→11）；`formatToolLine/ToolCallState`（11，经 re-export 兼容 hooks.ts）；`formatStatusWide/Narrow/formatTokens`（12）；`classifyMessage/toolNames`（9）；`COLORS/ICONS` 键名贯穿一致 ✓
+
+
+---
+
+## Task 14 修订：建议面板 Enter 选中（优先级 #1）
+
+> 在原 Task 14（input-box 边框/braille/提示行）之上**新增** Enter 选中行为。原 Task 14 的样式改造仍执行；本节补交互。
+
+**Files:**
+- Create: `packages/cli/src/components/should-select-suggestion.ts`
+- Test: `packages/cli/src/components/should-select-suggestion.test.ts`
+- Modify: `packages/cli/src/components/input-box.tsx`（handleSubmit 守卫 + 提示文案）
+
+**Interfaces:**
+- Produces: `shouldSelectSuggestion(value: string, suggestions: {name:string}[]): boolean` - 当面板有项时返回 true（Enter 应选中而非发送）
+
+- [ ] **Step 1: 写失败测试（RED）**
+
+创建 `packages/cli/src/components/should-select-suggestion.test.ts`：
+```ts
+import { describe, it, expect } from "vitest";
+import { shouldSelectSuggestion } from "./should-select-suggestion.js";
+
+describe("shouldSelectSuggestion", () => {
+  it("true when input starts with / and suggestions exist", () => {
+    expect(shouldSelectSuggestion("/di", [{ name: "/diary" }])).toBe(true);
+  });
+  it("false when no suggestions", () => {
+    expect(shouldSelectSuggestion("/zzz", [])).toBe(false);
+  });
+  it("false when input does not start with /", () => {
+    expect(shouldSelectSuggestion("hello", [{ name: "/diary" }])).toBe(false);
+  });
+});
+```
+> 设计抉择：面板为空时 Enter 应**发送**（无项可选）。故判定 = `value.startsWith("/") && suggestions.length > 0`（无项则不拦截，正常发送）。
+
+- [ ] **Step 2: 实现（GREEN）**
+
+`packages/cli/src/components/should-select-suggestion.ts`：
+```ts
+export function shouldSelectSuggestion(
+  value: string,
+  suggestions: { name: string }[]
+): boolean {
+  return value.startsWith("/") && suggestions.length > 0;
+}
+```
+
+- [ ] **Step 3: 接入 handleSubmit（input-box.tsx）**
+
+在 `handleSubmit` 最前面：
+```ts
+const handleSubmit = (text: string) => {
+  if (shouldSelectSuggestion(value, suggestions)) {
+    completeSuggestion();
+    return; // 不发送
+  }
+  if (!text.trim() || loading) return;
+  // ...原逻辑
+};
+```
+提示文案 `showSuggestions` 分支改为：`Enter 选中 · 再按 Enter 发送 · Tab 补全 · ↑↓ 选择`。
+
+- [ ] **Step 4: 验证 + Commit**
+
+Run: `npx vitest run packages/cli/src/components/should-select-suggestion.test.ts && pnpm build && pnpm test`
+Expected: 新测试 PASS；tsc 通过；全量 PASS（startup MCP 既有失败忽略）
+
+```bash
+git add packages/cli/src/components/should-select-suggestion.ts packages/cli/src/components/should-select-suggestion.test.ts packages/cli/src/components/input-box.tsx
+git commit -m "feat(cli): Enter selects suggestion instead of sending (priority #1)"
+```
+
+---
+
+## Task B：/diary 日记模式风格切换（优先级 #2）
+
+> 新增。依赖 Task 1（diaryAccent）、Task 14（diary 模式下 InputBox 样式）。详见 spec §11。
+
+**Files:**
+- Modify: `packages/cli/src/theme.ts`（加 `diaryAccent`）
+- Test: `packages/cli/src/theme.test.ts`（追加 diaryAccent 断言）
+- Create: `packages/cli/src/components/diary-state.ts`（纯函数 reducer）
+- Test: `packages/cli/src/components/diary-state.test.ts`
+- Modify: `packages/cli/src/hooks.ts`（diaryMode/segments/date 状态 + 暴露）
+- Create: `packages/cli/src/components/diary-page.tsx`（日记卡片边框组件）
+- Modify: `packages/cli/src/app.tsx`（diaryMode 时渲染 DiaryPage 替换 ChatView 区）
+- Modify: `packages/cli/src/components/status-bar.tsx`（diaryMode tint）
+
+- [ ] **Step 1: theme 加 diaryAccent（RED->GREEN）**
+
+`theme.ts` COLORS 加 `diaryAccent: "#7DC9BF"`；`theme.test.ts` 追加 `expect(COLORS.diaryAccent).toMatch(/^#[0-9A-Fa-f]{6}$/)`。
+
+- [ ] **Step 2: diaryStateReducer 纯函数（RED->GREEN）**
+
+`diary-state.ts`：
+```ts
+export interface DiaryState { mode: boolean; segments: {content:string}[]; date: string; }
+export function nextDiaryState(input: string, prev: DiaryState, session: {date:string; segments:{content:string}[]} | null, wasEnd: boolean): DiaryState
+```
+- 进入（`/diary` 提交、session 非 null、prev.mode=false）：`{mode:true, segments:[], date:session.date}`
+- 捕获（session 非 null、prev.mode=true、非 end）：`{mode:true, segments:[...session.segments], date:prev.date}`
+- 结束（wasEnd）：`{mode:false, segments:[], date:""}`
+单测三态 + 边界。
+
+- [ ] **Step 3: hooks.ts 状态提升**
+
+在 `handleDiaryInput` 返回非 null 分支（约 623-648 行），按 `nextDiaryState` 结果 `setDiaryMode/setDiarySegments/setDiaryDate`。保留 `diarySessionRef` 给 dispatch。从 `useConversation` 返回值暴露三者。
+
+- [ ] **Step 4: DiaryPage 组件**
+
+`diary-page.tsx`：borderStyle="round" 的 Box，标题 `✎ 日记 · {date}`（diaryAccent）；内含 segments（缩进 2）、commandMessage（✓）、InputBox（diary 样式：`✎` 提示符 + 日记 hint `口述经历 · /diary-end 结束 · Esc 取消`）。
+
+- [ ] **Step 5: app.tsx 接线**
+
+ChatApp：`diaryMode` 为真时 return `<DiaryPage .../>` 替换 ChatView+indicators+InputBox 区域；StatusBar 保留并传 `diaryMode`。`Ctrl+Q`（goBack）时同时清 diary 状态。
+
+- [ ] **Step 6: status-bar tint**
+
+`status-bar.tsx` 接 `diaryMode?: boolean`，分割线颜色 `diaryMode ? COLORS.diaryAccent : COLORS.faint`。
+
+- [ ] **Step 7: 验证 + Commit**
+
+Run: `npx vitest run packages/cli/src/components/diary-state.test.ts packages/cli/src/theme.test.ts && pnpm build && pnpm test`
+Expected: 全绿（startup MCP 既有失败忽略）
+
+```bash
+git add -A packages/cli/src
+git commit -m "feat(cli): /diary mode framed journal-page style switch (priority #2)"
+```
+
+- [ ] **Step 8: 手工验证（用户检查点）**
+
+`pnpm start` -> `/diary` 进入 -> 整屏切青绿 + 日记卡片边框 + ✎ 提示符 -> 口述片段逐条显示 -> `/diary-end` 切回正常。
+
+---
+
+## Task A：基线修复（合并后已最小化）
+
+> merge 已解决 dream-indicator 缺失。剩余仅"补 Task 5 实现"让 build 转绿。
+
+- [ ] 完成 Task 5：创建 `packages/cli/src/components/relative-time.ts`（spec §8 已有完整代码），提交 test + impl。
+- [ ] 确认 `pnpm build` 全绿。
+- [ ] `startup.test.ts` MCP mock 失败：标注既有/环境依赖，不在本计划范围（如需修复另开任务）。
+
+---
+
+## 修订后执行顺序（建议）
+
+```
+A (补 Task 5) -> 6 -> 7 -> 8 -> 9 -> 10 -> 11 -> 12 -> 13 -> 14(含 Enter 修订) -> B(/diary 切换) -> 15(清理)
+```
+Task B 在 14 之后（依赖 diaryAccent 与 InputBox 样式）。0–4 已完成，跳过。

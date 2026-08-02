@@ -1,7 +1,7 @@
 # TUI 美化（极简现代方向）— 设计文档
 
-**日期**: 2026-07-27
-**状态**: 已确认
+**日期**: 2026-07-27（2026-08-02 修订）
+**状态**: 已确认（修订中）
 **范围**: LICode CLI 前端（`packages/cli`）视觉重设计 — 主题系统、ASCII Art 横幅、Markdown 渲染、欢迎屏、对话屏
 
 ---
@@ -301,3 +301,116 @@ deepseek-v4-pro · 1,234 tok · a3f9c21e
 - `packages/cli/src` 中 grep 不到被移除的 emoji
 - 手工验证：iTerm2 / Terminal.app / VS Code 集成终端下两屏渲染正常（含 16 色降级）
 - 视觉效果与 §5、§6 的 mockup 一致
+
+
+---
+
+## 9. 修订记录（2026-08-02：合并 master + 重新裁定）
+
+本 spec 初版（2026-07-27）基于当时的 master。此后 master 前进 126 commit，新增第二大脑日记系统（`packages/core/src/diary/`）、decide 工具、memory/context 改造。原 spec 未考虑日记系统。
+
+**已执行**：master 合并进 `worktree-tui-beautification`（merge commit `938cc2c`，无冲突）。worktree 现同时拥有 v2 美化底座 + master 全部新功能。
+
+**重新裁定的任务状态**（对照旧计划）：
+
+| 旧 Task | 状态 | 依据 |
+|---|---|---|
+| 0 marked 依赖 | ✅ 已提交 | `marked ^18.0.7` |
+| 1 主题 v2 | ✅ 已提交 | theme.test 5 绿 |
+| 2 banner | ✅ 已提交 | banner.test 5 绿 |
+| 3 markdown 视图模型 | ✅ 已提交 | markdown.test 18 绿 |
+| 4 MarkdownText 渲染器 | ✅ 已提交 | tsc 绿 |
+| 5 relative-time | 🟡 半完成 | 测试已写（未跟踪，TDD-RED），缺 `relative-time.ts` 实现 |
+| 6 core summary | ❌ 未做 | master 的 "summary" 只是 `getStats()` 注释，`listSessions` 无 `summary?` 字段 |
+| 7–15 | ❌ 未做 | 仍 v1 风格 |
+| 新增 A 基线 | — | merge 已解决 dream-indicator 缺失；剩"补 Task 5 实现"。`startup.test.ts` 的 MCP mock 失败是 master 既有/环境依赖，与本计划无关、不阻断 |
+| 新增 B `/diary` 切换 | ❌ 未做 | 日记系统已在（merge 带来），见 §11 |
+
+**基线**：`pnpm build` 仅因未跟踪的 `relative-time.test.ts` 红（Task 5 完成即绿）；`pnpm test` 615 绿 / 1 红（`startup.test.ts` MCP mock，既有不阻断）。
+
+本次修订新增设计：§10（Enter 选中）、§11（`/diary` 风格切换）。原 §1–§8 仍然有效。
+
+---
+
+## 10. 建议面板 Enter 选中（优先级 #1）
+
+### 10.1 问题
+`input-box.tsx`：输入以 `/` 开头时弹出建议面板，`↑↓` 移动选中、`Tab` 补全，但 `Enter` 未被拦截，穿透到 `TextInput.onSubmit` → `handleSubmit` → 直接发送。提示文案"Enter 发送"。所以工具/skill 无法用 Enter 选中。
+
+### 10.2 设计
+面板打开时 `Enter` = 接受高亮项填入输入框 + 关闭面板 + **不发送**；再按 `Enter`（面板已关）才发送。
+
+实现：在 `handleSubmit`（`input-box.tsx`）最前面加守卫：
+```ts
+if (showSuggestions && suggestions.length > 0) {
+  completeSuggestion();   // 已有逻辑：setValue(选中名 + " ")
+  return;                  // 不发送
+}
+```
+- 单点修改，不动 `useInput`（避免与 TextInput 双重触发）。
+- `completeSuggestion` 后值变 `/diary `（带尾空格）→ query 含空格 → 无匹配 → 面板自动关闭。
+- 提示文案改为：`Enter 选中 · 再按 Enter 发送 · Tab 补全 · ↑↓ 选择`。
+
+### 10.3 测试
+抽纯函数 `shouldSelectSuggestion(value, suggestions): boolean` 单测：面板空 / 有项 / 已完整输入边界。
+
+---
+
+## 11. /diary 日记模式风格切换（优先级 #2）
+
+### 11.1 现状与缺口
+日记系统已在（merge 带来）：`/diary` 系列在 `packages/core/src/diary/dispatch.ts` 的 `handleDiaryInput` 早于路由拦截（`hooks.ts` handleSubmit 内）。生命周期：`/diary` 开启 → 后续纯文本捕获为片段 → `/diary-end` 关闭并由 side-model 抽取 `DiaryEntry` 存盘。
+
+**缺口**：日记会话存于 `diarySessionRef`（`useRef`，`hooks.ts`），进/出不触发重渲染 → 整个 TUI 无"日记模式"观感，唯一反馈是一行 `commandMessage`。
+
+### 11.2 风格：日记卡片边框（已确认）
+进入日记模式时，ChatApp 用 `<DiaryPage>` **替换**正常 ChatView+indicators+InputBox 区域（日记页自带输入）：
+```
+┌ ✎ 日记 · 2026/8/2 ──────────────────┐   borderStyle="round"，标题=日期，diaryAccent
+│ ✓ 已记下（继续描述，或 /diary-end）  │   commandMessage
+│                                      │
+│   今天完成了 LICode 日记系统对接，   │   diarySegments[].content（缩进 2）
+│   和团队对齐了 second-brain 架构。   │
+│                                      │
+│ ✎ ▍                                  │   InputBox（diary 样式：✎ 提示符 + 日记 hint）
+│ 口述经历 · /diary-end 结束 · Esc 取消│
+└──────────────────────────────────────┘
+```
+退出（`/diary-end` → `diaryMode=false`）→ 恢复正常 ChatView。
+
+### 11.3 状态提升（hooks.ts）
+```ts
+const [diaryMode, setDiaryMode] = useState(false);
+const [diarySegments, setDiarySegments] = useState<DiarySegment[]>([]);
+const [diaryDate, setDiaryDate] = useState("");
+// 保留 diarySessionRef 给 dispatch（避免闭包陈旧），并行镜像到 state 给渲染
+```
+在 `handleDiaryInput` 返回非 null 分支（hooks.ts 约 623-648 行）：
+- 进入（`nextSession` 非空且原不在模式）：`setDiaryMode(true); setDiarySegments([]); setDiaryDate(session.date)`
+- 捕获（`nextSession` 非空且已在模式）：`setDiarySegments([...nextSession.segments])`
+- 结束（`wasEnd`）：`setDiaryMode(false); setDiarySegments([]); setDiaryDate("")`
+
+从 `useConversation` 暴露 `diaryMode/diarySegments/diaryDate`。
+
+### 11.4 主题：新增 diaryAccent
+```ts
+diaryAccent: "#7DC9BF",  // 沉静青绿：日记/手账感，与琥珀 accent 明显区分
+```
+"明显"靠三件套：① 整屏 accent 换色（边框/标题/提示符/状态栏）② `✎` 替代 `❯`/`>` ③ 边框包裹成"日志页"。`StatusBar` 传 `diaryMode`，分割线改 `diaryAccent`。
+
+### 11.5 边界
+- 日记模式中 `Ctrl+Q`（返回）应同时退出日记模式。
+- `Esc` 提示取消（若实现取消则走 `/diary-end`，否则仅提示）。
+- 风格切换在 `/diary` **提交后**触发（会话建立），非输入字符时；切回 = `/diary-end`（`wasEnd`）。
+
+### 11.6 测试
+纯函数 `diaryStateReducer(input, prev)` 单测：`/diary` 进入、捕获片段、`/diary-end` 退出三态。`DiaryPage` 渲染层用 `pnpm build` + 既有测试全绿验证。
+
+---
+
+## 12. 测试策略补充（2026-08-02）
+
+延续 §8 的 TDD 与"只测纯函数"原则。新增：
+- `shouldSelectSuggestion`（§10）：面板空 / 有项 / 已完整输入。
+- `diaryStateReducer`（§11）：进入 / 捕获 / 退出三态。
+- `theme.test.ts` 追加：`diaryAccent` 存在且为 hex truecolor。
