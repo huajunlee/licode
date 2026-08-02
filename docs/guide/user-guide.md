@@ -10,6 +10,9 @@
 - [快速开始](#快速开始)
 - [入门教程](#入门教程)
 - [架构原理](#架构原理)
+- [亮点功能与简历项目（STAR 法则）](#亮点功能与简历项目star-法则)
+- [面试深挖问答（通俗到详细）](#面试深挖问答通俗到详细)
+- [产物与目录结构](#产物与目录结构)
 - [命令参考](#命令参考)
 - [快捷键参考](#快捷键参考)
 - [配置参考](#配置参考)
@@ -605,7 +608,7 @@ LLM 调用工具时：
 - **权限检查**：工具标记 `requiresApproval: true` 时触发 PermissionGuard
 - **并行执行**：多个 tool-use 调用 `executeParallel()` → `Promise.all` 并发执行
 
-### 7. 内置工具（6 个）
+### 7. 内置工具（6 基础 + 4 第二大脑）
 
 | 工具 | 功能 | 适用场景 |
 |------|------|---------|
@@ -615,6 +618,10 @@ LLM 调用工具时：
 | **bash** | 执行 Shell 命令 | 构建、测试、git 操作 |
 | **glob** | 文件名模式匹配 | 查找特定类型文件 |
 | **grep** | 文件内容正则搜索 | 搜索函数调用、引用 |
+| **decide** | 汇聚历史决定/事实/人物/近期日记，给决策分析（B/C framing） | 用户请帮忙做决定、拿主意（见 §22） |
+| **decide_save** | 用户确认后把决策记入日记（两步 gating，直写 journal 不进 memory） | decide 分析后用户同意记下 |
+| **journal_recall** | 按话题/关键词搜索历史日记 | 回忆"之前那件事" |
+| **profile_recall** | 按名字查找人物档案 | 回忆某人的特质/关系/互动 |
 
 ### 8. ConversationManager（对话管理器）
 
@@ -637,8 +644,8 @@ Message 类型：
 
 **核心机制：**
 
-- **Token 估算**：用 `TokenCounter` 估算消息 token 数
-- **自动裁剪**：`trimToBudget(maxTokens)` 保留最新的 user-assistant 消息对，丢弃旧的
+- **Token 估算**：用 `TokenCounter`（char-class 启发式 + EMA 校准）估算消息 token 数
+- **自动压缩**：token 超阈值时由 `ContextCompressor` 按轮次边界压缩（见 §10），旧版 `trimToBudget`（按下标切、会孤立 tool_result）已移除
 - **持久化**：`save()/load()` 将对话保存为 `.licode/sessions/{id}.json`
 
 ### 9. SystemPrompt（系统提示词）
@@ -660,23 +667,41 @@ Message 类型：
 
 **组装策略：** `always: true` 的层始终包含，可选层按优先级依次填充，最后一个可选层可能被截断。
 
-### 10. Token 管理
+### 10. 上下文管理（Token 计数 + 压缩 + 恢复）
 
-**TokenCounter** 估算文本和消息数组的 token 消耗。
+长对话的核心难题是 token 持续增长。LICode 分 5 期演进出一套**校准式计数 + 结构感知压缩 + git 指针恢复**的上下文管理（深度解析见 [亮点 3](#亮点-3长对话上下文管理phase-1-5校准式计数--git-指针恢复--滚动摘要) 与 [面试 Q8-Q11](#上下文压缩context-compression)）。
 
-**TokenBudget** 追踪用量：
-- 设定 `maxTokens` 上限
-- 当用量超过 80% 阈值时标记 "near limit"
-- 超过上限时触发上下文压缩
+| Phase | 目标 | 核心机制 |
+|-------|------|---------|
+| 1 | 让 token 预测可信 | `TokenCounter` char-class 估算 + `TokenCalibrator` EMA 在线学习 ratio（用真实 `usage.input_tokens` 校准），零新依赖、后端无关 |
+| 2+3 | 长会话"摘要续命"替代"撞墙即死" | 激活 `SystemPrompt.assemble(budget)` 分层裁剪；重写 `ContextCompressor` 按轮次边界切；移除有缺陷的 `trimToBudget` |
+| 4 | 巨量工具输出不进会话 | `overflowToolResult`：>64KB 落盘 `.licode/overflow/` + 指针 + 预览 |
+| 5 | 减少跨压缩细节丢失 | 滚动演化摘要 + 三层选择性保留 + write 轮压缩为 `file_change` 笔记 + git blob 恢复指针 |
 
-**上下文压缩**（ContextCompressor）：
+**压缩触发**（`AgentLoop.run()` while 循环内、每步 LLM 调用前）：
+
 ```
-消息数超过 maxTokens 时：
-  1. 保留最近 50% 预算的消息
-  2. Summarizer 用 LLM 摘要旧消息
-  3. 将摘要作为 assistant 消息插入历史开头
-  4. 发出 context-compressed 事件
+if (!compressedThisRun && getTokenCount() > compressThreshold(0.85) × maxContextTokens(200k))
+    -> compressor.compress()    // 每次 run() 至多压缩一次（compressedThisRun 守卫）
+termination.check()             // 压缩后仍超 maxTokens 才硬停（最终兜底）
+buildMessages(systemBudget)     // 压力下裁可选系统层
 ```
+
+**压缩算法**（`ContextCompressor.compress`）：
+
+```
+1. splitIntoTurns：按 UserMessage 边界切轮（tool 对/recall 对天然在轮内，不切断）
+2. classifyMiddleTurns 分四类：
+     must-keep-error（含 is_error，原样保留）
+     must-keep-write（含 Write/Edit，压缩为 file_change 笔记）
+     candidate（其余，按 important/normal 分类）
+     fold（孤儿轮，折进摘要）
+3. 一次 side-call（CompressionAssistant）干三件事：分类 + file_change 描述符 + 滚动合并摘要
+4. 组装：[firstUser, SUMMARY(assistant), ...mustKeep, ...important(预算允许), ...recentTurns]
+5. 失败降级 trim（丢中间、折 firstUser 进 recent[0]），method="trim"，永不中断主循环
+```
+
+> ⚠️ **关键设计**：① 摘要用 `assistant` 角色放首条 user **之后**（不能用 system--会被 `extractSystem` 提顶层乱序；不能放第一条--数组 assistant 开头 API 报错）；② 旧 `trimToBudget` 按下标切会孤立 tool_result 导致 API 报错，已移除；③ 被压缩的 write 全文用 `git hash-object -w --stdin` 写成 git blob（**不产生 commit**，内容寻址 + 天然去重），可经 hash 精确恢复；④ 状态栏百分比直对应 `compressThreshold`（85% 即将压缩、100% 硬上限）。
 
 ### 11. TerminationPolicy（终止策略）
 
@@ -702,6 +727,8 @@ CommandRouter 拦截 `/` 开头的输入并路由到对应命令处理器：
 | `/clear` | 清空对话历史 | ✅ |
 | `/context` | 显示模型、token、消息数、会话 ID | ✅ |
 | `/memory`、`/memory-list`、`/memory-add`、`/memory-delete` | 记忆管理：查看、手动添加、删除 | ✅ |
+| `/memory-archive`、`/memory-restore`、`/memory-pin`、`/memory-unpin` | 记忆归档/恢复/置顶（见 §17） | ✅ |
+| `/diary`、`/diary-end`、`/diary-list`、`/diary-find`、`/diary-show`、`/diary-curate` | 第二大脑日记（见 §20、§23） | ✅ |
 | `/subagent` | 开关子 Agent 支持 | ✅ |
 
 ### 13. MCP 协议（Model Context Protocol）
@@ -811,7 +838,7 @@ Hook 可以设为 `blocking: true`（阻塞等待完成）或非阻塞（fire-an
 
 ### 17. Memory（记忆系统）
 
-LICode 拥有跨会话的持久记忆：它能记住你是谁、你喜欢怎样协作、项目有哪些不成文的约定，并在后续对话中主动用上。2026-07 的重构（**Phase 1 生产层修复** + **Phase 2 召回层升级**）让记忆从"只进不出的记事本"升级为"会更新、会召回、不打扰"的完整系统。
+LICode 拥有跨会话的持久记忆：它能记住你是谁、你喜欢怎样协作、项目有哪些不成文的约定，并在后续对话中主动用上。经过 Phase 1-4 的持续演进（**Phase 1 生产层修复** + **Phase 2 召回层升级** + **Phase 3 做梦整理** + **Phase 4 归档/置顶/用量追踪**）以及日期归一化、可读文件名两项加固，记忆从"只进不出的记事本"升级为"会更新、会召回、会整理、不打扰"的完整系统。
 
 #### 改进亮点
 
@@ -824,6 +851,10 @@ LICode 拥有跨会话的持久记忆：它能记住你是谁、你喜欢怎样�
 | **召回透明可见** | 召回在对话流中显示为 `[调用工具: memory_recall]` 卡片，你能看到 LICode 想起了什么 | Phase 2 |
 | **会话内即时生效** | 本会话刚写的记忆，后续轮次即可被召回（无需重启）；system prompt 索引每轮自动刷新 | Phase 2 |
 | **失败零干扰** | side query 失败/超时（10s）→ 自动退回"仅索引"模式，对话不受影响；`LICODE_MEMORY_RECALL=off` 可整体关闭召回 | Phase 2 |
+| **做梦整理** | 后台"做梦"（dream）定期整理整个记忆库：找漂移/重复 -> grep 证据 -> 合并/改写/删除 + 自动归档 >30 天未用记忆；零 LLM 门（24h+≥5 新会话），fire-and-forget 不阻塞用户 | Phase 3+4 |
+| **自动归档与恢复** | >30 天未被召回的记忆自动归档（软删除，`/memory-restore` 可恢复）；`/memory-pin` 标记的永不归档；归档判定用 lastUsedAt 而非 createdAt（避免召回关闭时误归档所有从未召回的记忆） | Phase 4 |
+| **日期归一化** | 相对日期（昨天/上周/下个月）在三处统一转绝对日期：extractor prompt 注入今天 + `save()` 程序化归一化 + Write-path hook（主 Agent 直写时补归一化），消除"昨天"导致的记忆错乱 | 2026-08-01 |
+| **可读文件名** | 文件名用 `cleanName`（保留中文，人可读）与 slug（`toSlug`，中文 hash 兜底，程序标识）解耦；人物档案用 canonicalName（中文）做文件名，重命名不破坏引用 | 2026-08-01 |
 
 #### 存储层：四类记忆 + 自动索引（两阶段共用）
 
@@ -893,6 +924,29 @@ updatedAt: 2026-07-28T09:30:00.000Z
 - **开关**：`LICODE_MEMORY_RECALL=off` 启动即整体关闭召回，退回仅索引模式。
 - **主 Agent 兜底**：未被 side query 选中的记忆，主 Agent 仍可按 memory-guide 指引用 Read 工具自行查阅 `.licode/memory/` 目录。
 
+#### 做梦整理原理（Phase 3+4）：四阶段 + 零 LLM 门
+
+记忆库会定期"做梦"整理（`MemoryDream`，深度解析见 [面试 Q5-Q7](#做梦整理dream)）：
+
+```
+after:agentLoop hook（fire-and-forget，不阻塞用户）
+   │
+   ├─ shouldDream（零 LLM 门）：距上次 ≥24h 且自上次起 ≥5 个新会话才触发
+   ├─ acquireLock（O_EXCL 原子锁，30min 过期覆盖，崩溃不永久阻塞）
+   │
+   ▼ dream() 四阶段（永不 reject，失败不更新 state 可重试）
+   1. Orient（LLM）：审现有记忆（索引+全文），输出 suspicions（漂移/重复/失效/相对日期）
+   2. Gather（无 LLM）：grep 近期会话新消息找证据片段（±1 条上下文，≤5 条/suspicion）
+   3. Consolidate（LLM）：基于证据出 create/update/append/delete ops
+      + Phase 4 规则驱动自动归档（>30d 未用且非 pinned -> archive，可 /memory-restore 恢复）
+      + delete 前先备份到 .dream-backup/
+   4. Prune：重建索引；>200 行或 >25KB 则 LLM 缩短 description 至 ≤150 字符
+```
+
+**安全机制**：① 删除前 `backupAndDelete` 备份文件 + MEMORY.md；② 归档是软删除（移到 `archive/{type}/`），`/memory-restore` 可恢复；③ pinned 记忆硬条件排除，永不归档；④ 失败时不更新 `.dream.state`，下次重试。
+
+**并发让位**：dream 运行时，召回的 `recordUsage` 让位（避免写写竞态），但召回读路径不让位；提取 hook 同理检测 dream 状态。`recordUsage` 写回后用 `utimes` 恢复原 mtime，避免触发"主 Agent 已写则跳过提取"的误判。
+
 #### 涉及文件及各自作用
 
 | 文件 | 作用 |
@@ -902,6 +956,7 @@ updatedAt: 2026-07-28T09:30:00.000Z
 | `packages/core/src/memory/hook.ts` | **提取钩子**——共享状态（互斥锁 / 上次提取时间 / 本轮开始时间），协调"主 Agent 已写则跳过提取"与索引重建 |
 | `packages/core/src/memory/recall.ts` | **MemoryRecall**——召回引擎。side query 选择（永不抛异常，失败返回空）；召回对的构造/剪除纯函数；`createMemoryRecallHandler` 生成每轮回调（刷新索引层 → 剪除 → 选择 → 注入） |
 | `packages/core/src/memory/loader.ts` | **MemoryLoader**——会话启动时把 MEMORY.md 索引注入 system prompt（priority 5 层） |
+| `packages/core/src/memory/dream.ts` | **MemoryDream**--做梦整理引擎（Phase 3+4）。四阶段 Orient/Gather/Consolidate/Prune；零 LLM 门 shouldDream；O_EXCL 锁；archive/restore/recordUsage/setPinned 等存储操作；createMemoryDreamHook fire-and-forget |
 | `packages/core/src/conversation/templates/memory-guide.md` | **主 Agent 指引层**（priority 4）——教主 Agent 何时写 / 如何写 / 不写什么 / 如何用 Read 查记忆 |
 | `packages/core/src/agent/loop.ts` | **AgentLoop**——`AgentConfig.onTurnStart` 挂点：召回注入的唯一入口（addUserMessage 之后、首次 LLM 调用之前，异常不阻断 loop） |
 | `packages/cli/src/hooks.ts` | **CLI 接线**——创建 store/extractor/recall，注册 after:agentLoop 提取 hook，为两处 pipeline 配置 onTurnStart，读取 `LICODE_MEMORY_RECALL` 开关 |
@@ -965,6 +1020,344 @@ updatedAt: 2026-07-28T09:30:00.000Z
 
 ---
 
+### 20. 第二大脑日记系统（Second-Brain Diary）
+
+LICode 不只是"会记代码的助手"，还能当你的**第二大脑**--把你口述的日常日记结构化沉淀，并自动提炼出长期记忆和人物档案。受「第二大脑」「卡片盒笔记法」启发，设计成 **捕获 -> 结构化 -> 提升 -> 整理** 四层流水线。
+
+#### DiaryEntry 数据结构
+
+每条日记是一个结构化条目（`diary/types.ts`）：
+
+```typescript
+interface DiaryEntry {
+  meta: { id, date, createdAt, endedAt };   // id 是 opaque（如 msaedeuy），与文件名解耦
+  raw: { content, segments[] };              // 原文 + 带时间戳的片段
+  title: string;                             // 4-10 字短标题，用作文件名
+  summary: string;                           // 2-3 句叙事摘要
+  facts: Fact[];                             // 离散事件 {what, when, tags}
+  decisions: Decision[];                     // 明确决定 {decision, reasoning, context}
+  emotions: Emotion[];                       // 推断情绪 {state, intensity:1-5, trigger, inferred}
+  people: PersonRef[];                       // 提到的人 {name, relation, interaction, specific}
+  futureMemory: Candidate[];                 // 候选记忆 {content, type, importance, promotability, reason}
+}
+```
+
+`futureMemory` 候选带 **importance（重要性）** 和 **promotability（可提升性）** 两个维度--这是后续三层提升的分流依据。
+
+#### 捕获与结构化
+
+```
+/diary            ← 进入日记模式，开始累积片段
+（口述今天的经历）
+/diary-end        ← 结束并保存
+        │
+        ▼
+DiaryExtractor（side-model LLM，独立于主对话）
+   prompt 规则：不臆造（没说留 null）/ 推断必标注 / 宁可少收不要错收 / 语言跟随用户
+                所有相对时间（昨天、下个月）一律转成绝对日期（锚定今天）
+        │
+        ▼
+JournalStore.save(entry)
+   文件名 = {date}/{date}-{HHmm}-{title}.md   ← 人类可读（如 2026-08-01-2118-学习规划与家庭通话.md）
+   id     = opaque（如 msaedeuy）             ← 程序标识，与文件名解耦
+```
+
+> 💡 **可读文件名与 id 解耦**：文件名是给人看的（日期+时间+标题），id 是给程序用的（短随机串）。重命名文件不会破坏引用，id 不变。这是「可读文件名」重构（2026-08-01）的核心设计。
+
+#### 三层提升（capture -> long-term memory）
+
+日记保存后，`futureMemory` 候选按双维度分流到三层：
+
+```
+futureMemory 候选
+   │
+   ├─ importance:high + promotability≠low + type∈{preference,decision,goal}
+   │     -> auto-promote（自动提升）：deriveMemory() -> MemoryStore.save(create)
+   │       例："计划一年内拿到大厂 Offer"(goal,high) -> 直接写入 .licode/memory/project/
+   │
+   ├─ people 中 specific=true 的专有名字（爸妈/王总/张三）
+   │     -> auto-file（自动归档）：autoFileEntry() -> PersonProfileStore
+   │       例："爸妈" -> 写入 .licode/people/爸妈.md
+   │
+   └─ promotability:low 或 specific=false（朋友/同事等模糊名）
+         -> curation（人审整理）：留待 /diary-curate 人工确认
+           例："对 Loop Engineering 有了更深入了解"(preference,low) -> 候选待整理
+```
+
+`CuratedIndex`（`.licode/journal/.curated.json`）记录已处理的候选键（如 `msaedeuy#c0`、`msaedeuy#p0`），**防止重复提升/重复归档/重复整理**--这是三层之间的去重协调机制。
+
+#### 涉及文件
+
+| 文件 | 作用 |
+|------|------|
+| `diary/types.ts` | DiaryEntry 结构定义 + `emptyEntry`/`dateString` |
+| `diary/extractor.ts` | `DiaryExtractor`--side-model 结构化提取（含日期归一化规则） |
+| `diary/store.ts` | `JournalStore`--日记持久化（可读文件名 + id 解耦） |
+| `diary/promote.ts` | `autoPromoteEntry`/`deriveMemory`--候选自动提升为记忆 |
+| `diary/curated.ts` | `CuratedIndex`--已处理候选去重索引 |
+| `diary/dispatch.ts` | `handleDiaryInput`--/diary 命令分发（进入/累积/结束） |
+
+### 21. 人物档案系统（People Profiles）
+
+日记里提到的人会自动沉淀为**人物档案**，并和日记双向链接。
+
+#### PersonProfile 结构
+
+```typescript
+interface PersonProfile {
+  meta: {
+    canonicalName: string;   // 中文名，人类可读（如 "爸妈"）
+    aliases: string[];        // 别名
+    slug: string;             // opaque hash（如 "jx3k"），程序标识
+    firstSeen, lastSeen, mentionCount;
+  };
+  summary: string;
+  traits: string[];                     // 特质（来自 diary 的 note 字段）
+  preferences: string[];
+  interactions: Interaction[];          // {date, entryId, event} ← entryId 反链日记！
+  relationshipState: RelationshipState[]; // {date, state} ← 只记变化，不每条重复
+}
+```
+
+#### 关键设计
+
+- **canonicalName vs slug 双轨**：文件名用 canonicalName（中文，给人看），程序内部用 slug（opaque hash，稳定标识）。`toSlug` 对中文做 hash 兜底，`cleanName` 保留中文做文件名。
+- **interactions 反链日记**：每条 interaction 带 `entryId`，能追溯到是哪条日记产生的--**人物 ↔ 日记双向链接**。
+- **relationshipState 只记变化**：连续多次"父母"只记一条，状态改变（如"分手"->"复合"）才追加--时序追踪关系演变，不堆冗余。
+- **specific 分流**：专有名字（爸妈/王总）自动归档；模糊称谓（朋友/同事/老板）留给 curation 人审。
+- **mergeProfiles 人审补漏**：当 profile-curation 的 side-call 漏判（没提议合并同一人的两个档案），可用手动合并兜底。
+
+### 22. 决策顾问（decide）
+
+当你请 LICode 帮忙做决定、拿主意时，它会调用 `decide` 工具，**汇聚你的历史决定、相关事实、人物立场和近期日记**，给出有依据的分析。
+
+#### gatherDecisionContext：五块上下文
+
+```
+decide(topic="换工作", people=["爸妈"])
+        │
+        ├─ 历史相关决定：话题匹配的历史 decisions（无匹配则兜底近期决定）
+        ├─ 相关事实：话题匹配 entry 的 facts
+        ├─ 相关人物：topic/people 提到的人的档案（特质/喜好/关系/互动）
+        ├─ 近期日记：最近 5 条日记标题
+        └─ 分析指引（FRAMING）  ← 始终保留在末尾，截断也不丢
+```
+
+#### B/C framing：两种回答模式
+
+| 模式 | 触发条件 | 回答形态 |
+|------|---------|---------|
+| **B 式（默认）** | 证据充足 | 列 2-3 条可选路径，各自利弊与风险，最后给一个**倾向性建议**（基于用户历史与处境） |
+| **C 式（降级）** | 证据不足/互相矛盾/超出可判断范围 | **不硬编模糊答案**--把事实与各方立场摆清，明说"目前信息不足以给倾向建议"，把判断权交还用户 |
+
+> 💡 这是刻意设计的安全阀：避免 AI 在信息不足时编造"貌似有理"的建议。C 式比胡乱给建议更诚实、更可信。
+
+#### decide_save：两步 gating
+
+```
+decide 给出分析
+   -> 必须询问"要不要把这次决策记下来？"
+   -> 用户明确同意 -> 才调 decide_save
+   -> 用户拒绝/不回应 -> 不保存，绝不主动调 decide_save
+```
+
+`decide_save` 用 `buildDecisionEntry` 构造一条 `DiaryEntry`（title=【决策】topic），**直接写入 journal（日记）**，不进 memory。理由：决策是"发生在某时的 contextual 事件"，不是"永久事实"，放日记比污染记忆更合适。
+
+### 23. 整理系统（Curation）
+
+低 promotability 的候选和模糊人物，不会自动提升，而是进入**人审整理**流程：
+
+```
+/diary-curate          ← 列出待整理候选（futureMemory + 模糊人物）
+        │
+        ▼
+MemoryCuration.curate（side-model）
+   把一批候选合并成少数连贯的长期记忆（窄档：只在这批内合并，不碰库里已有）
+        │
+        ▼
+/diary-curate apply    ← 人审确认后落盘
+```
+
+`ProfileCuration` 同理处理人物候选（合并同人异名、提炼特质）。`CurationSession` 维护一次整理会话的状态（候选 -> 提案 -> 应用），`handleCurationInput` 分发命令。
+
+**与 dream 的区别**：curation 是**人审、窄档、即时**（用户主动触发，只整理当前候选）；dream 是**自动、全库、定期**（后台跑，整理整个记忆库）。两者互补。
+
+---
+
+## 亮点功能与简历项目（STAR 法则）
+
+> 这一节把 LICode 最有技术含量的设计梳理成可写进简历的项目条目，每条按 **STAR（Situation/Task/Action/Result）** 展开。简历上可用每节开头的「一句话 bullet」，面试时再展开 STAR 细节。
+
+### 亮点 1：跨会话持久记忆系统（生产-召回-做梦整理三层闭环）
+
+**简历 bullet**：设计并实现 AI 助手的跨会话持久记忆系统--双路径生产（主 Agent 直写 + 后台 LLM 提取，5 分钟冷却/互斥锁/mtime 检测防重复）+ side-query 严格召回（合成 tool_call 注入，每轮剪除防 token 累积，失败零干扰降级）+ 四阶段"做梦"整理（自动归档 >30 天未用记忆），使无关问题零成本、相关问题精准注入。
+
+- **Situation**：AI 对话助手普遍"失忆"--会话结束即丢失上下文，用户每次都要重述偏好/项目背景。已有方案要么只存不召回（变成"只进不出的记事本"），要么召回粗糙（关键词匹配、无关记忆干扰对话、token 持续累积）。
+- **Task**：设计一套跨会话记忆系统，能自动生产、按需召回、定期整理，且**不干扰主对话、不浪费 token、不出现矛盾**。
+- **Action**：
+  - **生产层双路径**：明确指令（"记住：…"）由主 Agent 当场直写；日常对话由 `after:agentLoop` hook 后台 LLM 提取。提取带 5 分钟冷却、问句排除、互斥锁（防并发）、mtime 检测（主 Agent 已写则跳过，防重复）。
+  - **矛盾处理**：提取 prompt 携带现有记忆**正文**（非索引），LLM 发现冲突时输出 `update` 整体改写旧文件，以最新为准--从结构上避免"喜欢/不喜欢"矛盾并存。
+  - **召回层**：`onTurnStart` 挂点，side-query 小模型用**严格过滤 prompt**（默认不召回，3 条相关性条件 + 3 条不相关条件）选 ≤5 条，把正文作为**合成 tool_call 对**注入（不拼消息--角色严格交替、全 provider 兼容、TUI 透明可见）。每轮**剪除上一轮召回对**，防 token 累积。
+  - **做梦整理**：四阶段 Orient（找漂移/重复）-> Gather（无 LLM grep 证据）-> Consolidate（出 create/update/append/delete ops + 自动归档 >30 天未用且非 pinned 的记忆）-> Prune（重建索引）。零 LLM 门（24h + ≥5 新会话才触发），fire-and-forget 不阻塞用户，失败不更新 state 可重试。
+  - **日期归一化三处封堵**：extractor prompt 注入日期 + `save()` 程序化归一化 + Write-path hook（主 Agent 用 Write 工具直写时补归一化），消除"昨天/上周"导致的记忆错乱。
+- **Result**：记忆从"只进不出的记事本"升级为"会更新、会召回、不打扰"的完整闭环；无关问题（如"帮我重构函数"）零召回零成本，相关问题精准注入正文；矛盾自动消解，旧记忆自动归档不堆积。
+
+### 亮点 2：第二大脑日记系统（结构化提取 + 三层提升 + 双向链接）
+
+**简历 bullet**：实现第二大脑日记系统--side-model LLM 将口述日记结构化为 facts/decisions/emotions/people/futureMemory 候选；设计 importance×promotability 双维度提升门，将候选分流到 auto-promote（自动提升为记忆）/ auto-file（自动归档为人物档案）/ curation（人审整理）三层；CuratedIndex 去重协调三层；日记与人物档案通过 entryId 双向链接。
+
+- **Situation**：个人日记/记录散落各处，写完即忘，无法被 AI 复用，也无法沉淀为长期记忆和人物关系。
+- **Task**：把"口述日记"变成可被 AI 结构化理解、可自动沉淀为长期记忆和人物档案的"第二大脑"。
+- **Action**：
+  - **结构化提取**：`DiaryExtractor` 用独立 side-model（不占主对话）把口述拆成 facts/decisions/emotions/people/futureMemory，候选带 importance + promotability 双维度。提取规则：不臆造、推断必标注、相对日期转绝对。
+  - **三层提升**：`autoPromoteEntry` 对 high-importance 候选 `deriveMemory` 直写记忆；`autoFileEntry` 对 specific 人物写档案（interaction 带 entryId 反链日记，relationshipState 只记变化）；low-promotability 走 `/diary-curate` 人审。
+  - **CuratedIndex 去重**：`.curated.json` 用 `{entryId}#c{i}`/`#p{i}` 键记录已处理候选，三层共用，防重复提升/归档/整理。
+  - **可读文件名与 id 解耦**：文件名=日期+时间+标题（人可读），id=opaque（程序标识），重命名不破坏引用。
+- **Result**：日记从"死文本"变成会自动沉淀为记忆和人物档案的"活"数据；高价值信息自动入库，低价值信息留待人审，不丢也不噪音。
+
+### 亮点 3：长对话上下文管理（Phase 1-5，校准式计数 + git 指针恢复 + 滚动摘要）
+
+**简历 bullet**：设计并实现长对话上下文管理（分 5 期演进）--校准式 token 计数（char-class 启发式 + EMA 在线学习 ratio，零新依赖）替代 tiktoken；按轮次边界切分压缩（结构上规避孤立 tool_result 报错）；用 git blob `hash-object -w` 做被压缩文件全文的恢复指针（不产生 commit，内容寻址 + 天然去重）；滚动演化摘要 + 三层选择性保留 + 三层降级永不中断主循环。
+
+- **Situation**：长对话 token 涨上去撞 `maxTokens` 硬墙直接 `TerminationError` 终止，无摘要续命、无降级；token 计数是粗略启发式不可信；`trimToBudget` 按下标切会孤立 tool_result 导致 API 报错；工具大段输出全量灌进上下文。
+- **Task**：让长对话从"撞墙即死"变为"摘要续命"，且压缩不丢关键信息、不破坏消息结构、不中断主循环。
+- **Action**：
+  - **校准式计数**（Phase 1）：不引入 tiktoken（对 Claude/DeepSeek 仅近似且违背零新依赖），用 char-class 估算 + 内嵌 `TokenCalibrator`（EMA 在线学习 ratio，用真实 `usage.input_tokens` 校准），后端无关。
+  - **结构感知压缩**（Phase 2+3）：`splitIntoTurns` 按 UserMessage 边界切轮，tool 对/recall 对天然在轮内不被切断，**从结构上**规避孤立 tool_result。摘要用 `assistant` 角色放首条 user 之后（不能用 system--会被提顶层乱序；不能放第一条--数组 assistant 开头 API 报错）。
+  - **git 指针恢复**（Phase 5）：被压缩掉的 write 全文，用 `git hash-object -w --stdin` 写成 git blob 对象（**不产生 commit**），返回 40 位 hash 作恢复指针；同内容同 hash 天然去重；非 git 环境 sha1 落盘回退。
+  - **滚动演化摘要**（Phase 5）：旧摘要显式传给合并调用（非从零重摘），一次 side-call 同时干分类 + file_change 描述符 + 滚动合并三件事；important 轮在摘要里简短引用，被预算 shed 后仍有退路。
+  - **三层降级**：side-call 失败 -> 降级 trim（丢中间、折 firstUser 进 recent）；`maxTokens` 从"一超即死"降为"压缩后仍超的最终兜底"，永不中断主循环。
+- **Result**：长对话可持续续命不撞墙；压缩按结构边界切不报错；被压缩的文件全文可经 git blob 精确恢复；token 计数后端无关且自校准。
+
+### 亮点 4：决策顾问工具（多源汇聚 + B/C framing + 两步 gating）
+
+**简历 bullet**：实现决策顾问工具--汇聚历史决定/事实/人物档案/近期日记构建决策上下文，设计 B/C framing（证据充足给倾向建议，不足则降级摆清事实交还判断权，不硬编模糊答案）；两步 gating（用户确认才落盘，直写日记不污染记忆）。
+
+- **Situation**：用户请 AI 帮忙做决定时，AI 往往要么给空洞建议、要么在信息不足时编造"貌似有理"的判断，且决策记录无处沉淀。
+- **Task**：让 AI 的决策建议**有依据（基于用户历史）**、**知边界（信息不足时坦诚降级）**、**可沉淀（用户确认后记入日记）**。
+- **Action**：
+  - `gatherDecisionContext` 汇聚五块：话题匹配的历史决定、相关事实、相关人物档案（特质/喜好/关系）、近期日记、分析指引。截断只截上下文，framing 始终保留。
+  - **B/C framing**：B 式（默认）列 2-3 可选路径 + 利弊 + 倾向建议；C 式（证据不足/矛盾/超范围）摆清事实明说"信息不足"，把判断权交还用户。
+  - **两步 gating**：decide 给分析 -> 必须问"要不要记下来" -> 用户明确同意 -> 才调 `decide_save`；`buildDecisionEntry` 构造 DiaryEntry 直写 journal，不进 memory。
+- **Result**：决策建议从用户真实历史出发而非泛泛而谈；信息不足时坦诚降级而非编造；决策按用户意愿沉淀为可追溯的日记条目，不污染永久记忆。
+
+### 亮点 5：ReAct Agent 引擎 + 洋葱模型事件管线 + 双事件通道
+
+**简历 bullet**：构建 ReAct（推理-行动）Agent 引擎与洋葱模型事件管线--双事件通道（Pipeline 编排 user-message + EventBus 流式播报 UI），三步终止保护（步数/Token/超时）；诊断并修复 token 计数断链（agent-loop 路径不发 llm-response-complete，改挂 EventBus 的 agent-loop-complete）。
+
+- **Situation**：需要一个能自主推理、调用工具、多轮循环的 Agent 核心，且 UI 要实时流式更新，token 要准确显示。
+- **Task**：设计清晰的引擎与事件架构，职责分离，可扩展，且修复 token 显示断链。
+- **Action**：
+  - **ReAct 循环**：用户输入 -> LLM 推理 -> 工具调用 -> 结果注入 -> 继续循环，直到终止。三步保护：maxSteps 50 / maxTokens 200K / maxTimeMs 10 分钟。
+  - **双事件通道**：Pipeline（洋葱模型中间件链）只过 `user-message` 一个事件，职责是"预处理->跑循环->后处理"；EventBus 是循环内部的流式通道，每步 emit（llm-token/tool-execute/agent-loop-complete）更新 UI。`createAgentLoopMiddleware` 把 eventBus 注入 loop--**pipeline 包住 loop，loop 驱动 eventBus**。
+  - **token 断链诊断**：原 `tokenCountingMiddleware` 监听 `llm-response-complete`，但 agent-loop 路径根本不发该事件（只在旧 generateChatEvents 路径才有），导致状态栏恒显 0。修复：改挂 EventBus 的 `agent-loop-complete`（每轮必发且带 usage）和 `context-compressed` 分支。
+- **Result**：引擎职责清晰、UI 实时流式、token 准确显示；架构可扩展（MCP/Skills/Hooks/记忆均挂载于明确挂点）。
+
+### 亮点 6：多智能体协作 + Git Worktree 隔离 + 统一扩展体系
+
+**简历 bullet**：设计多智能体协作（子 Agent 在独立 Git Worktree 隔离执行，文件系统互不干扰）与统一扩展体系（MCP 协议接入外部工具 + Skills 领域专长 + Hooks 生命周期钩子 + Slash 命令），全部统一注册到 ToolRegistry。
+
+- **Situation**：复杂任务需并行拆解，子 Agent 改文件会互相冲突；外部工具、领域专长、生命周期自动化缺乏统一接入点。
+- **Task**：让多 Agent 安全并行，让扩展能力统一可插拔。
+- **Action**：
+  - **Git Worktree 隔离**：每个子 Agent 获得独立 git worktree（`.licode/worktrees/licode/{name}/`），在隔离工作区改文件，互不干扰；完成后父 Agent 收集结果，可 merge 或 discard。
+  - **统一 ToolRegistry**：内置 6 工具 + MCP 工具（`mcp__{server}__{tool}`）+ Skills 工具（`skill__{tool}`）统一注册，Zod schema 校验参数，PermissionGuard 权限检查，`executeParallel` 并发执行。
+  - **Skills/Hooks/Slash**：Skills 注入 system prompt 层（priority 15）+ 专属工具；Hooks 在 `before/after:agentLoop` 执行 Shell 命令；CommandRouter 拦截 `/` 命令。
+- **Result**：复杂任务可安全并行拆解；外部能力即插即用；权限与沙箱三层防护（系统提示词 + PermissionGuard + macOS sandbox-exec）。
+
+---
+
+## 面试深挖问答（通俗到详细）
+
+> 这一节站在面试官角度，对每个亮点预判追问，并给出「先通俗再详细」的答案。**通俗**用类比让非专家听懂，**详细**给出准确的机制与权衡。
+
+### 记忆召回（Recall）
+
+**Q1：为什么不把相关记忆直接拼进 system prompt 或用户消息，而要用"合成 tool_call"？**
+
+- **通俗**：就像你问朋友问题，朋友"想起"某件事--你不能把"想起的过程"塞进朋友嘴里（改他说的话），也不能偷偷改他的世界观（system prompt）。LICode 的做法是让助手"做个查记忆的动作"，把查到的内容作为工具结果放在你的问题后面，助手从那里接着回答--既不改你的原话，也不动系统设定。
+- **详细**：三个原因。① 不改 system prompt：system prompt 是分层组装的，每轮往里塞正文会破坏分层裁剪逻辑且 token 累积；② 不改用户原文：保留用户消息原样便于调试和恢复；③ 消息角色严格交替：Anthropic API 要求 user/assistant 严格交替，合成 `assistant(tool_use) + user(tool_result)` 对天然合法，所有 provider 兼容。附带好处：TUI 把它渲染成 `[调用工具: memory_recall]` 卡片，召回过程**透明可见**。
+
+**Q2：每轮都注入记忆，token 不会越积越多吗？**
+
+- **通俗**：不会。每轮开始前，LICode 先把上一轮"查记忆"的那对消息**剪掉**，再决定这轮要不要查新的--历史里任意时刻最多只有一对召回消息。
+- **详细**：`onTurnStart` 回调分四步：① 刷新索引层（内容变了才更新）② `pruneRecallMessages` 剪除上一轮的合成对（按 `memory_recall` tool 名 + tool_use_id 定位，处理 restored session 里历史中间的对）③ side-query 选 ≤5 条 ④ 注入新对。所以 token 不累积，每轮开销恒定。
+
+**Q3：side-query 召回失败或超时了怎么办？会不会卡住对话？**
+
+- **通俗**：不会。查记忆这件事是"锦上添花"，查不到就当没查--对话照常进行，只是这轮不注入记忆。
+- **详细**：三层 best-effort，永不抛异常。① `MemoryRecall.select` 整体 try/catch，LLM 错误/超时（10s，用 `Promise.race` 计时器）-> 返回空数组；② 索引为空 -> 根本不发起 LLM 调用（零成本）；③ `createMemoryRecallHandler` 最外层 try/catch，任何异常都不阻断 loop。降级后本轮只剪除不注入，退回"仅索引"模式（system prompt 里仍有 MEMORY.md 索引）。`LICODE_MEMORY_RECALL=off` 可整体关闭。
+
+**Q4：用户改口了（先说喜欢红烧排骨，后说不喜欢了），记忆会矛盾并存吗？**
+
+- **通俗**：不会。提取时 LICode 把**已有的记忆全文**都给 LLM 看，LLM 发现"不喜欢了"和旧的"喜欢"冲突，就直接把旧文件**整体改写**成最新的，不会两条并存。
+- **详细**：这是 Phase 1 生产层的关键设计--提取 prompt 携带现有记忆的**正文**（而非仅索引），LLM 输出 `update` action 时 `MemoryStore.save(memory, "update")` 整体替换正文（保留 createdAt、刷新 updatedAt）。如果是补充而非冲突，用 `append`（段落级去重合并）。`create` 在目标已存在时**防御性降级为 append**，绝不丢旧内容。
+
+### 做梦整理（Dream）
+
+**Q5：为什么要"做梦"整理记忆，不能实时整理吗？**
+
+- **通俗**：实时整理太贵也太干扰--你每说一句它就翻一遍整个记忆库，既慢又可能在你对话时改东西。所以模仿人脑：白天记（生产/召回），晚上睡觉时统一整理（dream），且只在"攒够了新材料"时才做。
+- **详细**：`shouldDream` 是**零 LLM 门**：距上次整理 ≥24h **且** 自上次起有 ≥5 个新会话才触发。整理是 fire-and-forget（hook 立即返回，不 await），用户从不被阻塞。四阶段 Orient->Gather->Consolidate->Prune 只在 Consolidate 用 LLM，Gather 是纯 grep（无 LLM 成本）。
+
+**Q6：dream 会误删我的记忆吗？怎么保证安全？**
+
+- **通俗**：三重保险。① 删除前先备份到 `.dream-backup/`；② 超过 30 天没用过的记忆只是"归档"（移到 archive 区，能恢复），不是删除；③ 你标记为 pinned 的记忆永远不会被归档。
+- **详细**：① `backupAndDelete` 在 delete 前把文件 + MEMORY.md 拷到 `.dream-backup/{type}/`；② Phase 4 自动归档用 `archive()`（软删除，移到 `archive/{type}/`，`/memory-restore` 可恢复），归档候选判定用 `lastUsedAt`（不是 createdAt--避免召回关闭时误归档所有从未召回的记忆），pinned 是硬条件排除；③ dream 整体永不 reject，失败时**不更新 `.dream.state`**，下次可重试。O_EXCL 原子锁 + 30 分钟过期覆盖，崩溃不永久阻塞。
+
+**Q7：dream 整理时和召回/提取并发写怎么办？**
+
+- **详细**：让位机制。`createMemoryRecallHandler` 在 `dreamState.running` 时跳过 `recordUsage`（避免与 dream consolidate 的写写竞态），但召回的**读路径**（select/inject）不让位（服务用户当轮）。提取 hook 同理检测 dream 运行状态。`recordUsage` 写回后用 `utimes` **恢复原 mtime**--这是关键技巧，否则召回计数会 bump mtime ≥ loopStartedAt，触发"主 Agent 已写则跳过提取"的误判。
+
+### 上下文压缩（Context Compression）
+
+**Q8：为什么不用 tiktoken 之类的真 tokenizer 算 token？**
+
+- **通俗**：tiktoken 是给 OpenAI 模型用的，对 Claude/DeepSeek 只是近似；而且引入它就多了一个依赖。LICode 的做法是先粗估，再用模型**真实返回的 token 数**不断校准这个估计--越用越准，且不绑定任何特定后端。
+- **详细**：`TokenCounter` 用 char-class 估算（CJK/字母数字/符号/空白四类不同权重）+ 内嵌 `TokenCalibrator`（EMA 在线学习 ratio：首次 `real/base`，后续 `0.7·ratio+0.3·sample`，clamp [0.5,4]）。`AgentLoop` 每轮把真实 `usage.input_tokens` 喂回 `observeUsage`。Phase 2 把 `base` 升级为含 system+tools（`getMessageTokenBase`），ratio 退化为 ≈1 的纯修正系数--把"缺 system/tools"从"靠乘数硬吸收"改成"显式纳入 base"。零新依赖、后端无关。
+
+**Q9：压缩时怎么切消息？按下标切到 maxTokens/2 不行吗？**
+
+- **通俗**：按下标切会切断"工具调用+工具结果"这对搭档--只留结果不留调用，API 直接报错。LICode 按"轮次"切，一整轮要么留要么丢，不会切断搭档。
+- **详细**：`splitIntoTurns` 在每个 UserMessage 前下刀，tool_use/tool_result 对和 memory-recall 合成对天然在轮内。旧 `trimToBudget` 就是按下标切且只认 user/assistant 文本对、忽略 tool 对，激活会孤立 tool_result，所以 Phase 2 直接移除了它。摘要用 `assistant` 角色放首条 user **之后**--不能用 system（`extractSystem` 会提顶层乱序）、不能放第一条（数组 assistant 开头 API 报错），这个位置让角色交替天然成立 + 语义准确（模型承接自己的历史）。
+
+**Q10：被压缩掉的文件全文（write 工具写的大段代码）就丢了？**
+
+- **通俗**：不丢。LICode 把被压缩掉的文件内容存进 git 的对象库（像 git 存文件那样），只留一个 hash 指针在对话里--需要时用 hash 取回全文。
+- **详细**：`getRecoveryPointer` 用 `git hash-object -w --stdin`（git 底层 plumbing 命令）把内容写成 **git blob 对象**，**不产生 commit**，返回 40 位 hash。同内容同 hash 天然去重，复用 git 对象库而非自建存储。非 git 环境用 `crypto.createHash("sha1")` 落盘 `.licode/overflow/` 回退。压缩时把 `[userText, assistant(tool_use), user(tool_result)]` 替换为 `[userText, assistant(file_change 笔记)]`--笔记含确定性字段（operation/path/stats/pointer）+ 模型填的描述符（symbols/summary.kind）。幂等：已是 file_change 笔记的轮不重复压缩。
+
+**Q11：压缩用的 LLM 挂了怎么办？**
+
+- **详细**：三层降级。① `CompressionAssistant.parse` 容错（剥 markdown fence、找首尾 `{}`），解析失败抛错；② `ContextCompressor.compress` 的 try/catch 降级 trim--只留 `recentFlat`，把首条 user 折进 `recent[0]`（`"[Earlier task: <firstUser>]\n\n<recent0>"`），`method="trim"`；③ 整个调用包在 loop 的 try 内。`maxTokens` 从"一超即死"降为"压缩后仍超的最终兜底"。永不中断主循环。
+
+### 第二大脑与决策顾问
+
+**Q12：futureMemory 候选为什么要 importance 和 promotability 两个维度？一个不够吗？**
+
+- **通俗**：importance 是"这事重不重要"，promotability 是"这事适不适合直接写成记忆"。比如"计划拿大厂 Offer"既重要又适合存（自动入库）；"对 Loop Engineering 有了了解"重要但不适合直接存（太泛，得人审整理）--两个维度分开才能正确分流。
+- **详细**：`autoPromoteEntry` 的自动门是 `type∈{preference,decision,goal} && importance==="high" && promotability!=="low"`。promotability:low 的候选即使重要也走 curation 人审（因为直接写成记忆质量差、需合并）。这把"高置信度自动入库"和"低置信度人审"分流，避免自动提升产生低质量记忆噪声。
+
+**Q13：decide 的 B/C framing 是什么？为什么不直接给建议？**
+
+- **通俗**：B 式是"我给你几个选项+利弊+我倾向哪个"；C 式是"信息不够，我把已知摆出来，你自己定"--总比不懂装懂瞎建议强。
+- **详细**：B 式（默认）列 2-3 可选路径 + 各自利弊风险 + 倾向建议（基于用户历史与处境）。C 式触发条件：证据不足/互相矛盾/超出可判断范围--不硬编模糊答案，把事实与各方立场摆清，明说"信息不足"，交还判断权。这是安全阀，避免 AI 在信息不足时编造"貌似有理"的建议。截断时只截上下文 bulk，framing 始终保留在末尾（保证 B/C 指引不丢）。
+
+**Q14：decide_save 为什么直写 journal 而不进 memory？**
+
+- **详细**：决策是"发生在某时的 contextual 事件"，不是"永久事实"。放日记（journal）它能被 `journal_recall` 按话题召回、被未来 decide 汇聚为"历史决定"；放 memory 会污染永久记忆库（每次决策都成一条记忆，很快膨胀）。gating 也是两步：decide 给分析 -> 必须问"要不要记下来" -> 用户明确同意 -> 才调 decide_save，绝不主动保存。
+
+### 工程与架构
+
+**Q15：LICode 怎么保证代码质量？**
+
+- **详细**：用 `omh.config.yaml` 定义的严格 TDD 工作流构建自身：implement-with-tdd（先写一个聚焦测试看红）-> local-tests（`pnpm test`）-> local-build（`pnpm build`）-> fix（失败自动修复，无限重试）-> deliver。规则：每个行为变更先写测试看红、最小改动转绿、重构保持全绿、交付前 test+build 必过。记忆/日记/上下文等核心模块都有 round-trip、纯函数、降级路径的单测。
+
+**Q16：这个项目的分层和可测试性怎么保证的？**
+
+- **详细**：核心逻辑抽成纯函数（如 `gatherDecisionContext`、`buildDecisionEntry`、`deriveMemory`、`pruneRecallMessages`、`buildRecallPair`、`splitIntoTurns`、`classifyMiddleTurns`），副作用（文件 IO、LLM 调用）通过依赖注入（`generate: (prompt)=>Promise<string>` 回调、`now: ()=>Date`）。这样纯逻辑可单测（不依赖文件/网络），集成层只做接线。`pnpm -r` monorepo（core/cli/spec-kit）分层，core 不依赖 cli。
+
+---
+
 ## 产物与目录结构
 
 使用 LICode 时，它会在你的项目里创建一系列文件和目录。了解每个文件和目录的作用，可以帮助你更好地管理和维护项目。
@@ -984,7 +1377,15 @@ updatedAt: 2026-07-28T09:30:00.000Z
 │   │   ├── feedback/                 ← 协作纠正类记忆（含 Why / How to apply）
 │   │   │   └── use-pnpm.md
 │   │   ├── project/                  ← 项目背景类记忆
-│   │   └── reference/                ← 外部系统入口类记忆
+│   │   ├── reference/                ← 外部系统入口类记忆
+│   │   └── archive/                  ← dream 自动归档区（>30d 未用，可 /memory-restore 恢复）
+│   ├── journal/                      ← 第二大脑日记（详见 §20）
+│   │   ├── .curated.json             ← 已处理候选去重索引（自动维护）
+│   │   └── 2026-08-01/               ← 按日期目录
+│   │       └── 2026-08-01-2118-学习规划.md  ← 可读文件名（日期+时间+标题）
+│   ├── people/                       ← 人物档案（详见 §21，文件名用中文 canonicalName）
+│   │   └── 爸妈.md
+│   ├── overflow/                     ← 工具输出溢出落盘（>64KB，见 §10）
 │   ├── mcp/
 │   │   └── config.json               ← MCP 服务端配置
 │   ├── hooks.json                    ← 生命周期钩子配置
@@ -1192,6 +1593,10 @@ specs/用户通知功能/
 | `/clear` | 清空当前对话历史 |
 | `/context` | 显示 token 用量和会话信息 |
 | `/memory`、`/memory-list`、`/memory-add`、`/memory-delete` | 记忆管理：查看、手动添加、删除 |
+| `/memory-archive`、`/memory-restore`、`/memory-pin`、`/memory-unpin` | 记忆归档/恢复/置顶（pinned 永不自动归档，见 §17） |
+| `/diary`、`/diary-end` | 进入/结束日记模式（第二大脑，见 §20） |
+| `/diary-list`、`/diary-find`、`/diary-show` | 列出/搜索/查看日记 |
+| `/diary-curate` | 人审整理日记候选到记忆/档案（`/diary-curate apply` 确认，见 §23） |
 | `/subagent` | 开关子 Agent 功能 |
 
 ### Spec 子命令
@@ -1237,6 +1642,9 @@ specs/用户通知功能/
 | `ANTHROPIC_API_KEY` | API 密钥 | ✅ 是 |
 | `ANTHROPIC_BASE_URL` | API 地址（使用第三方兼容 API 时设置） | 否 |
 | `LICODE_MEMORY_RECALL` | 设为 `off` 时关闭每轮记忆召回（side query），退回仅索引模式（见架构原理 §17） | 否 |
+| `LICODE_DIARY_ENABLED` | 设为 `1`/`true` 时启用第二大脑日记捕获（默认关，见 §20） | 否 |
+| `LICODE_DIARY_MODEL` | 日记结构化提取用的 side 模型（默认 `deepseek-chat`） | 否 |
+| `LICODE_DIARY_CURATE_MODEL` | 整理（curation）side 模型（默认同 `LICODE_DIARY_MODEL`） | 否 |
 
 ### 项目配置文件
 
@@ -1304,6 +1712,38 @@ specs/用户通知功能/
 示例：grep { pattern: "useState", path: "src/", include: "*.tsx" }
 ```
 
+### decide - 决策顾问
+
+```
+参数：topic（决策话题关键词）、people（相关人名，可选）
+示例：decide { topic: "换工作", people: ["爸妈"] }
+```
+> 汇聚历史决定/事实/人物档案/近期日记给分析（B/C framing）。详见 §22。用户确认后用 decide_save 记录。
+
+### decide_save - 记录决策
+
+```
+参数：topic、decision（结论）、reasoning（理由与分析）、people（可选）
+示例：decide_save { topic: "换工作", decision: "暂不跳槽", reasoning: "当前项目未结项..." }
+```
+> 仅在用户明确同意后调用，直写 journal 不进 memory。详见 §22。
+
+### journal_recall - 回忆日记
+
+```
+参数：query（话题/关键词）
+示例：journal_recall { query: "家庭通话" }
+```
+> 按话题搜索历史日记条目，返回匹配的 entries。
+
+### profile_recall - 回忆人物
+
+```
+参数：name（人名）
+示例：profile_recall { name: "爸妈" }
+```
+> 查找人物档案（特质/喜好/关系状态/互动历史）。
+
 ---
 
 ## 场景 Recipes
@@ -1367,7 +1807,7 @@ LICode 的定位是"能自主完成复杂开发任务的终端 AI 助手"，而�
 
 **Q: 如何让 LICode 记住我的偏好？**
 
-直接说"记住：我喜欢用 pnpm 而不是 npm"，主 Agent 会当场写入记忆文件；日常对话中的偏好、纠正和决策（如"不对，以后都用 pnpm"）也会由后台在每轮结束后自动提取——不再依赖关键词。改口也不用担心：新信息与旧记忆冲突时会直接改写旧文件，以最新为准。之后每轮对话，相关记忆的正文会被自动召回注入（显示为 `[调用工具: memory_recall]` 卡片）；无关问题不会打扰。存储在 `.licode/memory/` 下，可用 `/memory-list` 查看、`/memory-delete` 删除。原理详见 [架构原理 §17](#架构原理) 与 [Recipe 6](recipes/memory-preferences.md)。
+直接说"记住：我喜欢用 pnpm 而不是 npm"，主 Agent 会当场写入记忆文件；日常对话中的偏好、纠正和决策（如"不对，以后都用 pnpm"）也会由后台在每轮结束后自动提取——不再依赖关键词。改口也不用担心：新信息与旧记忆冲突时会直接改写旧文件，以最新为准。之后每轮对话，相关记忆的正文会被自动召回注入（显示为 `[调用工具: memory_recall]` 卡片）；无关问题不会打扰。存储在 `.licode/memory/` 下，可用 `/memory-list` 查看、`/memory-delete` 删除；长期不用的记忆会被 dream 自动归档（`/memory-restore` 恢复、`/memory-pin` 置顶永不归档）。原理详见 [架构原理 §17](#架构原理) 与 [Recipe 6](recipes/memory-preferences.md)。
 
 **Q: 会话数据包含敏感信息吗？如何保护？**
 
