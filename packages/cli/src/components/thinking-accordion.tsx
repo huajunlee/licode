@@ -1,19 +1,19 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Box, Text } from "ink";
-import { COLORS } from "../theme.js";
+import { COLORS, ICONS } from "../theme.js";
 
 // ---- Purpose inference (pure function, testable) ----
 
 // English stems + Chinese equivalents. \b only works for ASCII;
 // Chinese characters match positionally without word boundaries.
 const CATEGORIES: Array<[RegExp, string]> = [
-  [/\b(read|look|view)|读取|看看|查看|浏览|阅读|检查/, "📖 正在读取代码"],
-  [/\b(search|find|grep|locate)|搜索|查找|寻找|找找|定位/, "🔍 正在搜索代码库"],
-  [/\b(edit|modify|writ|updat|chang|fix|refactor|implement)|修改|改|编辑|写|重写|更新|实现|修复|添加|删除/, "✏️ 正在编辑文件"],
-  [/\b(analyz|analys|understand|debug|diagnos|investigat|think|reason)|分析|理解|了解|调试|思考|推理|排查/, "🤔 正在分析逻辑"],
+  [/\b(read|look|view)|读取|看看|查看|浏览|阅读|检查/, "读取代码"],
+  [/\b(search|find|grep|locate)|搜索|查找|寻找|找找|定位/, "搜索代码库"],
+  [/\b(edit|modify|writ|updat|chang|fix|refactor|implement)|修改|改|编辑|写|重写|更新|实现|修复|添加|删除/, "编辑文件"],
+  [/\b(analyz|analys|understand|debug|diagnos|investigat|think|reason)|分析|理解|了解|调试|思考|推理|排查/, "分析逻辑"],
 ];
 
-const FALLBACK_PURPOSE = "🤔 思考中";
+const FALLBACK_PURPOSE = "思考中";
 
 export function inferPurpose(reasoning: string): string {
   for (const [pattern, label] of CATEGORIES) {
@@ -39,6 +39,18 @@ interface ThinkingAccordionProps {
 // ---- Component ----
 
 export function ThinkingAccordion({ blocks, focusedIndex }: ThinkingAccordionProps) {
+  const [frame, setFrame] = useState(0);
+  const anyStreaming = blocks.some((b) => b.isStreaming);
+
+  useEffect(() => {
+    if (!anyStreaming) return;
+    const timer = setInterval(
+      () => setFrame((f) => (f + 1) % ICONS.spinnerFrames.length),
+      100
+    );
+    return () => clearInterval(timer);
+  }, [anyStreaming]);
+
   if (blocks.length === 0) return null;
 
   return (
@@ -52,17 +64,16 @@ export function ThinkingAccordion({ blocks, focusedIndex }: ThinkingAccordionPro
         return (
           <Box key={block.id} flexDirection="column">
             <Box>
-              <Text color={isFocused ? COLORS.info : undefined} dimColor={!isFocused}>
-                {isFocused ? "▸ " : "  "}
-                {block.isStreaming ? "🤔 正在推理中..." : block.purpose}
-                {block.isStreaming && (
-                  <Text color={COLORS.warning}> ⏳</Text>
-                )}
+              <Text color={isFocused ? COLORS.accent : COLORS.muted}>
+                {isFocused ? `${ICONS.expand} ` : "  "}
+                {block.isStreaming
+                  ? `思考中… ${ICONS.spinnerFrames[frame]}`
+                  : block.purpose}
               </Text>
             </Box>
             {isExpanded && block.reasoning.length > 0 && (
               <Box marginLeft={4} marginBottom={1}>
-                <Text dimColor>{block.reasoning}</Text>
+                <Text color={COLORS.muted}>{block.reasoning}</Text>
               </Box>
             )}
           </Box>
