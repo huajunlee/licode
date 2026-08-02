@@ -1,52 +1,60 @@
 import React from "react";
 import { Box, Text } from "ink";
 import type { Message } from "@licode/core";
-import { COLORS } from "../theme.js";
+import { classifyMessage, toolNames } from "./message-classify.js";
+import { MarkdownText } from "./markdown-text.js";
+import { COLORS, ICONS } from "../theme.js";
 
 interface ChatViewProps {
   messages: Message[];
 }
 
-function renderContent(msg: Message): string {
-  if (typeof msg.content === "string") {
-    return msg.content;
-  }
-  // ToolUseMessage or ToolResultMessage
-  if (msg.role === "assistant") {
-    // ToolUseMessage: content is ToolUseBlock[]
-    const names = msg.content.map((b: { name: string }) => b.name).join(", ");
-    return `[调用工具: ${names}]`;
-  }
-  // ToolResultMessage: content is ToolResultBlock[]
-  return msg.content
-    .map(
-      (b: { content: string; is_error?: boolean }) =>
-        `${b.is_error ? "✗" : "✓"} ${b.content.slice(0, 100)}`
-    )
-    .join("\n");
-}
-
 export function ChatView({ messages }: ChatViewProps) {
-  if (messages.length === 0) {
+  const visible = messages.filter((m) => {
+    const kind = classifyMessage(m);
+    return kind === "user" || kind === "assistant-text" || kind === "tool-use";
+  });
+
+  if (visible.length === 0) {
     return (
       <Box marginBottom={1}>
-        <Text dimColor>开始对话...</Text>
+        <Text color={COLORS.faint}>开始对话…</Text>
       </Box>
     );
   }
 
   return (
     <Box flexDirection="column" marginBottom={1}>
-      {messages
-        .filter((m) => m.role !== "system")
-        .map((msg, i) => (
-          <Box key={i} flexDirection="column" marginY={1}>
-            <Text color={msg.role === "user" ? COLORS.primary : undefined}>
-              {msg.role === "user" ? "> " : ""}
-              {renderContent(msg)}
-            </Text>
+      {visible.map((msg, i) => {
+        const kind = classifyMessage(msg);
+
+        if (kind === "user") {
+          return (
+            <Box key={i} marginTop={1}>
+              <Text color={COLORS.accent}>{ICONS.prompt} </Text>
+              <Text>{msg.content as string}</Text>
+            </Box>
+          );
+        }
+
+        if (kind === "tool-use") {
+          return (
+            <Box key={i} marginLeft={2}>
+              <Text color={COLORS.muted}>
+                {ICONS.toolDone} 调用工具: {toolNames(msg)}
+              </Text>
+            </Box>
+          );
+        }
+
+        // assistant-text: ◆ marker aligned with the first content line
+        return (
+          <Box key={i} marginTop={1}>
+            <Text color={COLORS.accent}>{ICONS.assistant} </Text>
+            <MarkdownText>{msg.content as string}</MarkdownText>
           </Box>
-        ))}
+        );
+      })}
     </Box>
   );
 }
