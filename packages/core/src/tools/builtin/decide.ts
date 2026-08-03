@@ -144,7 +144,7 @@ export const decideTool: Tool<typeof DecideParams> = {
   name: "decide",
   description:
     "当用户请你帮忙做决定、拿主意，或征求意见/建议时调用（如\"帮我决定要不要…\"\"你觉得我该不该…\"\"给我点建议\"）。" +
-    "汇聚历史决定/事实/人物/近期日记供你给依据分析。闲聊、问事实、执行任务时不要调用。用户确认记下决策时用 decide_save。话题尽量写关键词便于匹配。",
+    "汇聚历史决定/事实/人物/近期日记供你给依据分析。闲聊、问事实、执行任务时不要调用。用户确认记下决策时用 decide_save。话题尽量写关键词便于匹配。仅用于简单决策（二选一、低 stakes、当前上下文够用、用户要快）；复杂决策（多维度权衡/高 stakes/需定向召回/多选项/长周期）用 decide_plan。",
   parameters: DecideParams,
   async execute(input, context) {
     try {
