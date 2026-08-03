@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Box, Text } from "ink";
-import { formatToolLine, truncate } from "./tool-line.js";
+import { formatToolLine, truncate, shouldExpandFull } from "./tool-line.js";
 import type { ToolCallState } from "./tool-line.js";
 import { COLORS, ICONS } from "../theme.js";
 
@@ -19,6 +19,7 @@ export function ToolCallCard({
   spinnerFrame,
 }: ToolCallCardProps) {
   const line = formatToolLine({ toolName, status, detail, result });
+  const expandFull = shouldExpandFull(toolName, status, result);
 
   return (
     <Box flexDirection="column">
@@ -27,14 +28,16 @@ export function ToolCallCard({
         <Text bold>{line.name}</Text>
         {line.detail !== "" && <Text color={COLORS.muted}>  {line.detail}</Text>}
         {status === "done" && <Text color={COLORS.success}> {ICONS.inlineOk}</Text>}
-        {line.summary !== "" && <Text color={COLORS.muted}> {line.summary}</Text>}
+        {line.summary !== "" && !expandFull && <Text color={COLORS.muted}> {line.summary}</Text>}
         {status === "running" && (
           <Text color={COLORS.muted}> 运行中 {spinnerFrame ?? ""}</Text>
         )}
       </Box>
-      {status === "error" && result && (
+      {(status === "error" || expandFull) && result && (
         <Box marginLeft={4}>
-          <Text color={COLORS.error}>{truncate(result, 200)}</Text>
+          <Text color={status === "error" ? COLORS.error : COLORS.muted}>
+            {status === "error" ? truncate(result, 200) : result}
+          </Text>
         </Box>
       )}
     </Box>

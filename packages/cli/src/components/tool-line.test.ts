@@ -49,3 +49,24 @@ describe("formatToolLine", () => {
     expect(displayWidth(line.summary)).toBeLessThanOrEqual(40);
   });
 });
+
+import { shouldExpandFull } from "./tool-line.js";
+
+describe("shouldExpandFull", () => {
+  it("decide_plan done + result -> true", () => {
+    expect(shouldExpandFull("decide_plan", "done", "plan text")).toBe(true);
+  });
+  it("decide_reflect done + result -> true", () => {
+    expect(shouldExpandFull("decide_reflect", "done", "verdict text")).toBe(true);
+  });
+  it("其他工具 done -> false", () => {
+    expect(shouldExpandFull("decide", "done", "ctx")).toBe(false);
+    expect(shouldExpandFull("bash", "done", "output")).toBe(false);
+  });
+  it("decide_plan 但无 result -> false", () => {
+    expect(shouldExpandFull("decide_plan", "done", undefined)).toBe(false);
+  });
+  it("decide_plan running -> false", () => {
+    expect(shouldExpandFull("decide_plan", "running", "x")).toBe(false);
+  });
+});
