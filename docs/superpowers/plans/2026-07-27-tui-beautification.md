@@ -2664,3 +2664,10 @@ A (补 Task 5，build 转绿) -> 6 -> 7 -> 8 -> 9 -> 10 -> 11 -> 12 -> 13 -> 14(
 **类型一致性：** `shouldSelectSuggestion(value, suggestions)`（14修订 定义 <-> input-box 调用）✓；`DiaryState`/`nextDiaryState`（diary-state 定义 <-> hooks 调用）✓；`DiarySession.getSegments()/getDate()`（session 定义 <-> diary-state 调用）✓；`DiaryPage` props（定义 <-> app.tsx 调用）✓；`diaryMode/diarySegments/diaryDate`（hooks 暴露 <-> app.tsx 解构）✓；`COLORS.diaryAccent`（theme 定义 <-> diary-page/status-bar 调用）✓。
 
 **依赖排序：** Task B Step 4 依赖 Step 2（getters）与 Step 3（reducer）；Step 5 依赖 Step 6（InputBox diaryMode）；Step 7 依赖 Step 5。顺序已排 ✓。
+
+
+---
+
+## 图标/emoji 决策补充（2026-08-02）
+
+用户最终裁定：**保留 v2 几何图标集**（❯ ◆ ● ◐ ○ ✗ ✓ ▸ ＋ │ ─ ✎），**移除所有 emoji**（含 master 功能代码里的 🌙 ✨ 👤 ⚠️ 🤔，含 dingbat-emoji ✨）。此裁定覆盖之前"✨ 允许"的约束。Task 15 已据此执行（commit 5fb2d41）：移除 legacy 主题别名 + 清扫全部 emoji。packages/cli/src 现仅余 v2 几何图标，无任何 emoji。

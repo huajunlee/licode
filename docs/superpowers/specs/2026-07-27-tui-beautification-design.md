@@ -414,3 +414,10 @@ diaryAccent: "#7DC9BF",  // 沉静青绿：日记/手账感，与琥珀 accent �
 - `shouldSelectSuggestion`（§10）：面板空 / 有项 / 已完整输入。
 - `diaryStateReducer`（§11）：进入 / 捕获 / 退出三态。
 - `theme.test.ts` 追加：`diaryAccent` 存在且为 hex truecolor。
+
+
+---
+
+## 图标/emoji 决策补充（2026-08-02）
+
+用户最终裁定：**保留 v2 几何图标集**（❯ ◆ ● ◐ ○ ✗ ✓ ▸ ＋ │ ─ ✎），**移除所有 emoji**（含 master 功能代码里的 🌙 ✨ 👤 ⚠️ 🤔，含 dingbat-emoji ✨）。此裁定覆盖之前"✨ 允许"的约束。Task 15 已据此执行（commit 5fb2d41）：移除 legacy 主题别名 + 清扫全部 emoji。packages/cli/src 现仅余 v2 几何图标，无任何 emoji。
