@@ -137,6 +137,33 @@ describe("ConversationManager", () => {
     expect(sessions).toEqual([]);
   });
 
+  describe("listSessions summary", () => {
+    it("extracts summary from the first string-content user message", async () => {
+      const dir = path.join(tmpDir, ".licode", "sessions-summary");
+      fs.mkdirSync(dir, { recursive: true });
+
+      const mgr = new ConversationManager({ id: "s-sum", model: "m" });
+      mgr.addUserMessage("修复登录 bug\n涉及 verifyToken");
+      await mgr.save(path.join(dir, "s-sum.json"));
+
+      const sessions = await ConversationManager.listSessions(dir);
+      expect(sessions).toHaveLength(1);
+      expect(sessions[0].summary).toBe("修复登录 bug 涉及 verifyToken");
+    });
+
+    it("returns undefined summary when no user message exists", async () => {
+      const dir = path.join(tmpDir, ".licode", "sessions-nosummary");
+      fs.mkdirSync(dir, { recursive: true });
+
+      const mgr = new ConversationManager({ id: "s-empty", model: "m" });
+      await mgr.save(path.join(dir, "s-empty.json"));
+
+      const sessions = await ConversationManager.listSessions(dir);
+      expect(sessions).toHaveLength(1);
+      expect(sessions[0].summary).toBeUndefined();
+    });
+  });
+
   it("getTokenCount and getMessageCount return correct values", () => {
     const mgr = new ConversationManager({ model: "test" });
     mgr.addUserMessage("Hello");

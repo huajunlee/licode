@@ -61,7 +61,7 @@ export const decideSaveTool: Tool<typeof DecideSaveParams> = {
       await store.save(entry);
       return {
         status: "success",
-        content: `✅ 已记下决策：${input.decision}（${entry.meta.date} ${entry.meta.id}）`,
+        content: `已记下决策：${input.decision}（${entry.meta.date} ${entry.meta.id}）`,
         metadata: { id: entry.meta.id, date: entry.meta.date },
       };
     } catch (err) {

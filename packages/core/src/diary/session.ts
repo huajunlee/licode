@@ -17,6 +17,16 @@ export class DiarySession {
     this.segments.push({ timestamp: now.toISOString(), speaker: "user", content });
   }
 
+  /** Current captured segments (for UI rendering). */
+  getSegments(): Segment[] {
+    return this.segments;
+  }
+
+  /** Session date string (YYYY-M-D style, for diary page title). */
+  getDate(): string {
+    return this.date;
+  }
+
   async end(extractor: DiaryExtractorLike, now: Date): Promise<DiaryEntry> {
     const input: ExtractInput = {
       id: this.id,

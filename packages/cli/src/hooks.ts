@@ -33,6 +33,7 @@ import {
   CuratedIndex,
   DiaryExtractor,
   DiarySession,
+  type Segment,
   CurationSession,
   autoPromoteEntry,
   autoFileEntry,
@@ -54,6 +55,7 @@ import type {
 import type { ThinkingBlock } from "./components/thinking-accordion.js";
 import { inferPurpose } from "./components/thinking-accordion.js";
 import type { ToolCallState } from "./components/tool-call-card.js";
+import { nextDiaryState } from "./components/diary-state.js";
 
 export interface UseConversationConfig {
   model?: string;
@@ -80,6 +82,12 @@ export interface UseConversationResult {
   isDreaming: boolean;
   /** Phase 4: notice shown after a dream archives memories (null = none). */
   archivedNotice: string | null;
+  /** Diary mode active (framed journal-page style). */
+  diaryMode: boolean;
+  /** Segments captured in the current diary session (for DiaryPage render). */
+  diarySegments: Segment[];
+  /** Date string of the current diary session. */
+  diaryDate: string;
   handleSubmit: (input: string) => Promise<void>;
 }
 
@@ -256,7 +264,7 @@ export function createEventBus(
             } else {
               updated.push({
                 id: ++blockIdCounter,
-                purpose: "🤔 正在推理...",
+                purpose: "正在推理...",
                 reasoning: currentThinking,
                 isStreaming: true,
               });
@@ -374,6 +382,9 @@ export function useConversation(
   const [thinkingBlocks, setThinkingBlocks] = useState<ThinkingBlock[]>([]);
   const [activeToolCalls, setActiveToolCalls] = useState<ToolCallState[]>([]);
   const [commandMessage, setCommandMessage] = useState<string | null>(null);
+  const [diaryMode, setDiaryMode] = useState(false);
+  const [diarySegments, setDiarySegments] = useState<Segment[]>([]);
+  const [diaryDate, setDiaryDate] = useState("");
   const [slashCommands, setSlashCommands] = useState<Array<{ name: string; description: string }>>([]);
   const [isDreaming, setIsDreaming] = useState(false);
   const [archivedNotice, setArchivedNotice] = useState<string | null>(null);
@@ -416,7 +427,7 @@ export function useConversation(
           onStateChange: setIsDreaming,
           onArchived: (slugs) =>
             setArchivedNotice(
-              `🌙 记忆整理完成：已归档 ${slugs.length} 条 [${slugs.join(", ")}]，可用 /memory-restore <slug> 恢复`
+              `记忆整理完成：已归档 ${slugs.length} 条 [${slugs.join(", ")}]，可用 /memory-restore <slug> 恢复`
             ),
         })
   );
@@ -623,6 +634,11 @@ export function useConversation(
         if (outcome !== null) {
           const wasEnd = diarySessionRef.current !== null && outcome.nextSession === null && outcome.result.type === "action";
           diarySessionRef.current = outcome.nextSession;
+          // mirror to React state so DiaryPage re-renders on enter/capture/end
+          const ds = nextDiaryState(outcome.nextSession);
+          setDiaryMode(ds.mode);
+          setDiarySegments(ds.segments);
+          setDiaryDate(ds.date);
           setIsLoading(false);
           setCommandMessage(outcome.result.message);
           setMessages([...manager.getMessages()]);
@@ -640,8 +656,8 @@ export function useConversation(
                 now: () => new Date(),
               });
                 const notes: string[] = [];
-                if (pr.promoted.length) notes.push(`✨ 已自动提升 ${pr.promoted.length} 条到记忆`);
-                if (fr.filed.length) notes.push(`👤 已自动入档 ${fr.filed.length} 人`);
+                if (pr.promoted.length) notes.push(`已自动提升 ${pr.promoted.length} 条到记忆`);
+                if (fr.filed.length) notes.push(`已自动入档 ${fr.filed.length} 人`);
                 if (notes.length) setCommandMessage(outcome.result.message + "\n" + notes.join("；") + "。");
             } catch { /* 自动提升/入档失败不阻断；候选留待 /diary-curate */ }
           }
@@ -807,6 +823,9 @@ export function useConversation(
     slashCommands,
     isDreaming,
     archivedNotice,
+    diaryMode,
+    diarySegments,
+    diaryDate,
     handleSubmit,
   };
 }

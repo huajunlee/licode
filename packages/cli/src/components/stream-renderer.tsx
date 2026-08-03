@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Box, Text } from "ink";
+import { MarkdownText } from "./markdown-text.js";
 import { COLORS } from "../theme.js";
 
 interface StreamRendererProps {
@@ -19,11 +20,9 @@ export function StreamRenderer({ text }: StreamRendererProps) {
   if (!text) return null;
 
   return (
-    <Box marginBottom={1}>
-      <Text>
-        {text}
-        {showCursor && <Text color={COLORS.accent}>█</Text>}
-      </Text>
+    <Box flexDirection="column" marginBottom={1}>
+      <MarkdownText>{text}</MarkdownText>
+      {showCursor && <Text color={COLORS.accent}>█</Text>}
     </Box>
   );
 }

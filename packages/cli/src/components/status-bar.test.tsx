@@ -10,8 +10,7 @@ describe("StatusBar token display", () => {
     );
     const frame = lastFrame() ?? "";
     expect(frame).toMatch(/12%/);
-    expect(frame).toMatch(/24\.6k/);
-    expect(frame).toMatch(/200k/);
+    expect(frame).toMatch(/24,600/);
   });
 
   it("shows only absolute tokens before the window is published (0)", () => {

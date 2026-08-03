@@ -1,8 +1,9 @@
-import React, { useState, useRef, useMemo } from "react";
+import React, { useState, useRef, useMemo, useEffect } from "react";
 import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
 import { navigateHistory, pushHistory } from "./history-navigator.js";
-import { COLORS, BORDERS } from "../theme.js";
+import { COLORS, ICONS } from "../theme.js";
+import { shouldSelectSuggestion } from "./should-select-suggestion.js";
 
 interface InputBoxProps {
   onSubmit: (input: string) => Promise<void>;
@@ -10,6 +11,8 @@ interface InputBoxProps {
   disabled?: boolean;
   /** Available slash commands and skills for autocomplete */
   slashCommands?: Array<{ name: string; description: string }>;
+  /** Diary mode: show ✎ prompt + diary hint instead of the normal ones. */
+  diaryMode?: boolean;
 }
 
 export function InputBox({
@@ -17,6 +20,7 @@ export function InputBox({
   loading,
   disabled,
   slashCommands = [],
+  diaryMode = false,
 }: InputBoxProps) {
   const [value, setValue] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -42,6 +46,10 @@ export function InputBox({
   };
 
   const handleSubmit = (text: string) => {
+    if (shouldSelectSuggestion(value, suggestions)) {
+      completeSuggestion(); // 填入选中名 + " "，面板自动关闭
+      return;               // 不发送
+    }
     if (!text.trim() || loading) return;
     if (disabled) return;
     historyRef.current = pushHistory(historyRef.current, text);
@@ -50,6 +58,17 @@ export function InputBox({
     setValue("");
     setSelectedIndex(0);
   };
+
+  // Braille spinner frame for loading indicator
+  const [spinnerFrame, setSpinnerFrame] = useState(0);
+  useEffect(() => {
+    if (!loading) return;
+    const timer = setInterval(
+      () => setSpinnerFrame((f) => (f + 1) % ICONS.spinnerFrames.length),
+      100
+    );
+    return () => clearInterval(timer);
+  }, [loading]);
 
   // Arrow keys: navigate suggestions when showing, otherwise navigate history
   useInput(
@@ -100,22 +119,16 @@ export function InputBox({
   return (
     <Box flexDirection="column">
       {showSuggestions && (
-        <Box
-          flexDirection="column"
-          marginBottom={1}
-          borderStyle={BORDERS.popup}
-          borderColor="dim"
-          paddingX={1}
-        >
+        <Box flexDirection="column" marginBottom={1} marginLeft={2}>
           {suggestions.map((cmd, i) => {
             const isSelected = i === selectedIndex;
             return (
               <Box key={cmd.name}>
-                <Text color={isSelected ? COLORS.info : undefined}>
-                  {isSelected ? "❯ " : "  "}
+                <Text color={isSelected ? COLORS.accent : undefined}>
+                  {isSelected ? `${ICONS.prompt} ` : "  "}
                   <Text bold={isSelected}>{cmd.name}</Text>
                   {"  "}
-                  <Text dimColor={!isSelected}>
+                  <Text color={isSelected ? undefined : COLORS.muted}>
                     {cmd.description.length > 60
                       ? cmd.description.slice(0, 60) + "…"
                       : cmd.description}
@@ -127,11 +140,7 @@ export function InputBox({
         </Box>
       )}
       <Box>
-        {disabled ? (
-          <Text dimColor>{"> "}</Text>
-        ) : (
-          <Text color={COLORS.primary}>{"> "}</Text>
-        )}
+        <Text color={disabled ? COLORS.faint : diaryMode ? COLORS.diaryAccent : COLORS.accent}>{diaryMode ? "✎ " : ICONS.prompt} </Text>
         <TextInput
           value={value}
           onChange={(v) => {
@@ -150,17 +159,23 @@ export function InputBox({
           }}
           onSubmit={handleSubmit}
         />
-        {loading && <Text color={COLORS.warning}> ⏳</Text>}
+        {loading && (
+          <Text color={COLORS.muted}> {ICONS.spinnerFrames[spinnerFrame]}</Text>
+        )}
       </Box>
       <Box>
-        <Text dimColor>
-          {loading
-            ? "等待回复完成..."
+        <Text color={COLORS.faint}>
+          {diaryMode
+            ? showSuggestions
+              ? "Enter 选中 · 再按 Enter 发送 · /diary-end 结束"
+              : "口述经历 · /diary-end 结束 · ctrl+q 取消"
+            : loading
+            ? "等待回复完成…"
             : disabled
-            ? "Ctrl+↑↓ 查看推理 · Enter 收起"
+            ? "ctrl+↑↓ 查看推理 · enter 收起"
             : showSuggestions
-            ? "Tab 补全 · ↑↓ 选择 · Enter 发送 · 继续输入以过滤"
-            : "Enter 发送 · ↑↓ 历史 · / 查看命令 · Ctrl+C 退出"}
+            ? "Enter 选中 · 再按 Enter 发送 · Tab 补全 · ↑↓ 选择"
+            : "enter 发送 · / 命令 · ctrl+q 返回"}
         </Text>
       </Box>
     </Box>

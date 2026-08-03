@@ -7,8 +7,10 @@ import { WaitingIndicator } from "./components/waiting-indicator.js";
 import { DreamIndicator } from "./components/dream-indicator.js";
 import { ThinkingAccordion } from "./components/thinking-accordion.js";
 import { InputBox } from "./components/input-box.js";
+import { DiaryPage } from "./components/diary-page.js";
 import { StatusBar } from "./components/status-bar.js";
 import { SessionList } from "./components/session-list.js";
+import { BANNER_LINES, TAGLINE } from "./banner.js";
 import { WelcomeInput } from "./components/welcome-input.js";
 import { ToolCallCards } from "./components/tool-call-card.js";
 import { useConversation } from "./hooks.js";
@@ -134,8 +136,11 @@ function App({ apiKey, model, sessionId: initialSessionId, baseUrl, existingSess
   if (isWelcome) {
     return (
       <Box flexDirection="column" padding={1}>
-        <Box marginBottom={1}>
-          <Text bold>LICode v0.1.0</Text>
+        <Box flexDirection="column" marginBottom={1}>
+          {BANNER_LINES.map((line, i) => (
+            <Text key={i} color={COLORS.accent}>{line}</Text>
+          ))}
+          <Text color={COLORS.faint}>  {TAGLINE} · v0.1.0</Text>
         </Box>
         <SessionList
           visibleItems={visibleItems}
@@ -145,13 +150,8 @@ function App({ apiKey, model, sessionId: initialSessionId, baseUrl, existingSess
           isOnNewSession={isOnNewSession}
         />
         <Box marginTop={1}>
-          <Text dimColor>
-            ↑↓ 选择 · Enter 进入 · Ctrl+N 新建会话 · --session {"<id>"} 恢复 · 输入文字新建
-          </Text>
-        </Box>
-        <Box marginTop={1}>
-          <Text dimColor>
-            📖 新用户？查看用户指南：docs/guide/user-guide.md
+          <Text color={COLORS.faint}>
+            ↑↓ 选择 · enter 进入 · ctrl+n 新建 · --session {"<id>"} 恢复
           </Text>
         </Box>
         {welcomeError && (
@@ -205,6 +205,9 @@ function ChatApp({
     slashCommands,
     isDreaming,
     archivedNotice,
+    diaryMode,
+    diarySegments,
+    diaryDate,
     handleSubmit,
   } = useConversation({ apiKey, model, sessionId, baseUrl, existingSessions });
 
@@ -236,45 +239,59 @@ function ChatApp({
 
   return (
     <Box flexDirection="column" padding={1}>
-      <ChatView messages={messages} />
-      {isDreaming && (
-        <Box marginBottom={1}>
-          <DreamIndicator />
-        </Box>
+      {diaryMode ? (
+        <DiaryPage
+          date={diaryDate}
+          segments={diarySegments}
+          commandMessage={commandMessage}
+          onSubmit={handleSubmit}
+          loading={isLoading}
+          slashCommands={slashCommands}
+        />
+      ) : (
+        <>
+          <ChatView messages={messages} />
+          {isDreaming && (
+            <Box marginBottom={1}>
+              <DreamIndicator />
+            </Box>
+          )}
+          {archivedNotice && (
+            <Box marginBottom={1}>
+              <Text color="yellow">{archivedNotice}</Text>
+            </Box>
+          )}
+          {hasThinking && (
+            <ThinkingAccordion blocks={thinkingBlocks} focusedIndex={focusedIndex} />
+          )}
+          {activeToolCalls.length > 0 && (
+            <ToolCallCards calls={activeToolCalls} />
+          )}
+          {isLoading && !streaming && !hasThinking && (
+            <Box marginBottom={1}>
+              <WaitingIndicator isActive={true} />
+            </Box>
+          )}
+          <StreamRenderer text={streaming} />
+          {error && (
+            <Box marginY={1}>
+              <Text color={COLORS.error}>Error: {error}</Text>
+            </Box>
+          )}
+          {commandMessage && (
+            <Box marginY={1}>
+              <Text color={COLORS.warning}>{commandMessage}</Text>
+            </Box>
+          )}
+          <InputBox onSubmit={handleSubmit} loading={isLoading} disabled={focusedIndex >= 0} slashCommands={slashCommands} />
+        </>
       )}
-      {archivedNotice && (
-        <Box marginBottom={1}>
-          <Text color="yellow">{archivedNotice}</Text>
-        </Box>
-      )}
-      {hasThinking && (
-        <ThinkingAccordion blocks={thinkingBlocks} focusedIndex={focusedIndex} />
-      )}
-      {activeToolCalls.length > 0 && (
-        <ToolCallCards calls={activeToolCalls} />
-      )}
-      {isLoading && !streaming && !hasThinking && (
-        <Box marginBottom={1}>
-          <WaitingIndicator isActive={true} />
-        </Box>
-      )}
-      <StreamRenderer text={streaming} />
-      {error && (
-        <Box marginY={1}>
-          <Text color={COLORS.error}>Error: {error}</Text>
-        </Box>
-      )}
-      {commandMessage && (
-        <Box marginY={1}>
-          <Text color={COLORS.warning}>{commandMessage}</Text>
-        </Box>
-      )}
-      <InputBox onSubmit={handleSubmit} loading={isLoading} disabled={focusedIndex >= 0} slashCommands={slashCommands} />
       <StatusBar
         model={model ?? "deepseek-v4-pro"}
         tokens={tokenCount}
         contextWindow={contextWindow}
         sessionId={currentSessionId}
+        diaryMode={diaryMode}
       />
     </Box>
   );

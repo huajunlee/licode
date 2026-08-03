@@ -60,4 +60,18 @@ describe("inferPurpose", () => {
     expect(inferPurpose("我们来思考一下这个问题")).toMatch(/分析/);
     expect(inferPurpose("需要了解这个模块的功能")).toMatch(/分析/);
   });
+  it("purpose labels contain no emoji", () => {
+    const samples = [
+      "read the file",
+      "搜索一下",
+      "edit this file",
+      "analyze the bug",
+      "xyzzy flobble",
+    ];
+    for (const s of samples) {
+      expect(inferPurpose(s)).not.toMatch(
+        /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]|⏳|⚙/u
+      );
+    }
+  });
 });

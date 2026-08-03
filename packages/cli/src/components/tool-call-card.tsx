@@ -1,73 +1,39 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Box, Text } from "ink";
-import { COLORS, BORDERS, ICONS } from "../theme.js";
+import { formatToolLine, truncate } from "./tool-line.js";
+import type { ToolCallState } from "./tool-line.js";
+import { COLORS, ICONS } from "../theme.js";
 
-export type ToolCallStatus = "pending" | "running" | "done" | "error";
+export type { ToolCallStatus, ToolCallState } from "./tool-line.js";
 
-export interface ToolCallState {
-  toolName: string;
-  status: ToolCallStatus;
-  detail?: string;
-  result?: string;
+interface ToolCallCardProps extends ToolCallState {
+  /** Braille frame shown next to running tools */
+  spinnerFrame?: string;
 }
-
-interface ToolCallCardProps {
-  toolName: string;
-  status: ToolCallStatus;
-  detail?: string;
-  result?: string;
-}
-
-function truncate(text: string, maxLen: number): string {
-  if (text.length <= maxLen) return text;
-  return text.slice(0, maxLen) + "...";
-}
-
-const STATUS_ICONS: Record<ToolCallStatus, string> = {
-  pending: ICONS.pending,
-  running: ICONS.running,
-  done: ICONS.success,
-  error: ICONS.error,
-};
-
-const STATUS_COLORS: Record<ToolCallStatus, string | undefined> = {
-  pending: COLORS.toolPending,
-  running: COLORS.toolRunning,
-  done: COLORS.toolDone,
-  error: COLORS.toolError,
-};
 
 export function ToolCallCard({
   toolName,
   status,
   detail,
   result,
+  spinnerFrame,
 }: ToolCallCardProps) {
-  const icon = STATUS_ICONS[status];
-  const color = STATUS_COLORS[status];
-  const borderColor = status === "error" ? COLORS.toolCardBorderError : COLORS.toolCardBorder;
+  const line = formatToolLine({ toolName, status, detail, result });
 
   return (
-    <Box
-      flexDirection="column"
-      borderStyle={BORDERS.card}
-      borderColor={borderColor}
-      paddingX={1}
-      marginBottom={1}
-    >
+    <Box flexDirection="column">
       <Box>
-        <Text color={color}>
-          {icon} {toolName}
-        </Text>
-        {detail && <Text dimColor> {truncate(detail, 80)}</Text>}
+        <Text color={line.color}>{line.icon} </Text>
+        <Text bold>{line.name}</Text>
+        {line.detail !== "" && <Text color={COLORS.muted}>  {line.detail}</Text>}
+        {status === "done" && <Text color={COLORS.success}> {ICONS.inlineOk}</Text>}
+        {line.summary !== "" && <Text color={COLORS.muted}> {line.summary}</Text>}
+        {status === "running" && (
+          <Text color={COLORS.muted}> 运行中 {spinnerFrame ?? ""}</Text>
+        )}
       </Box>
-      {status === "done" && result && (
-        <Box marginTop={1}>
-          <Text dimColor>{truncate(result, 200)}</Text>
-        </Box>
-      )}
       {status === "error" && result && (
-        <Box marginTop={1}>
+        <Box marginLeft={4}>
           <Text color={COLORS.error}>{truncate(result, 200)}</Text>
         </Box>
       )}
@@ -76,17 +42,27 @@ export function ToolCallCard({
 }
 
 export function ToolCallCards({ calls }: { calls: ToolCallState[] }) {
+  const [frame, setFrame] = useState(0);
+  const anyRunning = calls.some((c) => c.status === "running");
+
+  useEffect(() => {
+    if (!anyRunning) return;
+    const timer = setInterval(
+      () => setFrame((f) => (f + 1) % ICONS.spinnerFrames.length),
+      100
+    );
+    return () => clearInterval(timer);
+  }, [anyRunning]);
+
   if (calls.length === 0) return null;
 
   return (
-    <Box flexDirection="column" marginBottom={1}>
+    <Box flexDirection="column" marginBottom={1} marginLeft={2}>
       {calls.map((call, i) => (
         <ToolCallCard
           key={`${call.toolName}-${i}`}
-          toolName={call.toolName}
-          status={call.status}
-          detail={call.detail}
-          result={call.result}
+          {...call}
+          spinnerFrame={ICONS.spinnerFrames[frame]}
         />
       ))}
     </Box>

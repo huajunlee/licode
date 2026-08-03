@@ -26,6 +26,17 @@ interface SessionFile {
   metadata: ConversationMetadata;
 }
 
+function extractSummary(messages: Message[] | undefined): string | undefined {
+  if (!Array.isArray(messages)) return undefined;
+  for (const msg of messages) {
+    if (msg.role === "user" && typeof msg.content === "string") {
+      const summary = msg.content.replace(/\s+/g, " ").trim();
+      if (summary) return summary.slice(0, 200);
+    }
+  }
+  return undefined;
+}
+
 const DEFAULT_SESSIONS_DIR = ".licode/sessions";
 
 export class ConversationManager {
@@ -195,6 +206,7 @@ export class ConversationManager {
       updatedAt: string;
       model: string;
       messageCount: number;
+      summary?: string;
     }[]
   > {
     const dir = dirPath ?? DEFAULT_SESSIONS_DIR;
@@ -211,6 +223,7 @@ export class ConversationManager {
       updatedAt: string;
       model: string;
       messageCount: number;
+      summary?: string;
     }[] = [];
 
     for (const file of files) {
@@ -227,6 +240,7 @@ export class ConversationManager {
           updatedAt: data.updatedAt,
           model: data.model,
           messageCount: data.messageCount,
+          summary: extractSummary(data.messages),
         });
       } catch {
         // Skip corrupted files

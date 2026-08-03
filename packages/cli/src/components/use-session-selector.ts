@@ -17,6 +17,7 @@ const PAGE_SIZE = 15;
 export interface SessionInfo {
   id: string;
   title?: string;
+  summary?: string;
   createdAt: string;
   updatedAt: string;
   model: string;

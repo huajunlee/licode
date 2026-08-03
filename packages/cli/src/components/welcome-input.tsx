@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Box, Text } from "ink";
 import TextInput from "ink-text-input";
-import { COLORS } from "../theme.js";
+import { COLORS, ICONS } from "../theme.js";
 
 interface WelcomeInputProps {
   onSubmit: (input: string) => void;
@@ -16,7 +16,7 @@ export function WelcomeInput({ onSubmit }: WelcomeInputProps) {
 
   return (
     <Box marginTop={1}>
-      <Text color={COLORS.primary}>{"> "}</Text>
+      <Text color={COLORS.accent}>{ICONS.prompt} </Text>
       <TextInput
         value={value}
         onChange={setValue}

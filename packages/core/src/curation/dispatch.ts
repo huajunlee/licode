@@ -94,7 +94,7 @@ export async function handleCurationInput(
       return { result: { type: "error", message: "用法: /diary-curate apply 1,3,5 | apply all | reject" }, nextSession: ctx.session };
     }
     const res = await ctx.session.apply(sel, { memoryStore: ctx.memoryStore, curatedIndex: ctx.curatedIndex, profileStore: ctx.profileStore });
-    return { result: { type: "action", message: `✅ 已应用 ${res.applied} 项整理。` }, nextSession: null };
+    return { result: { type: "action", message: `已应用 ${res.applied} 项整理。` }, nextSession: null };
   }
 
   // /diary-curate merge <from> <into> -- 手动合并（补漏并）
@@ -106,7 +106,7 @@ export async function handleCurationInput(
     const [fromName, intoName] = parts;
     const mr = await mergeProfiles(fromName, intoName, { profileStore: ctx.profileStore });
     if (mr.error) return { result: { type: "error", message: mr.error }, nextSession: ctx.session };
-    return { result: { type: "action", message: `✅ 已合并「${mr.merged!.from}」->「${mr.merged!.into}」（前者档案已删除，后者 aliases 已补充）。` }, nextSession: ctx.session };
+    return { result: { type: "action", message: `已合并「${mr.merged!.from}」->「${mr.merged!.into}」（前者档案已删除，后者 aliases 已补充）。` }, nextSession: ctx.session };
   }
 
   // /diary-curate (no sub) -> gather + curate + stash
@@ -120,7 +120,7 @@ export async function handleCurationInput(
   const profProps = pendingP.length ? await ctx.profileCuration.resolveAmbiguous(pendingP, profiles) : [];
   const proposals = [...memProps, ...profProps];
   if (proposals.length === 0) {
-    return { result: { type: "action", message: `⚠️ 整理未产出提议（候选 ${pendingC.length}、模糊人 ${pendingP.length}），可能 side-call 失败，可重试 /diary-curate。` }, nextSession: null };
+    return { result: { type: "action", message: `整理未产出提议（候选 ${pendingC.length}、模糊人 ${pendingP.length}），可能 side-call 失败，可重试 /diary-curate。` }, nextSession: null };
   }
   const session = new CurationSession(proposals);
   return {
