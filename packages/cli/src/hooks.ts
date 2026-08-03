@@ -88,6 +88,8 @@ export interface UseConversationResult {
   diarySegments: Segment[];
   /** Date string of the current diary session. */
   diaryDate: string;
+  /** True once the ConversationManager + provider + extensions are initialized and handleSubmit will work. */
+  isReady: boolean;
   handleSubmit: (input: string) => Promise<void>;
 }
 
@@ -387,6 +389,7 @@ export function useConversation(
   const [diaryDate, setDiaryDate] = useState("");
   const [slashCommands, setSlashCommands] = useState<Array<{ name: string; description: string }>>([]);
   const [isDreaming, setIsDreaming] = useState(false);
+  const [isReady, setIsReady] = useState(false);
   const [archivedNotice, setArchivedNotice] = useState<string | null>(null);
 
   const commandRouterRef = useRef<CommandRouter>(new CommandRouter());
@@ -576,6 +579,7 @@ export function useConversation(
       managerRef.current = manager;
       setSessionId(manager.id);
       setMessages([...manager.getMessages()]);
+      setIsReady(true);
     };
 
     initManager();
@@ -826,6 +830,7 @@ export function useConversation(
     diaryMode,
     diarySegments,
     diaryDate,
+    isReady,
     handleSubmit,
   };
 }

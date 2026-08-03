@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useReducer } from "react";
-import { Box, Text, useInput } from "ink";
+import React, { useState, useCallback, useReducer, useEffect, useRef } from "react";
+import { Box, Text, useInput, useStdout } from "ink";
 import { ConversationManager } from "@licode/core";
 import { ChatView } from "./components/chat-view.js";
 import { StreamRenderer } from "./components/stream-renderer.js";
@@ -42,6 +42,13 @@ function App({ apiKey, model, sessionId: initialSessionId, baseUrl, existingSess
   const [activeSessionId, setActiveSessionId] = useState<string | undefined>(initialSessionId);
   const [welcomeError, setWelcomeError] = useState<string | null>(null);
   const [sessions, setSessions] = useState(existingSessions ?? []);
+  const [pendingInput, setPendingInput] = useState<string | null>(null);
+  const { stdout } = useStdout();
+  // Clear screen + scrollback on view transitions so each screen renders clean
+  // (no residual banner/session-list from the previous view persists).
+  const clearScreen = useCallback(() => {
+    stdout?.write("\x1b[2J\x1b[3J\x1b[H");
+  }, [stdout]);
 
   const refreshSessions = useCallback(async () => {
     try {
@@ -63,22 +70,25 @@ function App({ apiKey, model, sessionId: initialSessionId, baseUrl, existingSess
 
   const enterSession = useCallback(
     (id: string) => {
+      clearScreen();
       setActiveSessionId(id);
       dispatch("enter-chat");
     },
-    []
+    [clearScreen]
   );
 
   const newSession = useCallback(() => {
+    clearScreen();
     setActiveSessionId(undefined);
     dispatch("enter-chat");
-  }, []);
+  }, [clearScreen]);
 
   const goBack = useCallback(() => {
+    clearScreen();
     setActiveSessionId(undefined);
     dispatch("go-back");
     refreshSessions();
-  }, [refreshSessions]);
+  }, [clearScreen, refreshSessions]);
 
   const handleWelcomeSubmit = useCallback(
     (input: string) => {
@@ -105,6 +115,8 @@ function App({ apiKey, model, sessionId: initialSessionId, baseUrl, existingSess
           enterSession(selectedId);
         }
       } else {
+        // Non-empty text: start a new session and send the text as the first message.
+        setPendingInput(trimmed);
         newSession();
       }
     },
@@ -172,6 +184,8 @@ function App({ apiKey, model, sessionId: initialSessionId, baseUrl, existingSess
       baseUrl={baseUrl}
       existingSessions={sessions}
       onGoBack={goBack}
+      initialInput={pendingInput ?? undefined}
+      onInitialInputConsumed={() => setPendingInput(null)}
     />
   );
 }
@@ -183,6 +197,8 @@ function ChatApp({
   baseUrl,
   existingSessions,
   onGoBack,
+  initialInput,
+  onInitialInputConsumed,
 }: {
   apiKey: string;
   model?: string;
@@ -190,6 +206,8 @@ function ChatApp({
   baseUrl?: string;
   existingSessions?: Array<{ id: string }>;
   onGoBack: () => void;
+  initialInput?: string;
+  onInitialInputConsumed?: () => void;
 }) {
   const {
     messages,
@@ -208,11 +226,22 @@ function ChatApp({
     diaryMode,
     diarySegments,
     diaryDate,
+    isReady,
     handleSubmit,
   } = useConversation({ apiKey, model, sessionId, baseUrl, existingSessions });
 
   // Accordion navigation: Ctrl+↑/↓ to move, -1 = no focus (input mode)
   const [focusedIndex, setFocusedIndex] = useState(-1);
+
+  // Send the welcome-screen text as the first message once the manager is ready.
+  const sentInitialRef = useRef(false);
+  useEffect(() => {
+    if (isReady && initialInput && !sentInitialRef.current) {
+      sentInitialRef.current = true;
+      void handleSubmit(initialInput);
+      onInitialInputConsumed?.();
+    }
+  }, [isReady, initialInput, handleSubmit, onInitialInputConsumed]);
 
   // Ctrl+↑↓ navigation, Enter to collapse
   useInput(
