@@ -9,9 +9,11 @@ interface StatusBarProps {
   /** Context window in tokens; 0/omitted hides the percentage. */
   contextWindow?: number;
   sessionId: string;
+  /** Diary mode active: tint the separator with diaryAccent. */
+  diaryMode?: boolean;
 }
 
-export function StatusBar({ model, tokens, contextWindow = 0, sessionId }: StatusBarProps) {
+export function StatusBar({ model, tokens, contextWindow = 0, sessionId, diaryMode = false }: StatusBarProps) {
   const { stdout } = useStdout();
   const cols = stdout?.columns ?? 80;
   const line =
@@ -21,7 +23,7 @@ export function StatusBar({ model, tokens, contextWindow = 0, sessionId }: Statu
 
   return (
     <Box flexDirection="column" marginTop={1}>
-      <Text color={COLORS.faint}>{ICONS.separator.repeat(Math.max(10, cols - 2))}</Text>
+      <Text color={diaryMode ? COLORS.diaryAccent : COLORS.faint}>{ICONS.separator.repeat(Math.max(10, cols - 2))}</Text>
       <Text color={COLORS.faint}>{line}</Text>
     </Box>
   );

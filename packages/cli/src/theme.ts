@@ -26,6 +26,9 @@ export const COLORS = {
   /** Errors, failed tools ✗ */
   error: "#F7768E",
 
+  /** Diary mode accent: journal-page border/title/prompt (distinct from amber) */
+  diaryAccent: "#7DC9BF",
+
   // ---- Legacy aliases (transitional — removed in final cleanup task) ----
   /** @deprecated use accent */ primary: "#E5A567",
   /** @deprecated use accent */ info: "#E5A567",

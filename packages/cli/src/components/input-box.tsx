@@ -11,6 +11,8 @@ interface InputBoxProps {
   disabled?: boolean;
   /** Available slash commands and skills for autocomplete */
   slashCommands?: Array<{ name: string; description: string }>;
+  /** Diary mode: show ✎ prompt + diary hint instead of the normal ones. */
+  diaryMode?: boolean;
 }
 
 export function InputBox({
@@ -18,6 +20,7 @@ export function InputBox({
   loading,
   disabled,
   slashCommands = [],
+  diaryMode = false,
 }: InputBoxProps) {
   const [value, setValue] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -137,7 +140,7 @@ export function InputBox({
         </Box>
       )}
       <Box>
-        <Text color={disabled ? COLORS.faint : COLORS.accent}>{ICONS.prompt} </Text>
+        <Text color={disabled ? COLORS.faint : diaryMode ? COLORS.diaryAccent : COLORS.accent}>{diaryMode ? "✎ " : ICONS.prompt} </Text>
         <TextInput
           value={value}
           onChange={(v) => {
@@ -162,7 +165,9 @@ export function InputBox({
       </Box>
       <Box>
         <Text color={COLORS.faint}>
-          {loading
+          {diaryMode
+            ? "口述经历 · /diary-end 结束 · Esc 取消"
+            : loading
             ? "等待回复完成…"
             : disabled
             ? "ctrl+↑↓ 查看推理 · enter 收起"

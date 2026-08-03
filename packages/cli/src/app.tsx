@@ -7,6 +7,7 @@ import { WaitingIndicator } from "./components/waiting-indicator.js";
 import { DreamIndicator } from "./components/dream-indicator.js";
 import { ThinkingAccordion } from "./components/thinking-accordion.js";
 import { InputBox } from "./components/input-box.js";
+import { DiaryPage } from "./components/diary-page.js";
 import { StatusBar } from "./components/status-bar.js";
 import { SessionList } from "./components/session-list.js";
 import { BANNER_LINES, TAGLINE } from "./banner.js";
@@ -204,6 +205,9 @@ function ChatApp({
     slashCommands,
     isDreaming,
     archivedNotice,
+    diaryMode,
+    diarySegments,
+    diaryDate,
     handleSubmit,
   } = useConversation({ apiKey, model, sessionId, baseUrl, existingSessions });
 
@@ -235,45 +239,59 @@ function ChatApp({
 
   return (
     <Box flexDirection="column" padding={1}>
-      <ChatView messages={messages} />
-      {isDreaming && (
-        <Box marginBottom={1}>
-          <DreamIndicator />
-        </Box>
+      {diaryMode ? (
+        <DiaryPage
+          date={diaryDate}
+          segments={diarySegments}
+          commandMessage={commandMessage}
+          onSubmit={handleSubmit}
+          loading={isLoading}
+          slashCommands={slashCommands}
+        />
+      ) : (
+        <>
+          <ChatView messages={messages} />
+          {isDreaming && (
+            <Box marginBottom={1}>
+              <DreamIndicator />
+            </Box>
+          )}
+          {archivedNotice && (
+            <Box marginBottom={1}>
+              <Text color="yellow">{archivedNotice}</Text>
+            </Box>
+          )}
+          {hasThinking && (
+            <ThinkingAccordion blocks={thinkingBlocks} focusedIndex={focusedIndex} />
+          )}
+          {activeToolCalls.length > 0 && (
+            <ToolCallCards calls={activeToolCalls} />
+          )}
+          {isLoading && !streaming && !hasThinking && (
+            <Box marginBottom={1}>
+              <WaitingIndicator isActive={true} />
+            </Box>
+          )}
+          <StreamRenderer text={streaming} />
+          {error && (
+            <Box marginY={1}>
+              <Text color={COLORS.error}>Error: {error}</Text>
+            </Box>
+          )}
+          {commandMessage && (
+            <Box marginY={1}>
+              <Text color={COLORS.warning}>{commandMessage}</Text>
+            </Box>
+          )}
+          <InputBox onSubmit={handleSubmit} loading={isLoading} disabled={focusedIndex >= 0} slashCommands={slashCommands} />
+        </>
       )}
-      {archivedNotice && (
-        <Box marginBottom={1}>
-          <Text color="yellow">{archivedNotice}</Text>
-        </Box>
-      )}
-      {hasThinking && (
-        <ThinkingAccordion blocks={thinkingBlocks} focusedIndex={focusedIndex} />
-      )}
-      {activeToolCalls.length > 0 && (
-        <ToolCallCards calls={activeToolCalls} />
-      )}
-      {isLoading && !streaming && !hasThinking && (
-        <Box marginBottom={1}>
-          <WaitingIndicator isActive={true} />
-        </Box>
-      )}
-      <StreamRenderer text={streaming} />
-      {error && (
-        <Box marginY={1}>
-          <Text color={COLORS.error}>Error: {error}</Text>
-        </Box>
-      )}
-      {commandMessage && (
-        <Box marginY={1}>
-          <Text color={COLORS.warning}>{commandMessage}</Text>
-        </Box>
-      )}
-      <InputBox onSubmit={handleSubmit} loading={isLoading} disabled={focusedIndex >= 0} slashCommands={slashCommands} />
       <StatusBar
         model={model ?? "deepseek-v4-pro"}
         tokens={tokenCount}
         contextWindow={contextWindow}
         sessionId={currentSessionId}
+        diaryMode={diaryMode}
       />
     </Box>
   );

@@ -36,4 +36,16 @@ describe("DiarySession", () => {
     expect(entry.raw.segments).toEqual([]);
     expect(entry.raw.content).toBe("");
   });
+
+  it("getSegments returns captured segments", () => {
+    const s = new DiarySession("2026-8-2", new Date("2026-08-02T10:00:00"));
+    s.addSegment("第一段", new Date("2026-08-02T10:00:01"));
+    s.addSegment("第二段", new Date("2026-08-02T10:00:02"));
+    expect(s.getSegments().map((g) => g.content)).toEqual(["第一段", "第二段"]);
+  });
+
+  it("getDate returns the session date", () => {
+    const s = new DiarySession("2026-8-2", new Date("2026-08-02T10:00:00"));
+    expect(s.getDate()).toBe("2026-8-2");
+  });
 });

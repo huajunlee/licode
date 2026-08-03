@@ -22,6 +22,10 @@ describe("theme tokens", () => {
         expect(value, `COLORS.${key}`).toMatch(/^#[0-9A-Fa-f]{6}$/);
       }
     });
+
+    it("diaryAccent is a hex truecolor", () => {
+      expect(COLORS.diaryAccent).toMatch(/^#[0-9A-Fa-f]{6}$/);
+    });
   });
 
   describe("ICONS", () => {
