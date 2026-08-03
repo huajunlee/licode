@@ -264,7 +264,7 @@ export function createEventBus(
             } else {
               updated.push({
                 id: ++blockIdCounter,
-                purpose: "🤔 正在推理...",
+                purpose: "正在推理...",
                 reasoning: currentThinking,
                 isStreaming: true,
               });
@@ -427,7 +427,7 @@ export function useConversation(
           onStateChange: setIsDreaming,
           onArchived: (slugs) =>
             setArchivedNotice(
-              `🌙 记忆整理完成：已归档 ${slugs.length} 条 [${slugs.join(", ")}]，可用 /memory-restore <slug> 恢复`
+              `记忆整理完成：已归档 ${slugs.length} 条 [${slugs.join(", ")}]，可用 /memory-restore <slug> 恢复`
             ),
         })
   );
@@ -656,8 +656,8 @@ export function useConversation(
                 now: () => new Date(),
               });
                 const notes: string[] = [];
-                if (pr.promoted.length) notes.push(`✨ 已自动提升 ${pr.promoted.length} 条到记忆`);
-                if (fr.filed.length) notes.push(`👤 已自动入档 ${fr.filed.length} 人`);
+                if (pr.promoted.length) notes.push(`已自动提升 ${pr.promoted.length} 条到记忆`);
+                if (fr.filed.length) notes.push(`已自动入档 ${fr.filed.length} 人`);
                 if (notes.length) setCommandMessage(outcome.result.message + "\n" + notes.join("；") + "。");
             } catch { /* 自动提升/入档失败不阻断；候选留待 /diary-curate */ }
           }

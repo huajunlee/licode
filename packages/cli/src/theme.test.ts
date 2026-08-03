@@ -26,6 +26,12 @@ describe("theme tokens", () => {
     it("diaryAccent is a hex truecolor", () => {
       expect(COLORS.diaryAccent).toMatch(/^#[0-9A-Fa-f]{6}$/);
     });
+
+    it("exposes only the minimal-modern palette keys (incl. diaryAccent)", () => {
+      expect(Object.keys(COLORS).sort()).toEqual([
+        "accent", "diaryAccent", "error", "faint", "muted", "success", "text", "warning",
+      ]);
+    });
   });
 
   describe("ICONS", () => {

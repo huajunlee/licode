@@ -19,7 +19,7 @@ export function DreamIndicator() {
 
   return (
     <Text dimColor>
-      {ICONS.spinnerFrames[frame]} 🌙 记忆整理中...
+      {ICONS.spinnerFrames[frame]} 记忆整理中...
     </Text>
   );
 }

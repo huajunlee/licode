@@ -226,7 +226,7 @@ export async function runCli(
   // 启动诊断：检查关键配置是否有值
   if (!resolvedBaseUrl) {
     console.error(
-      "⚠️  未设置 ANTHROPIC_BASE_URL。如果你用的不是 Anthropic 官方 API，请设置：\n" +
+      "未设置 ANTHROPIC_BASE_URL。如果你用的不是 Anthropic 官方 API，请设置：\n" +
         "   export ANTHROPIC_BASE_URL=\"https://your-api-endpoint\"\n" +
         "   例如 DeepSeek: export ANTHROPIC_BASE_URL=\"https://api.deepseek.com/anthropic\"\n"
     );

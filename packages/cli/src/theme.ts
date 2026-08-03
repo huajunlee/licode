@@ -28,16 +28,6 @@ export const COLORS = {
 
   /** Diary mode accent: journal-page border/title/prompt (distinct from amber) */
   diaryAccent: "#7DC9BF",
-
-  // ---- Legacy aliases (transitional — removed in final cleanup task) ----
-  /** @deprecated use accent */ primary: "#E5A567",
-  /** @deprecated use accent */ info: "#E5A567",
-  /** @deprecated use muted */ toolPending: "#8A8F9E",
-  /** @deprecated use accent */ toolRunning: "#E5A567",
-  /** @deprecated use success */ toolDone: "#9ECE6A",
-  /** @deprecated use error */ toolError: "#F7768E",
-  /** @deprecated use faint */ toolCardBorder: "#565B68",
-  /** @deprecated use error */ toolCardBorderError: "#F7768E",
 } as const;
 
 // ---- Icons ----
@@ -66,18 +56,4 @@ export const ICONS = {
   spinnerFrames: [
     "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏",
   ] as readonly string[],
-
-  // ---- Legacy aliases (transitional — removed in final cleanup task) ----
-  /** @deprecated use toolPending */ pending: "○",
-  /** @deprecated use toolRunning */ running: "◐",
-  /** @deprecated use toolDone */ success: "●",
-  /** @deprecated use toolError */ error: "✗",
 } as const;
-
-// ---- Legacy exports (transitional — removed in final cleanup task) ----
-
-/** @deprecated borders are being removed from the design */
-export const BORDERS = { popup: "single", card: "round" } as const;
-
-/** @deprecated use inline spacing values */
-export const SPACING = { xs: 1, sm: 1, md: 2, lg: 4 } as const;
