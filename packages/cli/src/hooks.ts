@@ -734,6 +734,11 @@ export function useConversation(
                 await next();
               });
 
+            setMessages((prev) => [
+              ...prev,
+              { role: "user", content: promptContent, timestamp: new Date().toISOString() } as Message,
+            ]);
+
             async function* singleEvent(): AsyncGenerator<PipelineEvent> {
               yield { type: "user-message", content: promptContent };
             }
@@ -794,6 +799,14 @@ export function useConversation(
             }
             await next();
           });
+
+        // Optimistically show the user's question during streaming/thinking;
+        // the agent loop adds it to the manager and the post-run setMessages
+        // below reconciles (no duplication).
+        setMessages((prev) => [
+          ...prev,
+          { role: "user", content: input, timestamp: new Date().toISOString() } as Message,
+        ]);
 
         // Push a single user-message event to kick off the pipeline.
         // AgentLoop intercepts it and drives the entire ReAct loop.
