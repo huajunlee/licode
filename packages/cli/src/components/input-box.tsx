@@ -3,6 +3,7 @@ import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
 import { navigateHistory, pushHistory } from "./history-navigator.js";
 import { COLORS, ICONS } from "../theme.js";
+import { shouldSelectSuggestion } from "./should-select-suggestion.js";
 
 interface InputBoxProps {
   onSubmit: (input: string) => Promise<void>;
@@ -42,6 +43,10 @@ export function InputBox({
   };
 
   const handleSubmit = (text: string) => {
+    if (shouldSelectSuggestion(value, suggestions)) {
+      completeSuggestion(); // 填入选中名 + " "，面板自动关闭
+      return;               // 不发送
+    }
     if (!text.trim() || loading) return;
     if (disabled) return;
     historyRef.current = pushHistory(historyRef.current, text);
@@ -162,7 +167,7 @@ export function InputBox({
             : disabled
             ? "ctrl+↑↓ 查看推理 · enter 收起"
             : showSuggestions
-            ? "tab 补全 · ↑↓ 选择 · enter 发送"
+            ? "Enter 选中 · 再按 Enter 发送 · Tab 补全 · ↑↓ 选择"
             : "enter 发送 · / 命令 · ctrl+q 返回"}
         </Text>
       </Box>
