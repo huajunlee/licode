@@ -9,6 +9,7 @@ import { profileRecallTool } from "./profile-recall.js";
 import { decideTool } from "./decide.js";
 import { decideSaveTool } from "./decide-save.js";
 import { decidePlanTool } from "./decide-plan.js";
+import { decideReflectTool } from "./decide-reflect.js";
 import type { Tool } from "../types.js";
 
 export const builtinTools: Tool[] = [
@@ -23,6 +24,7 @@ export const builtinTools: Tool[] = [
   decideTool,
   decideSaveTool,
   decidePlanTool,
+  decideReflectTool,
 ];
 
-export { bashTool, readTool, writeTool, editTool, globTool, grepTool, journalRecallTool, profileRecallTool, decideTool, decideSaveTool, decidePlanTool };
+export { bashTool, readTool, writeTool, editTool, globTool, grepTool, journalRecallTool, profileRecallTool, decideTool, decideSaveTool, decidePlanTool, decideReflectTool };
