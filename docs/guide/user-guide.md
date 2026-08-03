@@ -1186,14 +1186,14 @@ MemoryCuration.curate（side-model）
 
 ## 亮点功能与简历项目（STAR 法则）
 
-> **项目名称：LICode**
+> **项目名称：融合第二大脑与决策的智能体（代号 LICode）**
 > **项目定位：运行在终端的 AI 编程助手与个人第二大脑，集成 ReAct Agent 引擎、跨会话持久记忆、结构化日记与决策顾问。**
 >
 > 以下六条亮点可作为该项目的简历条目，每条按 STAR 法则展开。简历上使用每节开头的「简历条目」，面试时展开 STAR 细节并配合下方的「面试深挖问答」。
 
 ### 亮点 1：跨会话持久记忆系统
 
-**简历条目**：在 LICode 项目中设计并实现跨会话持久记忆系统。该系统采用双路径生产机制，主 Agent 直接写入与后台 LLM 自动提取两条路径协同工作，并通过五分钟冷却、互斥锁、mtime 检测防止重复提取。召回层基于 side-query 严格过滤，将相关记忆以合成 tool_call 形式注入当轮上下文，每轮剪除上一轮召回对以防止 token 累积，并在失败时零干扰降级。系统还包含四阶段做梦整理机制，自动归档超过三十天未使用的记忆，最终实现无关问题零召回成本且相关问题精准注入正文。
+**简历条目**：设计并实现跨会话持久记忆系统。该系统采用双路径生产机制，主 Agent 直接写入与后台 LLM 自动提取两条路径协同工作，并通过五分钟冷却、互斥锁、mtime 检测防止重复提取。召回层基于 side-query 严格过滤，将相关记忆以合成 tool_call 形式注入当轮上下文，每轮剪除上一轮召回对以防止 token 累积，并在失败时零干扰降级。系统还包含四阶段做梦整理机制，自动归档超过三十天未使用的记忆，最终实现无关问题零召回成本且相关问题精准注入正文。
 
 - **Situation**：AI 对话助手普遍存在失忆问题，会话结束即丢失上下文，用户每次都要重述偏好和项目背景。已有方案要么只存不召回而变成只进不出的记事本，要么召回粗糙，依赖关键词匹配、无关记忆干扰对话且 token 持续累积。
 - **Task**：设计一套跨会话记忆系统，能自动生产、按需召回、定期整理，且不干扰主对话、不浪费 token、不出现矛盾。
@@ -1207,7 +1207,7 @@ MemoryCuration.curate（side-model）
 
 ### 亮点 2：第二大脑日记系统
 
-**简历条目**：在 LICode 项目中实现第二大脑日记系统。该系统用 side-model LLM 将口述日记结构化为事实、决定、情绪、人物与候选记忆五类字段，设计 importance 与 promotability 双维度提升门，将候选分流到自动提升为记忆、自动归档为人物档案、人审整理三层，CuratedIndex 去重索引协调三层避免重复处理，日记与人物档案通过 entryId 双向链接。
+**简历条目**：实现第二大脑日记系统。该系统用 side-model LLM 将口述日记结构化为事实、决定、情绪、人物与候选记忆五类字段，设计 importance 与 promotability 双维度提升门，将候选分流到自动提升为记忆、自动归档为人物档案、人审整理三层，CuratedIndex 去重索引协调三层避免重复处理，日记与人物档案通过 entryId 双向链接。
 
 - **Situation**：个人日记和记录散落各处，写完即忘，无法被 AI 复用，也无法沉淀为长期记忆和人物关系。
 - **Task**：把口述日记变成可被 AI 结构化理解、可自动沉淀为长期记忆和人物档案的第二大脑。
@@ -1220,7 +1220,7 @@ MemoryCuration.curate（side-model）
 
 ### 亮点 3：长对话上下文管理
 
-**简历条目**：在 LICode 项目中设计并实现长对话上下文管理，分五期演进。用校准式 token 计数替代 tiktoken，采用 char-class 启发式加 EMA 在线学习 ratio 实现零新依赖与后端无关。按轮次边界切分压缩以从结构上规避孤立 tool_result 报错。用 git blob hash-object 做被压缩文件全文的恢复指针，不产生 commit 且内容寻址与天然去重。滚动演化摘要配合三层选择性保留与三层降级，永不中断主循环。
+**简历条目**：设计并实现长对话上下文管理，分五期演进。用校准式 token 计数替代 tiktoken，采用 char-class 启发式加 EMA 在线学习 ratio 实现零新依赖与后端无关。按轮次边界切分压缩以从结构上规避孤立 tool_result 报错。用 git blob hash-object 做被压缩文件全文的恢复指针，不产生 commit 且内容寻址与天然去重。滚动演化摘要配合三层选择性保留与三层降级，永不中断主循环。
 
 - **Situation**：长对话 token 涨上去撞 maxTokens 硬墙直接 TerminationError 终止，无摘要续命也无降级，token 计数是粗略启发式不可信，trimToBudget 按下标切会孤立 tool_result 导致 API 报错，工具大段输出全量灌进上下文。
 - **Task**：让长对话从撞墙即死变为摘要续命，且压缩不丢关键信息、不破坏消息结构、不中断主循环。
@@ -1234,7 +1234,7 @@ MemoryCuration.curate（side-model）
 
 ### 亮点 4：决策顾问工具
 
-**简历条目**：在 LICode 项目中实现决策顾问工具。该工具汇聚历史决定、事实、人物档案与近期日记构建决策上下文，设计 B 与 C 两种 framing 模式，证据充足时给倾向建议，不足时降级摆清事实交还判断权而不硬编模糊答案。采用两步 gating，用户确认才落盘且直写日记不污染记忆。
+**简历条目**：实现决策顾问工具。该工具汇聚历史决定、事实、人物档案与近期日记构建决策上下文，设计 B 与 C 两种 framing 模式，证据充足时给倾向建议，不足时降级摆清事实交还判断权而不硬编模糊答案。采用两步 gating，用户确认才落盘且直写日记不污染记忆。
 
 - **Situation**：用户请 AI 帮忙做决定时，AI 往往要么给空洞建议，要么在信息不足时编造貌似有理的判断，且决策记录无处沉淀。
 - **Task**：让 AI 的决策建议有依据、知边界、可沉淀，即基于用户历史、信息不足时坦诚降级、用户确认后记入日记。
@@ -1246,7 +1246,7 @@ MemoryCuration.curate（side-model）
 
 ### 亮点 5：ReAct Agent 引擎与双事件通道
 
-**简历条目**：在 LICode 项目中构建 ReAct 推理行动 Agent 引擎与洋葱模型事件管线。设计双事件通道，Pipeline 编排 user-message，EventBus 流式播报 UI。实现步数、Token、超时三步终止保护。诊断并修复 token 计数断链，agent-loop 路径不发 llm-response-complete，改挂 EventBus 的 agent-loop-complete。
+**简历条目**：构建 ReAct 推理行动 Agent 引擎与洋葱模型事件管线。设计双事件通道，Pipeline 编排 user-message，EventBus 流式播报 UI。实现步数、Token、超时三步终止保护。诊断并修复 token 计数断链，agent-loop 路径不发 llm-response-complete，改挂 EventBus 的 agent-loop-complete。
 
 - **Situation**：需要一个能自主推理、调用工具、多轮循环的 Agent 核心，且 UI 要实时流式更新，token 要准确显示。
 - **Task**：设计清晰的引擎与事件架构，职责分离，可扩展，且修复 token 显示断链。
@@ -1258,7 +1258,7 @@ MemoryCuration.curate（side-model）
 
 ### 亮点 6：多智能体协作与统一扩展体系
 
-**简历条目**：在 LICode 项目中设计多智能体协作与统一扩展体系。子 Agent 在独立 Git Worktree 隔离执行，文件系统互不干扰。MCP 协议、Skills 领域专长、Hooks 生命周期钩子、Slash 命令全部统一注册到 ToolRegistry，经 Zod schema 校验参数与 PermissionGuard 权限检查。
+**简历条目**：设计多智能体协作与统一扩展体系。子 Agent 在独立 Git Worktree 隔离执行，文件系统互不干扰。MCP 协议、Skills 领域专长、Hooks 生命周期钩子、Slash 命令全部统一注册到 ToolRegistry，经 Zod schema 校验参数与 PermissionGuard 权限检查。
 
 - **Situation**：复杂任务需并行拆解，子 Agent 改文件会互相冲突，外部工具、领域专长、生命周期自动化缺乏统一接入点。
 - **Task**：让多 Agent 安全并行，让扩展能力统一可插拔。
@@ -1290,12 +1290,12 @@ MemoryCuration.curate（side-model）
 
 **Q1：为什么不把相关记忆直接拼进 system prompt 或用户消息，而要用合成 tool_call？**
 
-- **通俗**：就像你问朋友问题，朋友想起某件事，你不能把想起的过程塞进朋友嘴里改他说的话，也不能偷偷改他的世界观。LICode 让助手做个查记忆的动作，把查到的内容作为工具结果放在你的问题后面，助手从那里接着回答，既不改你的原话也不动系统设定。
+- **通俗**：就像你问朋友问题，朋友想起某件事，你不能把想起的过程塞进朋友嘴里改他说的话，也不能偷偷改他的世界观。本项目让助手做个查记忆的动作，把查到的内容作为工具结果放在你的问题后面，助手从那里接着回答，既不改你的原话也不动系统设定。
 - **详细**：三个原因。第一，不改 system prompt，system prompt 是分层组装的，每轮往里塞正文会破坏分层裁剪逻辑且 token 累积。第二，不改用户原文，保留用户消息原样便于调试和恢复。第三，消息角色严格交替，Anthropic API 要求 user 与 assistant 严格交替，合成 assistant 的 tool_use 加 user 的 tool_result 对天然合法，所有 provider 兼容。附带好处是 TUI 把它渲染成 memory_recall 工具卡片，召回过程透明可见。
 
 **Q2：每轮都注入记忆，token 不会越积越多吗？**
 
-- **通俗**：不会。每轮开始前 LICode 先把上一轮查记忆的那对消息剪掉，再决定这轮要不要查新的，历史里任意时刻最多只有一对召回消息。
+- **通俗**：不会。每轮开始前本项目先把上一轮查记忆的那对消息剪掉，再决定这轮要不要查新的，历史里任意时刻最多只有一对召回消息。
 - **详细**：onTurnStart 回调分四步，第一步刷新索引层，第二步 pruneRecallMessages 剪除上一轮的合成对，按 memory_recall tool 名与 tool_use_id 定位，能处理 restored session 里历史中间的对，第三步 side-query 选不超过五条，第四步注入新对，所以 token 不累积且每轮开销恒定。
 
 **Q3：side-query 召回失败或超时了怎么办？会不会卡住对话？**
@@ -1305,7 +1305,7 @@ MemoryCuration.curate（side-model）
 
 **Q4：用户改口了，记忆会矛盾并存吗？**
 
-- **通俗**：不会。提取时 LICode 把已有的记忆全文都给 LLM 看，LLM 发现不喜欢了和旧的喜欢冲突，就直接把旧文件整体改写成最新的，不会两条并存。
+- **通俗**：不会。提取时本项目把已有的记忆全文都给 LLM 看，LLM 发现不喜欢了和旧的喜欢冲突，就直接把旧文件整体改写成最新的，不会两条并存。
 - **详细**：这是 Phase 1 生产层的关键设计，提取 prompt 携带现有记忆的正文而非仅索引，LLM 输出 update 时 MemoryStore.save 整体替换正文，保留 createdAt 刷新 updatedAt。如果是补充而非冲突用 append 做段落级去重合并。create 在目标已存在时防御性降级为 append，绝不丢旧内容。
 
 **Q5：为什么要做梦整理记忆，不能实时整理吗？**
@@ -1354,17 +1354,17 @@ MemoryCuration.curate（side-model）
 
 **Q9：为什么不用 tiktoken 之类的真 tokenizer 算 token？**
 
-- **通俗**：tiktoken 是给 OpenAI 模型用的，对 Claude 与 DeepSeek 只是近似，而且引入它就多了一个依赖。LICode 先粗估，再用模型真实返回的 token 数不断校准，越用越准且不绑定后端。
+- **通俗**：tiktoken 是给 OpenAI 模型用的，对 Claude 与 DeepSeek 只是近似，而且引入它就多了一个依赖。本项目先粗估，再用模型真实返回的 token 数不断校准，越用越准且不绑定后端。
 - **详细**：TokenCounter 用 char-class 估算，CJK、字母数字、符号、空白四类不同权重，加内嵌 TokenCalibrator 的 EMA 在线学习 ratio，首次用 real 除 base，后续用零点七乘旧 ratio 加零点三乘新样本，clamp 在零点五到四之间。AgentLoop 每轮把真实 usage input tokens 喂回 observeUsage。Phase 2 把 base 升级为含 system 与 tools，ratio 退化为约一的纯修正系数，把缺 system 与 tools 从靠乘数硬吸收改成显式纳入 base，零新依赖且后端无关。
 
 **Q10：压缩时怎么切消息？按下标切到 maxTokens 的一半不行吗？**
 
-- **通俗**：按下标切会切断工具调用与工具结果这对搭档，只留结果不留调用，API 直接报错。LICode 按轮次切，一整轮要么留要么丢，不会切断搭档。
+- **通俗**：按下标切会切断工具调用与工具结果这对搭档，只留结果不留调用，API 直接报错。本项目按轮次切，一整轮要么留要么丢，不会切断搭档。
 - **详细**：splitIntoTurns 在每个 UserMessage 前下刀，tool_use 与 tool_result 对和 memory-recall 合成对天然在轮内。旧 trimToBudget 按下标切且只认 user 与 assistant 文本对、忽略 tool 对，激活会孤立 tool_result，所以 Phase 2 直接移除。摘要用 assistant 角色放首条 user 之后，不能用 system 因 extractSystem 会提顶层乱序，不能放第一条因数组 assistant 开头 API 报错，这个位置让角色交替天然成立且语义准确。
 
 **Q11：被压缩掉的文件全文就丢了？**
 
-- **通俗**：不丢。LICode 把被压缩掉的文件内容存进 git 的对象库，只留一个 hash 指针在对话里，需要时用 hash 取回全文。
+- **通俗**：不丢。本项目把被压缩掉的文件内容存进 git 的对象库，只留一个 hash 指针在对话里，需要时用 hash 取回全文。
 - **详细**：getRecoveryPointer 用 git hash-object 把内容写成 git blob 对象，不产生 commit，返回四十位 hash。同内容同 hash 天然去重，复用 git 对象库而非自建存储。非 git 环境用 sha1 落盘 overflow 目录回退。压缩时把 userText 加 assistant 的 tool_use 加 user 的 tool_result 替换为 userText 加 assistant 的 file_change 笔记，笔记含确定性字段 operation、path、stats、pointer 加模型填的描述符 symbols 与 summary kind。幂等，已是 file_change 笔记的轮不重复压缩。
 
 **Q12：压缩用的 LLM 挂了怎么办？**
@@ -1403,7 +1403,7 @@ MemoryCuration.curate（side-model）
 
 **Q15：为什么要分 Pipeline 和 EventBus 两条通道，合成一条不行吗？**
 
-- **通俗**：一条通道会把跑对话和刷界面混在一起，职责不清。LICode 把跑这一轮和把这轮的过程播给界面分成两件事，各走各的，互不干扰。
+- **通俗**：一条通道会把跑对话和刷界面混在一起，职责不清。本项目把跑这一轮和把这轮的过程播给界面分成两件事，各走各的，互不干扰。
 - **详细**：Pipeline 是请求编排，洋葱模型中间件链只过 user-message 一个事件，中间件之间用 next 串联，负责预处理、跑循环、后处理。EventBus 是流式 UI 更新，循环内每步 emit token、工具调用、完成等事件，switch 分发到 React setState 重渲染。两条通道不交叉，pipeline 上的中间件看不到 eventBus 事件，eventBus 也看不到 pipeline 的 user-message。唯一桥梁是 createAgentLoopMiddleware 把 eventBus 注入 loop，所以 loop 跑在 pipeline 内部却把事件发到 eventBus。
 
 ### 亮点 6 名词解释与深挖问答
