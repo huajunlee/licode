@@ -6,9 +6,13 @@ import {
   formatVerdictText,
   decideReflectTool,
   _setReflectChat,
+  _setReflectTimeout,
 } from "./decide-reflect.js";
 
-beforeEach(() => _setReflectChat(null));
+beforeEach(() => {
+  _setReflectChat(null);
+  _setReflectTimeout(null);
+});
 
 describe("buildReflectPrompt", () => {
   it("含评估 rubric 与输出格式要求", () => {
@@ -77,6 +81,20 @@ describe("decideReflectTool execute", () => {
       { workingDirectory: ".", sessionId: "s" }
     );
     expect(res.status).toBe("error");
+  });
+  it("LLM 挂起 -> 超时后 status=error（远小于生产 10s）", async () => {
+    // 注入永不 resolve 的 chat + 短超时，避免测试等待 10s
+    _setReflectChat(() => new Promise<string>(() => {}));
+    _setReflectTimeout(50);
+    const start = Date.now();
+    const res = await decideReflectTool.execute(
+      { plan: "# 决策计划：x" },
+      { workingDirectory: ".", sessionId: "s" }
+    );
+    const elapsed = Date.now() - start;
+    expect(res.status).toBe("error");
+    if (res.status === "error") expect(res.errorType).toBe("execution");
+    expect(elapsed).toBeLessThan(2000);
   });
   it("description 限定仅 decide_plan 后调用", () => {
     expect(decideReflectTool.description).toContain("decide_plan");

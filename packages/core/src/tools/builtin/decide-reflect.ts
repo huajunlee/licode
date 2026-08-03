@@ -70,22 +70,46 @@ export function _setReflectChat(fn: ReflectChat | null): void {
   testChat = fn;
 }
 
+/** 侧调用超时上限（ms）。生产默认 10s，与 recall.ts 一致。 */
+const DEFAULT_REFLECT_TIMEOUT_MS = 10_000;
+let testTimeoutMs: number | null = null;
+/** 仅供测试：注入超时时长；传 null 恢复生产默认。 */
+export function _setReflectTimeout(ms: number | null): void {
+  testTimeoutMs = ms;
+}
+
+/**
+ * Promise.race 超时封装，镜像 recall.ts 的 withTimeout；
+ * 胜出后清理定时器，避免已 settle 的 race 留下悬挂定时器拖住测试进程。
+ */
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<T>((_, reject) => {
+    timer = setTimeout(() => reject(new Error("decide_reflect timeout")), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer!));
+}
+
 async function reflectChat(prompt: string): Promise<string> {
-  if (testChat) return testChat(prompt);
-  const llm = new AnthropicProvider({
-    apiKey: process.env.ANTHROPIC_API_KEY ?? process.env.OPENAI_API_KEY ?? "",
-    baseUrl: process.env.ANTHROPIC_BASE_URL ?? process.env.OPENAI_BASE_URL,
-  });
-  const messages: Message[] = [
-    { role: "user", content: prompt, timestamp: new Date().toISOString() },
-  ];
-  const res = await llm.chat({
-    messages,
-    model: REFLECT_MODEL,
-    temperature: 0,
-    maxTokens: 1024,
-  });
-  return res.content;
+  const timeoutMs = testTimeoutMs ?? DEFAULT_REFLECT_TIMEOUT_MS;
+  const run = (async () => {
+    if (testChat) return testChat(prompt);
+    const llm = new AnthropicProvider({
+      apiKey: process.env.ANTHROPIC_API_KEY ?? process.env.OPENAI_API_KEY ?? "",
+      baseUrl: process.env.ANTHROPIC_BASE_URL ?? process.env.OPENAI_BASE_URL,
+    });
+    const messages: Message[] = [
+      { role: "user", content: prompt, timestamp: new Date().toISOString() },
+    ];
+    const res = await llm.chat({
+      messages,
+      model: REFLECT_MODEL,
+      temperature: 0,
+      maxTokens: 1024,
+    });
+    return res.content;
+  })();
+  return withTimeout(run, timeoutMs);
 }
 
 export const decideReflectTool: Tool<typeof DecideReflectParams> = {
