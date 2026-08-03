@@ -166,7 +166,7 @@ export function InputBox({
       <Box>
         <Text color={COLORS.faint}>
           {diaryMode
-            ? "口述经历 · /diary-end 结束 · Esc 取消"
+            ? "口述经历 · /diary-end 结束 · ctrl+q 取消"
             : loading
             ? "等待回复完成…"
             : disabled
