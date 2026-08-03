@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Text } from "ink";
-import { ICONS } from "../theme.js";
+import { COLORS, ICONS } from "../theme.js";
 
 export function formatElapsed(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -36,7 +36,7 @@ export function WaitingIndicator({ isActive }: WaitingIndicatorProps) {
   if (!isActive) return null;
 
   return (
-    <Text dimColor>
+    <Text color={COLORS.faint}>
       {ICONS.spinnerFrames[frame]} 等待中 · {formatElapsed(elapsed)}
     </Text>
   );

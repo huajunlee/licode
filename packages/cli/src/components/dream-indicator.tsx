@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Text } from "ink";
-import { ICONS } from "../theme.js";
+import { COLORS, ICONS } from "../theme.js";
 
 /**
  * Bottom indicator shown while a memory dream consolidation runs in the
@@ -18,7 +18,7 @@ export function DreamIndicator() {
   }, []);
 
   return (
-    <Text dimColor>
+    <Text color={COLORS.faint}>
       {ICONS.spinnerFrames[frame]} 记忆整理中...
     </Text>
   );

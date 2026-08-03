@@ -166,7 +166,9 @@ export function InputBox({
       <Box>
         <Text color={COLORS.faint}>
           {diaryMode
-            ? "口述经历 · /diary-end 结束 · ctrl+q 取消"
+            ? showSuggestions
+              ? "Enter 选中 · 再按 Enter 发送 · /diary-end 结束"
+              : "口述经历 · /diary-end 结束 · ctrl+q 取消"
             : loading
             ? "等待回复完成…"
             : disabled
