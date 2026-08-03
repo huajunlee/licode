@@ -3,7 +3,7 @@ import type { SlashCommand } from "../registry.js";
 const HELP_MAIN = [
   "══ LICode 帮助 ══",
   "",
-  "📖 用户指南: docs/guide/user-guide.md",
+  "用户指南: docs/guide/user-guide.md",
   "",
   "Slash 命令:",
   "  /help               — 显示此帮助",
@@ -64,7 +64,7 @@ const HELP_TOOLS = [
   "  read   读取文件    read { path, offset?, limit? }",
   "  write  写入文件    write { path, content }",
   "  edit   精确替换    edit { path, old_string, new_string, replace_all? }",
-  "  bash   执行命令    bash { command, timeout? }  ⚠️ 需确认",
+  "  bash   执行命令    bash { command, timeout? } 需确认",
   "  glob   文件名搜索  glob { pattern }",
   "  grep   内容搜索    grep { pattern, path?, include? }",
   "",

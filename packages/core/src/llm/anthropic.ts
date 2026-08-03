@@ -134,7 +134,7 @@ export class AnthropicProvider implements LLMProvider {
       const message = err instanceof Error ? err.message : String(err);
       const wrapped = new Error(
         message.includes("404")
-          ? `${message}\n\n💡 提示：如果你用的是非 Anthropic 官方的 API（如 DeepSeek），请设置环境变量：\n   export ANTHROPIC_BASE_URL="https://your-api-endpoint"\n   当前模型：${req.model}`
+          ? `${message}\n\n提示：如果你用的是非 Anthropic 官方的 API（如 DeepSeek），请设置环境变量：\n   export ANTHROPIC_BASE_URL="https://your-api-endpoint"\n   当前模型：${req.model}`
           : message
       );
       yield {

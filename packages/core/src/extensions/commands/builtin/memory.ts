@@ -10,7 +10,7 @@ async function listMemories(store: MemoryStore): Promise<string> {
   const entries = await store.listAll();
   if (entries.length === 0) {
     return [
-      "📝 没有存储的记忆。",
+      "没有存储的记忆。",
       "",
       "记忆会在你使用以下触发词时自动保存：",
       '  • "我的名字是..." / "我叫..."',
@@ -28,10 +28,10 @@ async function listMemories(store: MemoryStore): Promise<string> {
   }
 
   const typeLabels: Record<string, string> = {
-    user: "👤 用户",
-    feedback: "💬 反馈",
-    project: "📁 项目",
-    reference: "🔗 引用",
+    user: "用户",
+    feedback: "反馈",
+    project: "项目",
+    reference: "引用",
   };
 
   const lines: string[] = [];
@@ -45,7 +45,7 @@ async function listMemories(store: MemoryStore): Promise<string> {
     }
   }
 
-  return `📝 记忆 (${entries.length}):\n${lines.join("\n")}`;
+  return `记忆 (${entries.length}):\n${lines.join("\n")}`;
 }
 
 function errorUnknown(): { type: "error"; message: string } {
@@ -57,12 +57,12 @@ function errorUnknown(): { type: "error"; message: string } {
 
 async function listArchivedMemories(store: MemoryStore): Promise<string> {
   const entries = await store.listArchived();
-  if (entries.length === 0) return "📦 没有已归档的记忆。";
+  if (entries.length === 0) return "没有已归档的记忆。";
   const lines = entries.map((m) => {
     const preview = m.content.length > 60 ? m.content.slice(0, 60) + "..." : m.content;
     return `  [${m.slug}] ${m.name}: ${preview}`;
   });
-  return `📦 已归档记忆 (${entries.length}):\n${lines.join("\n")}`;
+  return `已归档记忆 (${entries.length}):\n${lines.join("\n")}`;
 }
 
 // ── /memory ── (backward compat, delegates to list) ──────────────────
@@ -95,7 +95,7 @@ export const memoryCommand: SlashCommand = {
       await getStore(context).save(memory);
       return {
         type: "action",
-        message: `✅ 已添加记忆 [${slug}]: ${content.slice(0, 80)}`,
+        message: `已添加记忆 [${slug}]: ${content.slice(0, 80)}`,
       };
     }
     if (sub === "delete") {
@@ -111,7 +111,7 @@ export const memoryCommand: SlashCommand = {
       await store.delete(slug);
       return {
         type: "action",
-        message: `🗑️ 已删除记忆 [${slug}]: ${existing.name}`,
+        message: `已删除记忆 [${slug}]: ${existing.name}`,
       };
     }
     if (sub === "restore") {
@@ -126,7 +126,7 @@ export const memoryCommand: SlashCommand = {
       }
       return {
         type: "action",
-        message: `♻️ 已恢复记忆 [${slug}]: ${existing.name}`,
+        message: `已恢复记忆 [${slug}]: ${existing.name}`,
       };
     }
     if (sub === "archive") {
@@ -141,7 +141,7 @@ export const memoryCommand: SlashCommand = {
       if (!existing) {
         return { type: "error", message: `记忆 "${slug}" 未找到。` };
       }
-      return { type: "action", message: `📌 已钉住记忆 [${slug}]: ${existing.name}（永不归档）` };
+      return { type: "action", message: `已钉住记忆 [${slug}]: ${existing.name}（永不归档）` };
     }
     if (sub === "unpin") {
       const slug = args[1];
@@ -152,7 +152,7 @@ export const memoryCommand: SlashCommand = {
       if (!existing) {
         return { type: "error", message: `记忆 "${slug}" 未找到。` };
       }
-      return { type: "action", message: `↩️ 已取消钉住 [${slug}]: ${existing.name}` };
+      return { type: "action", message: `已取消钉住 [${slug}]: ${existing.name}` };
     }
     return errorUnknown();
   },
@@ -192,7 +192,7 @@ export const memoryAddCommand: SlashCommand = {
     await getStore(context).save(memory);
     return {
       type: "action",
-      message: `✅ 已添加记忆 [${slug}]: ${content.slice(0, 80)}`,
+      message: `已添加记忆 [${slug}]: ${content.slice(0, 80)}`,
     };
   },
 };
@@ -215,7 +215,7 @@ export const memoryDeleteCommand: SlashCommand = {
     await store.delete(slug);
     return {
       type: "action",
-      message: `🗑️ 已删除记忆 [${slug}]: ${existing.name}`,
+      message: `已删除记忆 [${slug}]: ${existing.name}`,
     };
   },
 };
@@ -247,7 +247,7 @@ export const memoryRestoreCommand: SlashCommand = {
     }
     return {
       type: "action",
-      message: `♻️ 已恢复记忆 [${slug}]: ${existing.name}`,
+      message: `已恢复记忆 [${slug}]: ${existing.name}`,
     };
   },
 };
@@ -266,7 +266,7 @@ export const memoryPinCommand: SlashCommand = {
     if (!existing) {
       return { type: "error", message: `记忆 "${slug}" 未找到。` };
     }
-    return { type: "action", message: `📌 已钉住记忆 [${slug}]: ${existing.name}（永不归档）` };
+    return { type: "action", message: `已钉住记忆 [${slug}]: ${existing.name}（永不归档）` };
   },
 };
 
@@ -284,6 +284,6 @@ export const memoryUnpinCommand: SlashCommand = {
     if (!existing) {
       return { type: "error", message: `记忆 "${slug}" 未找到。` };
     }
-    return { type: "action", message: `↩️ 已取消钉住 [${slug}]: ${existing.name}` };
+    return { type: "action", message: `已取消钉住 [${slug}]: ${existing.name}` };
   },
 };
