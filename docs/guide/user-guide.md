@@ -1187,7 +1187,8 @@ MemoryCuration.curate（side-model）
 ## 亮点功能与简历项目（STAR 法则）
 
 > **项目名称：融合个人记忆与决策智能的第二大脑 Agent（代号 LICode）**
-> **项目定位：运行在终端的 AI 编程助手与个人第二大脑，集成 ReAct Agent 引擎、跨会话持久记忆、结构化日记与决策顾问。**
+>
+> **项目概述**：本项目是运行于终端的 AI 编程助手与个人第二大脑 Agent。技术栈采用 TypeScript 与 Node.js，以 pnpm monorepo 划分 core、cli、spec-kit 三层包，终端界面用 Ink 渲染、Zod 校验参数、Vitest 测试并遵循严格 TDD 工作流，经 Anthropic 兼容 API 接入大模型，通过 MCP 协议扩展外部工具。功能上实现了 ReAct 推理行动 Agent 引擎与洋葱模型双事件通道管线，内置 read、write、edit、bash、glob、grep 六个工具并统一接入 MCP、Skills、Hooks、Slash 命令扩展体系；构建了跨会话持久记忆系统，具备双路径生产、side-query 严格召回、四阶段做梦整理与日期归一化等机制；并实现第二大脑日记的结构化提取与三层提升、人物档案、决策顾问、长对话上下文管理，以及基于 Git Worktree 隔离的多智能体协作。
 >
 > 以下六条亮点可作为该项目的简历条目，每条按 STAR 法则展开。简历上使用每节开头的「简历条目」，面试时展开 STAR 细节并配合下方的「面试深挖问答」。
 
