@@ -18,4 +18,4 @@ export const BANNER_LINES: readonly string[] = RAW_LINES.map((l) =>
   l.padEnd(WIDTH)
 );
 
-export const TAGLINE = "终端里的 AI 编程伙伴";
+export const TAGLINE = "终端里的 AI 伙伴";
