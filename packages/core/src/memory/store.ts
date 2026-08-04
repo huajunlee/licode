@@ -292,15 +292,27 @@ export class MemoryStore {
           const raw = await fs.promises.readFile(filePath, "utf-8");
           const slug = `${type}/${path.basename(file, ".md")}`;
           const m = this.parse(raw, slug, type);
+          const vr = validateMemory(m);
+          if (!vr.ok) {
+            console.warn(`[memory] normalizeChangedSince: skipped invalid type "${m.type}" at ${file}`);
+            continue;
+          }
+          const targetType = vr.type;
+          const targetSlug = vr.slug;
+          const targetDir = path.join(this.dir, targetType);
+          const targetPath = path.join(targetDir, `${path.basename(targetSlug)}.md`);
           const name = normalizeDates(m.name, now);
           const description = normalizeDates(m.description, now);
           const content = normalizeDates(m.content, now);
-          if (name === m.name && description === m.description && content === m.content) continue;
+          // 无日期变化且未降级 -> 跳过
+          const unchanged = name === m.name && description === m.description && content === m.content && targetType === type;
+          if (unchanged) continue;
+          await fs.promises.mkdir(targetDir, { recursive: true });
           const frontmatter = [
             "---",
             `name: ${name}`,
             `description: ${description}`,
-            `type: ${m.type}`,
+            `type: ${targetType}`,
             `createdAt: ${m.createdAt}`,
             `updatedAt: ${m.updatedAt}`,
             `usageCount: ${m.usageCount ?? 0}`,
@@ -311,10 +323,11 @@ export class MemoryStore {
             content,
             "",
           ].join("\n");
-          await fs.promises.writeFile(filePath, frontmatter, "utf-8");
+          await fs.promises.writeFile(targetPath, frontmatter, "utf-8");
+          if (targetPath !== filePath) await fs.promises.unlink(filePath).catch(() => {});
           // Restore original mtime -> invisible to hasChangesSince.
           await fs.promises
-            .utimes(filePath, atimeMs / 1000, mtimeMs / 1000)
+            .utimes(targetPath, atimeMs / 1000, mtimeMs / 1000)
             .catch(() => {});
         } catch {
           // best-effort: skip files that fail to parse/rewrite

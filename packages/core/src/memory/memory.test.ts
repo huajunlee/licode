@@ -715,6 +715,24 @@ describe("MemoryStore.normalizeChangedSince (Write-path safety net)", () => {
     expect(raw).toContain("纯净标题");
     expect(statSync(filePath).mtimeMs).toBe(mtimeBefore);
   });
+
+  it("normalizeChangedSince downgrades an agent-written feedback file (missing Why/How) to user/", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-memory-"));
+    const fbPath = path.join(dir, "feedback", "use-pnpm.md");
+    mkdirSync(path.join(dir, "feedback"), { recursive: true });
+    writeFileSync(fbPath, [
+      "---", "name: 用pnpm", "description: d", "type: feedback",
+      "createdAt: 2026-08-04T00:00:00.000Z", "updatedAt: 2026-08-04T00:00:00.000Z",
+      "---", "", "用 pnpm 而非 npm", "",
+    ].join("\n"));
+    const ts = Date.now() - 1000;
+    const store = new MemoryStore(dir);
+    await store.normalizeChangedSince(ts);
+    expect(existsSync(fbPath)).toBe(false);
+    expect(existsSync(path.join(dir, "user", "use-pnpm.md"))).toBe(true);
+    const raw = readFileSync(path.join(dir, "user", "use-pnpm.md"), "utf-8");
+    expect(raw).toContain("type: user");
+  });
 });
 
 describe("validateMemory", () => {
