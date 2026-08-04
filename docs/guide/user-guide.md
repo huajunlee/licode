@@ -608,7 +608,7 @@ LLM 调用工具时：
 - **权限检查**：工具标记 `requiresApproval: true` 时触发 PermissionGuard
 - **并行执行**：多个 tool-use 调用 `executeParallel()` → `Promise.all` 并发执行
 
-### 7. 内置工具（6 基础 + 4 第二大脑）
+### 7. 内置工具（6 基础 + 6 第二大脑）
 
 | 工具 | 功能 | 适用场景 |
 |------|------|---------|
@@ -618,8 +618,10 @@ LLM 调用工具时：
 | **bash** | 执行 Shell 命令 | 构建、测试、git 操作 |
 | **glob** | 文件名模式匹配 | 查找特定类型文件 |
 | **grep** | 文件内容正则搜索 | 搜索函数调用、引用 |
-| **decide** | 汇聚历史决定/事实/人物/近期日记，给决策分析（B/C framing） | 用户请帮忙做决定、拿主意（见 §22） |
-| **decide_save** | 用户确认后把决策记入日记（两步 gating，直写 journal 不进 memory） | decide 分析后用户同意记下 |
+| **decide** | 汇聚历史决定/事实/人物/近期日记，给决策分析（B/C framing） | 简单决策：二选一、低 stakes、当前上下文够用（见 §22） |
+| **decide_plan** | 复杂决策的结构化规划：模型自填维度/选项/步骤，产出计划并驱动反思收敛 | 复杂决策：多维度/高 stakes/需定向召回（见 §22） |
+| **decide_reflect** | side-call 小模型评估计划完备性，返回 passed/gaps/suggestions | decide_plan 产出计划后自动调用（见 §22） |
+| **decide_save** | 用户确认后把决策记入日记（两步 gating，直写 journal 不进 memory） | decide/decide_plan 分析后用户同意记下 |
 | **journal_recall** | 按话题/关键词搜索历史日记 | 回忆"之前那件事" |
 | **profile_recall** | 按名字查找人物档案 | 回忆某人的特质/关系/互动 |
 
@@ -1127,9 +1129,9 @@ interface PersonProfile {
 - **specific 分流**：专有名字（爸妈/王总）自动归档；模糊称谓（朋友/同事/老板）留给 curation 人审。
 - **mergeProfiles 人审补漏**：当 profile-curation 的 side-call 漏判（没提议合并同一人的两个档案），可用手动合并兜底。
 
-### 22. 决策顾问（decide）
+### 22. 决策支持（decide / decide_plan / decide_reflect）
 
-当你请 LICode 帮忙做决定、拿主意时，它会调用 `decide` 工具，**汇聚你的历史决定、相关事实、人物立场和近期日记**，给出有依据的分析。
+当你请 LICode 帮忙做决定、拿主意时，它会根据决策复杂度选择路径：简单决策用 `decide`，**汇聚你的历史决定、相关事实、人物立场和近期日记**给出有依据的分析；复杂决策先用 `decide_plan` 规划、经 `decide_reflect` 反思收敛后再执行。下面先讲简单路径 `decide`，再讲复杂路径的 Planner。
 
 #### gatherDecisionContext：五块上下文
 
@@ -1163,6 +1165,65 @@ decide 给出分析
 
 `decide_save` 用 `buildDecisionEntry` 构造一条 `DiaryEntry`（title=【决策】topic），**直接写入 journal（日记）**，不进 memory。理由：决策是"发生在某时的 contextual 事件"，不是"永久事实"，放日记比污染记忆更合适。
 
+#### 简单还是复杂：路由
+
+`decide` 与 `decide_plan` 的分工由主模型按工具描述自行选择，命中下列任一即走复杂路径（decide_plan）：
+
+| 信号 | 含义 |
+|------|------|
+| 多维度权衡 | 涉及两个以上竞争维度（钱 vs 成长 vs 家庭） |
+| 高 stakes / 难撤销 | 后果重、难反转（职业、大额支出、重大关系） |
+| 信息不足需主动收集 | 当前上下文答不好，要跨多主题/人物定向召回 |
+| 多选项 | 三个以上真正可行的选项，非二选一 |
+| 长影响周期 | 影响以月/年计 |
+
+反之（二选一、低 stakes、当前上下文够用、用户要快）走简单路径 `decide`，行为同上。判偏了改工具描述即可，不动代码。
+
+#### decide_plan：模型自写计划
+
+复杂决策不直接回答，而是先产出一个结构化计划。计划由**主模型在调用工具时直接作为入参填写**（不做额外 side-call），工具只负责校验与渲染：
+
+```
+decide_plan(topic, question, dimensions, options, steps, focus?, people?)
+        │
+        ├─ topic：关键词，供后续 recall 匹配
+        ├─ question：完整决策问题/处境（topic 的详细补充）
+        ├─ dimensions：{aspect, goal}[]，维度 + 具体评估目标（如 成长 -> 未来3年技术成长空间）
+        ├─ options：可行选项
+        ├─ steps：执行步骤（每步说明要召回/收集什么）
+        ├─ focus？：升级或反思修订时需深挖的点
+        └─ people？：相关人 + 关系（如 张三/上级），关系影响分析权重
+```
+
+计划作为 tool result 注入上下文，**约束模型后续的工具调用路径**——这是软承诺，指引而非硬编排。计划产出后不直接执行，先经 decide_reflect 评估。
+
+#### decide_reflect：side-call 评估
+
+`decide_reflect` 用一个独立的 side-call 小模型（temperature:0，与主对话隔离、看不到主模型推理，无锚定偏见）评估计划是否完备，只报实质遗漏：
+
+- 关键维度缺失 / 选项严重偏见或狭窄 / 步骤不可行 / 人物缺失 / 决策问题不清晰
+- 已覆盖关键点即判通过，不挑小毛病（防不收敛）
+
+返回结构化判定 `{passed, gaps, suggestions}`。带超时保护（镜像记忆召回的 withTimeout，十秒兜底），挂起时降级为 error 不拖死主循环。
+
+#### reflect-revise 循环（最多 2 轮）
+
+```
+decide_plan ──> decide_reflect ──passed──> 内联执行 steps -> 综合分析 -> decide_save
+                 │
+                 └ gaps ─> decide_plan(focus=gaps+suggestions) ──> decide_reflect ──> …
+```
+
+- 第 1 轮：计划1 -> 评估。通过则执行；有 gaps 则修订。
+- 第 2 轮：计划2 -> 评估。通过则执行；仍不通过则接受当前计划执行（不再修订）。
+- 最多 2 轮评估、1 次修订，由主模型按工具描述驱动，复用已有循环，不新增执行引擎。
+
+**升级**：若先走了简单路径 `decide` 而用户不满（"太浅""没考虑家庭""为什么不是 B"），下一轮主模型识别不满，改调 `decide_plan` 并把不满点写进 `focus`，计划针对性补漏。`focus` 在用户驱动的升级与反思驱动的修订间复用，机制统一。
+
+#### 计划与评估的可见性
+
+计划与评估都是多行结构化内容，在终端**完整展开**显示（不像普通工具结果截断为一行摘要），让用户看到 Agent 打算怎么分析、评估挑出了什么。展示后不阻塞，继续执行或循环。
+
 ### 23. 整理系统（Curation）
 
 低 promotability 的候选和模糊人物，不会自动提升，而是进入**人审整理**流程：
@@ -1188,9 +1249,9 @@ MemoryCuration.curate（side-model）
 
 > **项目名称：融合个人记忆与决策智能的第二大脑 Agent（代号 LICode）**
 >
-> **项目概述**：本项目是运行于终端的 AI 编程助手与个人第二大脑 Agent。技术栈采用 TypeScript 与 Node.js，以 pnpm monorepo 划分 core、cli、spec-kit 三层包，终端界面用 Ink 渲染、Zod 校验参数、Vitest 测试并遵循严格 TDD 工作流，经 Anthropic 兼容 API 接入大模型，通过 MCP 协议扩展外部工具。功能上实现了 ReAct 推理行动 Agent 引擎与洋葱模型双事件通道管线，内置 read、write、edit、bash、glob、grep 六个工具并统一接入 MCP、Skills、Hooks、Slash 命令扩展体系；构建了跨会话持久记忆系统，具备双路径生产、side-query 严格召回、四阶段做梦整理与日期归一化等机制；并实现第二大脑日记的结构化提取与三层提升、人物档案、决策顾问、长对话上下文管理，以及基于 Git Worktree 隔离的多智能体协作。
+> **项目概述**：本项目是运行于终端的 AI 编程助手与个人第二大脑 Agent。技术栈采用 TypeScript 与 Node.js，以 pnpm monorepo 划分 core、cli、spec-kit 三层包，终端界面用 Ink 渲染、Zod 校验参数、Vitest 测试并遵循严格 TDD 工作流，经 Anthropic 兼容 API 接入大模型，通过 MCP 协议扩展外部工具。功能上实现了 ReAct 推理行动 Agent 引擎与洋葱模型双事件通道管线，内置 read、write、edit、bash、glob、grep 六个工具并统一接入 MCP、Skills、Hooks、Slash 命令扩展体系；构建了跨会话持久记忆系统，具备双路径生产、side-query 严格召回、四阶段做梦整理与日期归一化等机制；并实现第二大脑日记的结构化提取与三层提升、人物档案、决策顾问与复杂决策规划反思、长对话上下文管理，以及基于 Git Worktree 隔离的多智能体协作。
 >
-> 以下六条亮点可作为该项目的简历条目，每条按 STAR 法则展开。简历上使用每节开头的「简历条目」，面试时展开 STAR 细节并配合下方的「面试深挖问答」。
+> 以下七条亮点可作为该项目的简历条目，每条按 STAR 法则展开。简历上使用每节开头的「简历条目」，面试时展开 STAR 细节并配合下方的「面试深挖问答」。
 
 ### 亮点 1：跨会话持久记忆系统
 
@@ -1268,6 +1329,19 @@ MemoryCuration.curate（side-model）
   - 统一 ToolRegistry 将内置六工具、MCP 工具、Skills 工具统一注册，Zod schema 校验参数，PermissionGuard 权限检查，executeParallel 并发执行。
   - Skills 注入 system prompt 层加专属工具，Hooks 在 before 与 after agentLoop 执行 Shell 命令，CommandRouter 拦截斜杠命令。
 - **Result**：复杂任务可安全并行拆解，外部能力即插即用，权限与沙箱三层防护为系统提示词、PermissionGuard、macOS sandbox-exec。
+
+### 亮点 7：决策 Planner 与反思收敛循环
+
+**简历条目**：实现复杂决策的规划与反思收敛机制。主模型在调用工具时直接填写结构化计划，维度拆成方面加具体评估目标、人物带关系，计划作为工具结果注入上下文以约束后续执行路径，而非由额外模型生成。独立的 side-call 小模型在看不到主模型推理的隔离条件下评估计划完备性，只报实质遗漏，未通过则带焦点重规划再评估，最多两轮收敛，仍不通过则接受当前计划执行，避免无限循环。计划与评估结果在终端完整展开，并对简单与复杂决策做条件路由，简单决策仍走一次性上下文汇聚的快路径不受影响。
+
+- **Situation**：复杂决策若一次性给答案，模型容易走偏、漏维度、选项狭窄，且自我检查有锚定偏见，倾向于认为自己写得没问题。
+- **Task**：让复杂决策先规划再执行，且计划经独立视角检验后才动手，既不无限循环也不放过实质缺陷。
+- **Action**：
+  - 路由上主模型按工具描述自行选 decide 还是 decide_plan，命中多维度、高 stakes、需定向召回、多选项、长周期任一即走复杂路径，简单决策仍走 decide 快路径。
+  - decide_plan 由主模型直接填结构化入参，维度拆成方面加具体评估目标、人物带关系，工具只校验与渲染不做 side-call，计划作为工具结果注入上下文形成软承诺约束后续工具调用。
+  - decide_reflect 用独立小模型在 temperature 零、看不到主模型推理的隔离下评估，只报关键维度缺失、选项偏见、步骤不可行等实质遗漏，已覆盖即通过，带十秒超时兜底防挂起。
+  - 收敛循环最多两轮评估一次修订，未通过则带 focus 重规划，第二轮仍不通过则接受当前计划执行，focus 在用户不满触发的升级与反思触发的修订间复用。
+- **Result**：复杂决策从一次性拍脑袋变为先规划、经独立反思检验、收敛后才执行，计划有承诺、有可见性，既不无限循环也不放过实质缺陷，简单决策不受影响。
 
 ---
 
@@ -1791,6 +1865,22 @@ specs/用户通知功能/
 示例：decide_save { topic: "换工作", decision: "暂不跳槽", reasoning: "当前项目未结项..." }
 ```
 > 仅在用户明确同意后调用，直写 journal 不进 memory。详见 §22。
+
+### decide_plan - 复杂决策规划
+
+```
+参数：topic（关键词）、question（完整决策问题/处境）、dimensions（维度+评估目标，{aspect,goal}[]）、options（可行选项）、steps（执行步骤）、focus（升级/修订时需深挖的点，可选）、people（相关人+关系，可选）
+示例：decide_plan { topic: "换工作", question: "是否接受创业公司X的offer，薪资涨30%但要换城市", dimensions: [{aspect:"成长",goal:"未来3年技术成长空间"}], options: ["接受","拒绝","谈条件"], steps: ["journal_recall 职业 历史","profile_recall 相关人"] }
+```
+> 复杂决策先产计划再执行：主模型自填结构化计划，计划注入上下文约束后续工具调用。产出后自动调 decide_reflect 评估。详见 §22。
+
+### decide_reflect - 计划评估
+
+```
+参数：plan（待评估的计划文本，decide_plan 的渲染输出）
+示例：decide_reflect { plan: "# 决策计划：换工作\n## 维度\n- 成长：未来3年技术成长空间\n..." }
+```
+> side-call 小模型评估计划完备性，返回 {passed, gaps, suggestions}。仅在 decide_plan 后自动调用，未通过则带 focus 重规划，最多 2 轮。详见 §22。
 
 ### journal_recall - 回忆日记
 
