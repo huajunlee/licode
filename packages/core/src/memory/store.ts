@@ -7,6 +7,31 @@ const INDEX_HEADER = "# User Memory\n\nThe following memories are from previous 
 
 const MEMORY_TYPES: MemoryType[] = ["user", "feedback", "project", "reference"];
 
+export interface ValidationResult {
+  ok: boolean;
+  type: MemoryType;
+  slug: string;
+}
+
+/**
+ * 校验记忆的类型与 feedback 结构契约。共享给 save() 与 normalizeChangedSince()。
+ * - type 不在四类 -> ok:false(调用方拒绝写,不建脏目录)。
+ * - type=feedback 但 content 不含 Why: 或 How to apply: -> 降级 user(同步 slug 前缀)。
+ * 注意:这里的 keywords 校验与 dream.ts 的 suspicion keywords 无关(那是漂移线索词)。
+ */
+export function validateMemory(memory: Memory): ValidationResult {
+  if (!MEMORY_TYPES.includes(memory.type)) {
+    return { ok: false, type: memory.type, slug: memory.slug };
+  }
+  if (
+    memory.type === "feedback" &&
+    !(memory.content.includes("Why:") && memory.content.includes("How to apply:"))
+  ) {
+    return { ok: true, type: "user", slug: memory.slug.replace(/^feedback\//, "user/") };
+  }
+  return { ok: true, type: memory.type, slug: memory.slug };
+}
+
 /**
  * Write semantics for {@link MemoryStore.save}.
  *

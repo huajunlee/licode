@@ -4,7 +4,7 @@ import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SystemPrompt } from "../conversation/system-prompt.js";
 import { MemoryLoader } from "./loader.js";
-import { MemoryStore } from "./store.js";
+import { MemoryStore, validateMemory } from "./store.js";
 import type { Memory } from "./types.js";
 
 function makeMemory(overrides: Partial<Memory> = {}): Memory {
@@ -690,5 +690,37 @@ describe("MemoryStore.normalizeChangedSince (Write-path safety net)", () => {
     const raw = readFileSync(filePath, "utf-8");
     expect(raw).toContain("纯净标题");
     expect(statSync(filePath).mtimeMs).toBe(mtimeBefore);
+  });
+});
+
+describe("validateMemory", () => {
+  const base: Memory = {
+    slug: "user/x", type: "user", name: "n", description: "d",
+    content: "c", createdAt: "2026-08-04T00:00:00.000Z", updatedAt: "2026-08-04T00:00:00.000Z",
+  };
+
+  it("rejects type not in the four valid types", () => {
+    const r = validateMemory({ ...base, type: "foo" as Memory["type"] });
+    expect(r.ok).toBe(false);
+  });
+
+  it("passes a valid user memory unchanged", () => {
+    const r = validateMemory(base);
+    expect(r).toEqual({ ok: true, type: "user", slug: "user/x" });
+  });
+
+  it("downgrades feedback missing Why:/How to apply: to user (slug prefix fixed)", () => {
+    const r = validateMemory({ ...base, type: "feedback", slug: "feedback/use-pnpm", content: "用 pnpm" });
+    expect(r.ok).toBe(true);
+    expect(r.type).toBe("user");
+    expect(r.slug).toBe("user/use-pnpm");
+  });
+
+  it("keeps feedback that has both Why: and How to apply: as feedback", () => {
+    const r = validateMemory({
+      ...base, type: "feedback", slug: "feedback/use-pnpm",
+      content: "用 pnpm\nWhy: 用户要求\nHow to apply: 安装时用 pnpm",
+    });
+    expect(r).toEqual({ ok: true, type: "feedback", slug: "feedback/use-pnpm" });
   });
 });
