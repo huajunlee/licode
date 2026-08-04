@@ -807,4 +807,14 @@ describe("MemoryStore keywords (Phase B)", () => {
     const loaded = await store.load("user/bad");
     expect(loaded?.keywords).toBeUndefined();
   });
+
+  it("setPinned() preserves keywords (does not drop them on rewrite)", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-memory-"));
+    const store = new MemoryStore(dir);
+    await store.save({ ...makeMemory(), keywords: ["pnpm", "包管理器"] });
+    await store.setPinned("user/test-preference", true);
+    const loaded = await store.load("user/test-preference");
+    expect(loaded?.pinned).toBe(true);
+    expect(loaded?.keywords).toEqual(["pnpm", "包管理器"]);
+  });
 });

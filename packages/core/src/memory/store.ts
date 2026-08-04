@@ -461,6 +461,7 @@ export class MemoryStore {
         `usageCount: ${existing.usageCount ?? 0}`,
         `lastUsedAt: ${existing.lastUsedAt ?? ""}`,
         `pinned: ${pinned}`,
+        `keywords: ${JSON.stringify(existing.keywords ?? [])}`,
         "---",
         "",
         existing.content,
