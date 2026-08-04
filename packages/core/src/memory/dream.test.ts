@@ -309,6 +309,27 @@ describe("MemoryDream.dream (consolidate + prune)", () => {
     expect(await readState(path.join(memoryDir, ".dream.state"))).toBeGreaterThan(0);
   });
 
+  it("consolidate prompt contains the type decision tree (feedback->reference->project->user)", async () => {
+    const store = new MemoryStore(memoryDir);
+    await store.save(makeMemory("user/food"));
+    const dream = new MemoryDream({ minIntervalMs: 1, minNewSessions: 1 });
+    let capturedConsolidatePrompt = "";
+    (dream as any).llm.chat = vi
+      .fn()
+      .mockResolvedValueOnce({
+        content: '[{"slug":"user/food","keywords":["红烧排骨"],"reason":"r"}]',
+        usage: { input: 1, output: 1 },
+        model: "mock",
+        stopReason: "end_turn",
+      })
+      .mockImplementationOnce(async (req: { messages: Array<{ content: string }> }) => {
+        capturedConsolidatePrompt = req.messages[0].content;
+        return { content: "[]", usage: { input: 1, output: 1 }, model: "mock", stopReason: "end_turn" };
+      });
+    await dream.dream(store, sessionsDir, memoryDir);
+    expect(capturedConsolidatePrompt).toMatch(/feedback.*reference.*project.*user/s);
+  });
+
   it("backs up before delete and removes the file", async () => {
     const store = new MemoryStore(memoryDir);
     await store.save(makeMemory("user/food"));
