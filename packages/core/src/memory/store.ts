@@ -144,6 +144,7 @@ export class MemoryStore {
       `usageCount: ${usageCount}`,
       `lastUsedAt: ${lastUsedAt}`,
       `pinned: ${pinned}`,
+      `keywords: ${JSON.stringify(memory.keywords ?? [])}`,
       "---",
       "",
       finalContent,
@@ -318,6 +319,7 @@ export class MemoryStore {
             `usageCount: ${m.usageCount ?? 0}`,
             `lastUsedAt: ${m.lastUsedAt ?? ""}`,
             `pinned: ${m.pinned ?? false}`,
+            `keywords: ${JSON.stringify(m.keywords ?? [])}`,
             "---",
             "",
             content,
@@ -367,6 +369,8 @@ export class MemoryStore {
         `updatedAt: ${existing.updatedAt}`,
         `usageCount: ${usageCount}`,
         `lastUsedAt: ${lastUsedAt}`,
+        // 注：此站点历史上下文无 pinned 行（Phase 4 遗留）；keywords 紧随 lastUsedAt。
+        `keywords: ${JSON.stringify(existing.keywords ?? [])}`,
         "---",
         "",
         existing.content,
@@ -519,6 +523,17 @@ export class MemoryStore {
       fm.set(line.slice(0, idx).trim(), line.slice(idx + 1).trim());
     }
 
+    // keywords: 容错解析。缺失（旧记忆）-> undefined；非 JSON / 非字符串数组 -> undefined。绝不抛。
+    let keywords: string[] | undefined;
+    const kwMatch = raw.match(/^keywords:\s*(\[.*\])\s*$/m);
+    if (kwMatch) {
+      try {
+        const p = JSON.parse(kwMatch[1]);
+        if (Array.isArray(p) && p.every((k) => typeof k === "string")) keywords = p;
+      } catch { /* -> undefined */
+      }
+    }
+
     return {
       slug,
       type: (fm.get("type") as MemoryType) ?? (type as MemoryType),
@@ -530,6 +545,7 @@ export class MemoryStore {
       usageCount: fm.has("usageCount") ? Number(fm.get("usageCount")) || 0 : 0,
       lastUsedAt: fm.get("lastUsedAt") ?? "",
       pinned: fm.get("pinned") === "true",
+      keywords,
     };
   }
 }

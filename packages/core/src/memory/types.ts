@@ -21,6 +21,11 @@ export interface Memory {
   lastUsedAt?: string;
   /** Phase 4: 用户/Agent 标记的"永不归档"。pinned 记忆不进归档候选。 */
   pinned?: boolean;
+  /**
+   * Per-memory 检索关键词（Phase B，LLM 产出）。recall 的 rich-index 将据此命中。
+   * 注意：与 dream.ts 的 suspicion keywords 无关——那是漂移线索词，不是检索键。
+   */
+  keywords?: string[];
 }
 
 /** @deprecated 使用 Memory 替代 */

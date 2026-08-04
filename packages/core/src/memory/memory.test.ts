@@ -766,3 +766,45 @@ describe("validateMemory", () => {
     expect(r).toEqual({ ok: true, type: "feedback", slug: "feedback/use-pnpm" });
   });
 });
+
+describe("MemoryStore keywords (Phase B)", () => {
+  let dir: string | null = null;
+  afterEach(() => {
+    if (dir) {
+      rmSync(dir, { recursive: true, force: true });
+      dir = null;
+    }
+  });
+
+  it("save() writes keywords frontmatter and load() reads them back", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-memory-"));
+    const store = new MemoryStore(dir);
+    await store.save({ ...makeMemory(), keywords: ["pnpm", "包管理器"] });
+    const loaded = await store.load("user/test-preference");
+    expect(loaded?.keywords).toEqual(["pnpm", "包管理器"]);
+  });
+
+  it("load() tolerates missing keywords (old memories) -> undefined", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-memory-"));
+    const store = new MemoryStore(dir);
+    // 手写一个无 keywords 的旧记忆文件
+    const fp = path.join(dir, "user", "old.md");
+    mkdirSync(path.join(dir, "user"), { recursive: true });
+    writeFileSync(fp, ["---", "name: old", "description: d", "type: user",
+      "createdAt: 2026-01-01T00:00:00.000Z", "updatedAt: 2026-01-01T00:00:00.000Z", "---", "", "c", ""].join("\n"));
+    const loaded = await store.load("user/old");
+    expect(loaded?.keywords).toBeUndefined();
+  });
+
+  it("load() tolerates malformed keywords frontmatter -> undefined", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-memory-"));
+    const fp = path.join(dir, "user", "bad.md");
+    mkdirSync(path.join(dir, "user"), { recursive: true });
+    writeFileSync(fp, ["---", "name: bad", "description: d", "type: user",
+      "keywords: not-json", "createdAt: 2026-01-01T00:00:00.000Z", "updatedAt: 2026-01-01T00:00:00.000Z",
+      "---", "", "c", ""].join("\n"));
+    const store = new MemoryStore(dir);
+    const loaded = await store.load("user/bad");
+    expect(loaded?.keywords).toBeUndefined();
+  });
+});
