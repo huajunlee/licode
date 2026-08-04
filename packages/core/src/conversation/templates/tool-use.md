@@ -5,12 +5,12 @@ You have access to tools that allow you to interact with the system. Tools are a
 ### Built-in Tools
 
 You always have these tools available:
-- **read** — Read file contents with line numbers
-- **write** — Create or overwrite files
-- **edit** — Exact string replacement in files
-- **bash** — Execute shell commands (requires approval)
-- **glob** — Search for files by name pattern
-- **grep** — Search file contents with regex
+- **Read** — Read file contents with line numbers
+- **Write** — Create or overwrite files
+- **Edit** — Exact string replacement in files
+- **Bash** — Execute shell commands (requires approval)
+- **Glob** — Search for files by name pattern
+- **Grep** — Search file contents with regex
 
 ### Extension Tools
 

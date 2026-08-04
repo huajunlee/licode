@@ -21,7 +21,16 @@ export class ToolRegistry {
   }
 
   get(name: string): Tool | undefined {
-    return this.tools.get(name);
+    const exact = this.tools.get(name);
+    if (exact) return exact;
+    // Fallback: case-insensitive match. Some models emit tool names with
+    // wrong casing (e.g. deepseek-chat sending "read" for "Read"); tolerate
+    // it so a stray lowercase call still resolves to the registered tool.
+    const lower = name.toLowerCase();
+    for (const tool of this.tools.values()) {
+      if (tool.name.toLowerCase() === lower) return tool;
+    }
+    return undefined;
   }
 
   getTools(): Tool[] {

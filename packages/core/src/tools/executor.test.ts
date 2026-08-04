@@ -103,3 +103,38 @@ describe("ToolExecutor overflow", () => {
     expect(result.content.length).toBe(60 * 1024);
   });
 });
+
+describe("ToolExecutor tool resolution", () => {
+  it("resolves tool names case-insensitively (e.g. deepseek 'read' -> 'Read')", async () => {
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "Read",
+      description: "read",
+      parameters: z.object({}),
+      execute: async () => ({ status: "success" as const, content: "ok" }),
+    });
+    const executor = new ToolExecutor(registry);
+
+    const result = await executor.executeOne({ id: "t1", name: "read", input: {} });
+    expect(result.status).toBe("success");
+    if (result.status !== "success") throw new Error("expected success");
+    expect(result.content).toBe("ok");
+  });
+
+  it("still errors on a truly unknown tool name", async () => {
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "Read",
+      description: "read",
+      parameters: z.object({}),
+      execute: async () => ({ status: "success" as const, content: "ok" }),
+    });
+    const executor = new ToolExecutor(registry);
+
+    const result = await executor.executeOne({ id: "t1", name: "nope", input: {} });
+    expect(result.status).toBe("error");
+    if (result.status !== "success") {
+      expect(result.error).toContain("Unknown tool");
+    }
+  });
+});
