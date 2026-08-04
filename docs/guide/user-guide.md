@@ -981,6 +981,28 @@ after:agentLoop hook（fire-and-forget，不阻塞用户）
 
 生产（after:agentLoop）与召回（onTurnStart）分居 agent loop 两侧，共用同一个 MemoryStore 作为真相源，MEMORY.md 索引是两者之间的桥梁。
 
+#### 与 Claude Code 记忆模型的关系：六层全覆盖
+
+网上流传 Claude Code 有"六大记忆分层"（指令、短期、工作、长期、摘要、重塑休眠）的说法。这里需要厘清一个事实：**这是社区拆解文章的归纳，并非 Anthropic 官方模型**。Anthropic 官方记忆文档对 Claude Code 的记忆只描述了**两套互补系统**——`CLAUDE.md`（用户写的指令）与 Auto memory（Claude 自己写的笔记，`MEMORY.md` + topic 文件），并无"六层"的官方划分；官方文档总目录里也没有任何关于 memory consolidation / auto dream / dormant reshaping 的页面（"重塑休眠"仅见于泄漏源码的社区分析）。
+
+把社区六层逐一映射到 LICode 的实现，可以看到 **LICode 六层全覆盖，且按职责分散在多个模块**：
+
+| 社区六层 | Claude Code 真实机制 | LICode 对应 |
+|---|---|---|
+| 指令记忆 | CLAUDE.md | system-prompt 分层（role/safety/memory-guide）+ 项目 CLAUDE.md |
+| 短期记忆 | 近期对话消息 | `conversation/` 的 messages（当前会话） |
+| 工作记忆 | context window（组装后的 prompt） | `conversation/` + `system-prompt.ts` 装配 |
+| 长期记忆 | Auto memory（MEMORY.md + topic 文件） | `memory/`（四类型 + MEMORY.md 索引） |
+| 摘要记忆 | auto-compact / `/compact` | `context/compressor.ts` + `summarizer.ts`（按轮次边界压缩） |
+| 重塑休眠记忆 | Auto Dream（仅泄漏源码，非官方文档） | `memory/dream.ts`（四阶段整理 + 自动归档） |
+
+两个要点：
+
+- **短期记忆与工作记忆在 Claude Code 实际实现里是同一个东西**（对话消息在 context window 中），官方并未分成两层；LICode 同样不单设"短期记忆存储"，工作记忆即当前对话，与官方一致。
+- **LICode 的 `memory/dream.ts` 实现了"重塑休眠"层，而这一层在 Claude Code 官方文档里并未公开承认**——它只出现在泄漏源码的社区分析中。换言之，在整理/巩固这一层上，LICode 比官方文档所披露的更完整。
+
+> 💡 **inform 与 steer**：LICode 的记忆当前以 **inform** 为主——按查询相关性召回事实并注入当轮上下文；四类型中的 `feedback`（用户对协作方式的纠正与确认）则是让记忆进一步 **steer**（反向塑造 Agent 行为）的载体。前者让助手"了解用户"，后者让助手"按用户的方式协作"，二者共同构成记忆从画像到行为底座的演进路径。
+
 ### 18. 多智能体（Multi-Agent）
 
 复杂任务可以拆解给子 Agent 执行：
