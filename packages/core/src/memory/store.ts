@@ -69,10 +69,18 @@ export class MemoryStore {
   constructor(private dir: string) {}
 
   async save(memory: Memory, action: MemoryAction = "create"): Promise<void> {
-    const typeDir = path.join(this.dir, memory.type);
+    const vr = validateMemory(memory);
+    if (!vr.ok) {
+      console.warn(`[memory] rejected invalid type "${memory.type}" for slug "${memory.slug}"`);
+      return;
+    }
+    // 用校验/降级后的 type 与 slug(降级时 feedback/ -> user/)
+    const type = vr.type;
+    const slug = vr.slug;
+    const typeDir = path.join(this.dir, type);
     await fs.promises.mkdir(typeDir, { recursive: true });
 
-    const filePath = path.join(typeDir, `${path.basename(memory.slug)}.md`);
+    const filePath = path.join(typeDir, `${path.basename(slug)}.md`);
     const exists = fs.existsSync(filePath);
 
     // create on an existing file degrades to append — never lose old content
@@ -92,7 +100,7 @@ export class MemoryStore {
     if (effectiveAction === "update") {
       // Replace content wholesale; keep the original createdAt, refresh updatedAt
       if (exists) {
-        const existing = await this.load(memory.slug);
+        const existing = await this.load(slug);
         if (existing) {
           createdAt = existing.createdAt;
           usageCount = existing.usageCount ?? 0;
@@ -102,7 +110,7 @@ export class MemoryStore {
       }
       updatedAt = new Date().toISOString();
     } else if (effectiveAction === "append" && exists) {
-      const existing = await this.load(memory.slug);
+      const existing = await this.load(slug);
       if (existing) {
         finalContent = mergeAppend(existing.content, memory.content);
         usageCount = existing.usageCount ?? 0;
@@ -130,7 +138,7 @@ export class MemoryStore {
       "---",
       `name: ${finalName}`,
       `description: ${finalDescription}`,
-      `type: ${memory.type}`,
+      `type: ${type}`,
       `createdAt: ${createdAt}`,
       `updatedAt: ${updatedAt}`,
       `usageCount: ${usageCount}`,

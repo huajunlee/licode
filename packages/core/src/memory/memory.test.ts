@@ -49,6 +49,30 @@ describe("MemoryStore (new API)", () => {
     expect(raw).toContain("The user prefers testing with vitest.");
   });
 
+  it("save() skips a memory with invalid type and does not create a dir", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-memory-"));
+    const store = new MemoryStore(dir);
+    const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await store.save({ ...makeMemory(), type: "bogus" as Memory["type"], slug: "bogus/x" });
+    expect(spy).toHaveBeenCalled();
+    expect(existsSync(path.join(dir, "bogus"))).toBe(false);
+    spy.mockRestore();
+  });
+
+  it("save() downgrades feedback missing Why/How to user (writes to user/ dir)", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-memory-"));
+    const store = new MemoryStore(dir);
+    await store.save({
+      ...makeMemory(),
+      type: "feedback", slug: "feedback/use-pnpm",
+      content: "用 pnpm 而非 npm",
+    });
+    expect(existsSync(path.join(dir, "feedback", "use-pnpm.md"))).toBe(false);
+    expect(existsSync(path.join(dir, "user", "use-pnpm.md"))).toBe(true);
+    const raw = readFileSync(path.join(dir, "user", "use-pnpm.md"), "utf-8");
+    expect(raw).toContain("type: user");
+  });
+
   // --- append merge ---
 
   it("appends content when saving to an existing slug", async () => {
