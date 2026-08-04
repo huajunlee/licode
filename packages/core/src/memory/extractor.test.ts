@@ -200,6 +200,32 @@ describe("RegexMemoryExtractor (deprecated, regex-based)", () => {
   });
 });
 
+describe("MemoryExtractor prompt", () => {
+  it("buildPrompt contains the type decision tree (feedback first, user fallback)", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "licode-mem-"));
+    try {
+      const store = new MemoryStore(dir);
+      const ext = new MemoryExtractor();
+      let captured = "";
+      (ext as unknown as { llm: { chat: (req: { messages: Array<{ content: string }> }) => Promise<unknown> } })
+        .llm.chat = vi.fn(async (req) => {
+          captured = req.messages[0].content;
+          return { content: "[]", usage: { input: 1, output: 1 }, model: "mock", stopReason: "end_turn" };
+        });
+      await ext.extract(
+        [{ role: "user", content: "以后都用 pnpm", timestamp: "2026-08-04T00:00:00.000Z" }] as any,
+        store
+      );
+      expect(captured).toContain("feedback");
+      expect(captured).toContain("reference");
+      expect(captured).toContain("project");
+      expect(captured).toMatch(/feedback.*reference.*project.*user/s); // 决策顺序
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("MemoryExtractor prompt date injection", () => {
   it("buildPrompt includes today's date and the field-explicit absolute-date rule", async () => {
     vi.useFakeTimers({ now: new Date(2026, 7, 1) });
