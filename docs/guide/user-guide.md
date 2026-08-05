@@ -552,6 +552,10 @@ flowchart LR
 
 ### 4. LLMProvider（大模型适配层）
 
+所谓 Chunk，就是大模型流式返回时吐出的一个个"数据片段"，比如你使用的是Anthropic的规范，那么这个Chunk就是符合Anthropic规范的Chunk。Agent 建立在 LLMProvider 接口上（provider.ts:93-100），AnthropicProvider（anthropic.ts:14）只是这个接口的一个适配实现。ReAct 循环、工具执行、上下文管理都是 LICode 自己写的，anthropic SDK 只负责“把 LLM 调用适配成统一的 StreamChunk 流”。换 provider 时只要新 provider 也接收和产出 响应的StreamChunk，collectResponse 和上层 AgentLoop 一行都不用改。
+
+LICode 把它定义为 StreamChunk,一共 5 种,靠每个片段自带的 type 字段区分。和session的md文件中看到的"JSON Schema"其实是两回事:工具参数才走 JSON Schema,Chunk 是流式响应的内部 TS 类型,不在 schema 里;但 Chunk 的类型定义里确实有 type 字段标明它是哪一种。
+
 LICode 通过 `LLMProvider` 接口抽象大模型调用，当前支持 Anthropic 兼容 API。
 
 **流式响应的 5 种 chunk 类型：**
