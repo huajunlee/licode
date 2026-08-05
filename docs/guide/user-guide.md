@@ -461,6 +461,41 @@ flowchart TD
 
 AgentLoop 是 LICode 的核心决策发动机，实现 **ReAct（Reasoning + Acting）** 模式。
 
+**AgentLoop 的组成：**
+
+AgentLoop 直接持有九类部件；Skill/MCP/SubAgent 不在其中——它们经 adapter 翻译成统一的 `Tool` 注册进 ToolRegistry，被 loop 透明使用。
+
+```mermaid
+flowchart LR
+    subgraph loop ["AgentLoop（ReAct 决策发动机）"]
+        direction TB
+        LLM["LLMProvider · 出招（stream）"]
+        CM["ConversationManager · 记忆"]
+        TR["ToolRegistry · 工具箱"]
+        TE["ToolExecutor · 校验+并行执行"]
+        TP["TerminationPolicy · 三重刹车"]
+        TC["TokenCounter · 估算 token"]
+        CC["ContextCompressor · 压缩上下文"]
+        EB["EventBus · 广播事件"]
+        OTS["onTurnStart · 召回记忆"]
+    end
+
+    subgraph ext ["扩展源（经 adapter 转 Tool，对 loop 透明）"]
+        direction TB
+        BUILTIN["内置工具 Read/Write/Edit/Bash/Glob/Grep"]
+        MCP["MCP 工具"]
+        SKL["Skill 工具"]
+        SUB["SubAgent 工具"]
+    end
+
+    BUILTIN -.->|registerAll| TR
+    MCP -.->|mcpToolToAdapter| TR
+    SKL -.->|skillToolToAdapter| TR
+    SUB -.->|createAgentTool| TR
+```
+
+其中 LLMProvider / ConversationManager / ToolRegistry / ContextCompressor / EventBus / onTurnStart 为**注入**（来自 `AgentConfig`），ToolExecutor / TerminationPolicy / TokenCounter 为**内部构造**；内置工具 + MCP + Skill + SubAgent 经 adapter 转 `Tool` 注册进 ToolRegistry，对 loop 完全透明——新增一类扩展只需写 adapter，loop 无需改动。
+
 **ReAct 循环时序：**
 
 ```
