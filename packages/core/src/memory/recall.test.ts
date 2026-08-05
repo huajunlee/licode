@@ -189,25 +189,85 @@ describe("MemoryRecall.select", () => {
   });
 
   // Contract: select() never rejects - every failure mode degrades to [].
-  // loadIndex()/listAll() read the filesystem and can throw on a race or
-  // EACCES; they must be covered by the never-rejects guard, not just the
-  // LLM/timeout path. (Phase 4 usage-counting will hang off this return.)
-  it("never rejects when store.loadIndex() throws (file race / EACCES)", async () => {
-    const failingStore = {
-      loadIndex: vi.fn().mockRejectedValue(new Error("EACCES")),
-      listAll: vi.fn().mockResolvedValue([]),
-    } as unknown as MemoryStore;
-    const recall = new MemoryRecall();
-    await expect(recall.select("q", failingStore)).resolves.toEqual([]);
-  });
-
+  // listAll() reads the filesystem and can throw on a race or EACCES; it must
+  // be covered by the never-rejects guard, not just the LLM/timeout path.
+  // (Phase 4 usage-counting will hang off this return.)
   it("never rejects when store.listAll() throws (file race / EACCES)", async () => {
     const failingStore = {
-      loadIndex: vi.fn().mockResolvedValue("# index"),
       listAll: vi.fn().mockRejectedValue(new Error("EACCES")),
     } as unknown as MemoryStore;
     const recall = new MemoryRecall();
     await expect(recall.select("q", failingStore)).resolves.toEqual([]);
+  });
+});
+
+describe("MemoryRecall rich index", () => {
+  let dir: string | null = null;
+  let store: MemoryStore;
+
+  beforeEach(async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "test-key-123");
+    dir = mkdtempSync(path.join(tmpdir(), "recall-rich-"));
+    store = new MemoryStore(dir);
+  });
+
+  afterEach(() => {
+    if (dir) { rmSync(dir, { recursive: true, force: true }); dir = null; }
+    vi.unstubAllEnvs();
+  });
+
+  function mockChatReturning(content: string) {
+    const recall = new MemoryRecall();
+    const mockChat = vi.fn().mockResolvedValue({
+      content,
+      usage: { input: 1, output: 1 },
+      model: "mock",
+      stopReason: "end_turn",
+    });
+    (recall as any).llm.chat = mockChat;
+    return { recall, mockChat };
+  }
+
+  it("select() builds a rich index with description + keywords + first-line preview", async () => {
+    await store.save({
+      slug: "user/java", type: "user", name: "Java偏好",
+      description: "用户偏好Java后端", content: "用户主要用 Java 做后端开发。\n第二行。",
+      keywords: ["Java", "后端"], createdAt: "2026-08-04T00:00:00.000Z", updatedAt: "2026-08-04T00:00:00.000Z",
+    });
+    const { recall, mockChat } = mockChatReturning('["user/java"]');
+    await recall.select("帮我写Java接口", store);
+    const prompt = mockChat.mock.calls[0][0].messages[0].content as string;
+    expect(prompt).toContain("Java偏好");
+    expect(prompt).toContain("[关键词: Java,后端]");
+    expect(prompt).toContain("用户主要用 Java 做后端开发"); // 正文首行
+  });
+
+  it("rich index omits keywords segment when absent (old memory)", async () => {
+    await store.save({
+      slug: "user/old", type: "user", name: "旧记忆",
+      description: "无关键词的旧记忆", content: "这是旧记忆正文首行。",
+      createdAt: "2026-08-04T00:00:00.000Z", updatedAt: "2026-08-04T00:00:00.000Z",
+    });
+    const { recall, mockChat } = mockChatReturning('["user/old"]');
+    await recall.select("q", store);
+    const prompt = mockChat.mock.calls[0][0].messages[0].content as string;
+    expect(prompt).not.toContain("[关键词:");
+    expect(prompt).toContain("旧记忆");
+    expect(prompt).toContain("这是旧记忆正文首行");
+  });
+
+  it("first-line preview is truncated to 60 chars with …", async () => {
+    const longFirstLine = "一".repeat(80); // 80 chars > 60
+    await store.save({
+      slug: "user/long", type: "user", name: "长首行",
+      description: "首行超长", content: `${longFirstLine}\n第二行。`,
+      keywords: ["长"], createdAt: "2026-08-04T00:00:00.000Z", updatedAt: "2026-08-04T00:00:00.000Z",
+    });
+    const { recall, mockChat } = mockChatReturning('["user/long"]');
+    await recall.select("q", store);
+    const prompt = mockChat.mock.calls[0][0].messages[0].content as string;
+    expect(prompt).toContain("一".repeat(60) + "…");
+    expect(prompt).not.toContain("一".repeat(61));
   });
 });
 

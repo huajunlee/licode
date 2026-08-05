@@ -125,16 +125,25 @@ export class MemoryRecall {
 
   async select(userQuery: string, store: MemoryStore): Promise<Memory[]> {
     try {
-      const indexContent = await store.loadIndex();
-      if (!indexContent || indexContent.trim().length === 0) return [];
-
       const all = await store.listAll();
+      if (all.length === 0) return [];
       const knownSlugs = new Set(all.map((m) => m.slug));
-
+      // Rich index (in-memory): name - description [关键词] 「正文首行预览」.
+      // Built from listAll() so the side-query sees keywords + first-line,
+      // not just the bare MEMORY.md description. MEMORY.md itself is unchanged
+      // and still refreshed by createMemoryRecallHandler as the system-prompt layer.
+      const richIndex = all.map((m) => {
+        const parts = [`- [${m.name}](${m.slug}.md) - ${m.description}`];
+        if (m.keywords && m.keywords.length) parts.push(`[关键词: ${m.keywords.join(",")}]`);
+        const first = (m.content.split("\n")[0] || "").trim();
+        const preview = first.length > 60 ? first.slice(0, 60) + "…" : first;
+        parts.push(`「${preview}」`);
+        return parts.join(" ");
+      }).join("\n");
       const response = await this.withTimeout(
         this.llm.chat({
           messages: [
-            { role: "user", content: this.buildPrompt(indexContent, userQuery), timestamp: new Date().toISOString() },
+            { role: "user", content: this.buildPrompt(richIndex, userQuery), timestamp: new Date().toISOString() },
           ],
           model: this.model,
           maxTokens: 512,
@@ -164,7 +173,7 @@ export class MemoryRecall {
       "You are a STRICT memory-recall filter. Given the user's current message and the memory index,",
       "decide which memories to recall. 默认不召回任何记忆；不满足下列相关性条件的一律输出 []。",
       "",
-      "## Memory index",
+      "## Memory index（每条:名称 - 描述 [关键词] 「正文首行预览」,按相关性选择）",
       indexContent.trim(),
       "",
       "## User message",
