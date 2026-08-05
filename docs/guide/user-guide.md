@@ -107,7 +107,7 @@ pnpm start -- --session abc123
 LICode 会自动用 `read` 和 `glob` 工具扫描项目结构、读取关键文件，建立对项目的理解：
 
 ```
-🤔 正在了解项目结构...
+▸ 读取代码
    读取 package.json → 确认依赖：Express, Prisma, Jest
    读取 prisma/schema.prisma → 发现 User 模型：id, email, passwordHash
    读取 src/routes/ → 已有 auth.ts, posts.ts
@@ -131,7 +131,7 @@ LICode 会自动用 `read` 和 `glob` 工具扫描项目结构、读取关键文
 LICode 不会一口气全做完，而是**分步思考、逐步执行**：
 
 ```
-🤔 正在分析需求...
+▸ 分析逻辑
    需要 4 步完成：
    Step 1: 修改 Prisma schema，添加 nickname 字段
    Step 2: 运行 prisma migrate 创建数据库迁移
@@ -150,62 +150,27 @@ LICode 不会一口气全做完，而是**分步思考、逐步执行**：
 **Step 1 — 修改数据库 Schema：**
 
 ```
-┌──────────────────────────────────────────────┐
-│ ✓ edit  修改 prisma/schema.prisma            │
-│   model User 新增:                           │
-│   + nickname String? @db.VarChar(20)         │
-└──────────────────────────────────────────────┘
+● Edit  prisma/schema.prisma  ✓  model User 新增 nickname String? @db.VarChar(20)
 ```
 
 **Step 2 — 创建数据库迁移：**
 
 ```
-┌──────────────────────────────────────────────┐
-│ ⚙ bash  执行 npx prisma migrate dev         │
-│   --name add-user-nickname                   │
-│   ✓ 迁移文件已创建:                            │
-│     prisma/migrations/20260724_add_nickname/  │
-│   ✓ 数据库已同步                              │
-└──────────────────────────────────────────────┘
+● Bash  npx prisma migrate dev --name add-user-nickname  ✓  迁移已创建，数据库已同步
 ```
 
 **Step 3 — 编写路由代码：**
 
 ```
-┌──────────────────────────────────────────────┐
-│ ✓ write  创建 src/routes/user.ts             │
-│   - PATCH /api/user/nickname                 │
-│   - Zod 校验：非空，无特殊字符                 │
-│   - 只允许修改自己的昵称                       │
-└──────────────────────────────────────────────┘
-┌──────────────────────────────────────────────┐
-│ ✓ edit   修改 src/index.ts                   │
-│   + app.use('/api/user', userRouter)         │
-└──────────────────────────────────────────────┘
+● Write  创建 src/routes/user.ts  ✓  PATCH /api/user/nickname + Zod 校验
+● Edit   修改 src/index.ts  ✓  + app.use('/api/user', userRouter)
 ```
 
 **Step 4 — 编写并运行测试：**
 
 ```
-┌──────────────────────────────────────────────┐
-│ ✓ write  创建 src/routes/__tests__/user.test.ts │
-│   测试用例：                                   │
-│   - 正常修改昵称                               │
-│   - 空字符串返回 400                           │
-│   - 特殊字符返回 400                           │
-│   - 超长昵称返回 400                           │
-│   - 未登录返回 401                             │
-└──────────────────────────────────────────────┘
-┌──────────────────────────────────────────────┐
-│ ⚙ bash  执行 npx jest -- user.test.ts       │
-│   PASS  src/routes/__tests__/user.test.ts    │
-│   ✓ 正常修改昵称 (32ms)                       │
-│   ✓ 空字符串返回 400 (8ms)                    │
-│   ✓ 特殊字符返回 400 (6ms)                    │
-│   ✓ 超长昵称返回 400 (5ms)                    │
-│   ✓ 未登录返回 401 (7ms)                      │
-│   Tests: 5 passed, 5 total                   │
-└──────────────────────────────────────────────┘
+● Write  创建 src/routes/__tests__/user.test.ts  ✓  5 个测试用例
+● Bash   npx jest -- user.test.ts  ✓  Tests: 5 passed, 5 total
 ```
 
 ---
@@ -222,15 +187,8 @@ LICode 不会一口气全做完，而是**分步思考、逐步执行**：
 LICode 会用 `edit` 精确替换 Zod schema 中的正则表达式，然后重新跑测试验证：
 
 ```
-┌──────────────────────────────────────────────┐
-│ ✓ edit   修改 src/routes/user.ts:15          │
-│   regex: /^[一-鿿\w]+$/              │
-└──────────────────────────────────────────────┘
-┌──────────────────────────────────────────────┐
-│ ⚙ bash   执行 npx jest -- user.test.ts       │
-│   ✓ 中文昵称测试通过                          │
-│   Tests: 6 passed, 6 total                   │
-└──────────────────────────────────────────────┘
+● Edit   修改 src/routes/user.ts:15  ✓  regex: /^[一-鿿\w]+$/
+● Bash   npx jest -- user.test.ts  ✓  Tests: 6 passed, 6 total
 ```
 
 > 💡 **这就是 LICode 的核心工作流**：描述需求 → LICode 规划并执行 → 你审查结果 → 纠正细节 → LICode 修改并验证。它像一个有超级执行力的结对编程伙伴，而不是一个需要你逐行指导的代码生成器。
@@ -249,7 +207,7 @@ LICode 会用 `edit` 精确替换 Zod schema 中的正则表达式，然后重�
 展开推理卡片可以看到 LICode 的完整思考链：
 
 ```
-🤔 正在分析逻辑...（展开后）
+▸ 分析逻辑
 
   用户要求修改昵称校验规则。
   当前规则：z.string().regex(/^[a-zA-Z0-9_]+$/)
@@ -271,23 +229,14 @@ LICode 会用 `edit` 精确替换 Zod schema 中的正则表达式，然后重�
 LICode 调用工具时，会显示**工具调用卡片**，有 4 种状态：
 
 ```
-⏳ 等待中    ┌─────────────────────────────────────┐
-            │ ⏳ grep  搜索 "fetch" 匹配           │
-            └─────────────────────────────────────┘
+pending   ○ Grep  搜索 "fetch" 匹配
 
-⚙ 运行中    ┌─────────────────────────────────────┐
-            │ ⚙ bash  执行 npm test               │
-            └─────────────────────────────────────┘
+running   ◐ Bash  执行 npm test  运行中 ⠋
 
-✓ 成功      ┌─────────────────────────────────────┐
-            │ ✓ read  读取 src/app.ts             │
-            │   120 行已读取                        │
-            └─────────────────────────────────────┘
+done      ● Read  读取 src/app.ts  ✓  120 行已读取
 
-✗ 失败      ┌─────────────────────────────────────┐
-            │ ✗ bash  执行 npm run deploy         │
-            │   Error: connection refused          │
-            └─────────────────────────────────────┘
+error     ✗ Bash  执行 npm run deploy
+            Error: connection refused
 ```
 
 ---
