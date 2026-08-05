@@ -699,8 +699,14 @@ Message 类型：
 |-------|------|---------|
 | 1 | 让 token 预测可信 | `TokenCounter` char-class 估算 + `TokenCalibrator` EMA 在线学习 ratio（用真实 `usage.input_tokens` 校准），零新依赖、后端无关 |
 | 2+3 | 长会话"摘要续命"替代"撞墙即死" | 激活 `SystemPrompt.assemble(budget)` 分层裁剪；重写 `ContextCompressor` 按轮次边界切；移除有缺陷的 `trimToBudget` |
-| 4 | 巨量工具输出不进会话 | `overflowToolResult`：>64KB 落盘 `.licode/overflow/` + 指针 + 预览 |
+| 4 | 巨量工具输出不进会话 | `overflowToolResult`：>64KB 落盘 `.licode/overflow/` + 指针 + 预览（独立于压缩链，事前拦截大输出，不参与三层降级/选择性保留） |
 | 5 | 减少跨压缩细节丢失 | 滚动演化摘要 + 三层选择性保留 + write 轮压缩为 `file_change` 笔记 + git blob 恢复指针 |
+
+**两个核心机制辨析：**
+
+- **三层降级**（Phase 2+3 建立）：token 超限时的多级削减链，逐级兜底--① 超 `compressThreshold`(0.85) 触发 `compressor.compress()` 压缩；② 压力下 `buildMessages(systemBudget)` 裁可选系统层；③ side-call 失败时降级 trim（丢中间、折 firstUser 进 recent）。maxTokens 从“一超即死”降为“压缩后仍超才硬停”。
+- **三层选择性保留**（Phase 5）：压缩时对轮次的三层取舍--`must-keep`（含 is_error / Write·Edit，原样或压成 file_change 笔记）/ `important`（candidate 里重要轮次，预算允许才保）/ `recent`（近期轮次全保）。组装为 `[firstUser, SUMMARY, ...mustKeep, ...important, ...recent]`。
+- **Phase 4 overflow 与上述并列**：工具执行后 >64KB 落盘 + 指针 + 预览，属**输入侧预防**（大输出不进对话），不参与压缩/裁剪链。
 
 **压缩触发**（`AgentLoop.run()` while 循环内、每步 LLM 调用前）：
 
