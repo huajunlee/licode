@@ -107,7 +107,7 @@ pnpm start -- --session abc123
 LICode 会自动用 `read` 和 `glob` 工具扫描项目结构、读取关键文件，建立对项目的理解：
 
 ```
-🤔 正在了解项目结构...
+▸ 读取代码
    读取 package.json → 确认依赖：Express, Prisma, Jest
    读取 prisma/schema.prisma → 发现 User 模型：id, email, passwordHash
    读取 src/routes/ → 已有 auth.ts, posts.ts
@@ -131,7 +131,7 @@ LICode 会自动用 `read` 和 `glob` 工具扫描项目结构、读取关键文
 LICode 不会一口气全做完，而是**分步思考、逐步执行**：
 
 ```
-🤔 正在分析需求...
+▸ 分析逻辑
    需要 4 步完成：
    Step 1: 修改 Prisma schema，添加 nickname 字段
    Step 2: 运行 prisma migrate 创建数据库迁移
@@ -150,62 +150,27 @@ LICode 不会一口气全做完，而是**分步思考、逐步执行**：
 **Step 1 — 修改数据库 Schema：**
 
 ```
-┌──────────────────────────────────────────────┐
-│ ✓ edit  修改 prisma/schema.prisma            │
-│   model User 新增:                           │
-│   + nickname String? @db.VarChar(20)         │
-└──────────────────────────────────────────────┘
+● Edit  prisma/schema.prisma  ✓  model User 新增 nickname String? @db.VarChar(20)
 ```
 
 **Step 2 — 创建数据库迁移：**
 
 ```
-┌──────────────────────────────────────────────┐
-│ ⚙ bash  执行 npx prisma migrate dev         │
-│   --name add-user-nickname                   │
-│   ✓ 迁移文件已创建:                            │
-│     prisma/migrations/20260724_add_nickname/  │
-│   ✓ 数据库已同步                              │
-└──────────────────────────────────────────────┘
+● Bash  npx prisma migrate dev --name add-user-nickname  ✓  迁移已创建，数据库已同步
 ```
 
 **Step 3 — 编写路由代码：**
 
 ```
-┌──────────────────────────────────────────────┐
-│ ✓ write  创建 src/routes/user.ts             │
-│   - PATCH /api/user/nickname                 │
-│   - Zod 校验：非空，无特殊字符                 │
-│   - 只允许修改自己的昵称                       │
-└──────────────────────────────────────────────┘
-┌──────────────────────────────────────────────┐
-│ ✓ edit   修改 src/index.ts                   │
-│   + app.use('/api/user', userRouter)         │
-└──────────────────────────────────────────────┘
+● Write  创建 src/routes/user.ts  ✓  PATCH /api/user/nickname + Zod 校验
+● Edit   修改 src/index.ts  ✓  + app.use('/api/user', userRouter)
 ```
 
 **Step 4 — 编写并运行测试：**
 
 ```
-┌──────────────────────────────────────────────┐
-│ ✓ write  创建 src/routes/__tests__/user.test.ts │
-│   测试用例：                                   │
-│   - 正常修改昵称                               │
-│   - 空字符串返回 400                           │
-│   - 特殊字符返回 400                           │
-│   - 超长昵称返回 400                           │
-│   - 未登录返回 401                             │
-└──────────────────────────────────────────────┘
-┌──────────────────────────────────────────────┐
-│ ⚙ bash  执行 npx jest -- user.test.ts       │
-│   PASS  src/routes/__tests__/user.test.ts    │
-│   ✓ 正常修改昵称 (32ms)                       │
-│   ✓ 空字符串返回 400 (8ms)                    │
-│   ✓ 特殊字符返回 400 (6ms)                    │
-│   ✓ 超长昵称返回 400 (5ms)                    │
-│   ✓ 未登录返回 401 (7ms)                      │
-│   Tests: 5 passed, 5 total                   │
-└──────────────────────────────────────────────┘
+● Write  创建 src/routes/__tests__/user.test.ts  ✓  5 个测试用例
+● Bash   npx jest -- user.test.ts  ✓  Tests: 5 passed, 5 total
 ```
 
 ---
@@ -222,15 +187,8 @@ LICode 不会一口气全做完，而是**分步思考、逐步执行**：
 LICode 会用 `edit` 精确替换 Zod schema 中的正则表达式，然后重新跑测试验证：
 
 ```
-┌──────────────────────────────────────────────┐
-│ ✓ edit   修改 src/routes/user.ts:15          │
-│   regex: /^[一-鿿\w]+$/              │
-└──────────────────────────────────────────────┘
-┌──────────────────────────────────────────────┐
-│ ⚙ bash   执行 npx jest -- user.test.ts       │
-│   ✓ 中文昵称测试通过                          │
-│   Tests: 6 passed, 6 total                   │
-└──────────────────────────────────────────────┘
+● Edit   修改 src/routes/user.ts:15  ✓  regex: /^[一-鿿\w]+$/
+● Bash   npx jest -- user.test.ts  ✓  Tests: 6 passed, 6 total
 ```
 
 > 💡 **这就是 LICode 的核心工作流**：描述需求 → LICode 规划并执行 → 你审查结果 → 纠正细节 → LICode 修改并验证。它像一个有超级执行力的结对编程伙伴，而不是一个需要你逐行指导的代码生成器。
@@ -249,7 +207,7 @@ LICode 会用 `edit` 精确替换 Zod schema 中的正则表达式，然后重�
 展开推理卡片可以看到 LICode 的完整思考链：
 
 ```
-🤔 正在分析逻辑...（展开后）
+▸ 分析逻辑
 
   用户要求修改昵称校验规则。
   当前规则：z.string().regex(/^[a-zA-Z0-9_]+$/)
@@ -271,23 +229,14 @@ LICode 会用 `edit` 精确替换 Zod schema 中的正则表达式，然后重�
 LICode 调用工具时，会显示**工具调用卡片**，有 4 种状态：
 
 ```
-⏳ 等待中    ┌─────────────────────────────────────┐
-            │ ⏳ grep  搜索 "fetch" 匹配           │
-            └─────────────────────────────────────┘
+pending   ○ Grep  搜索 "fetch" 匹配
 
-⚙ 运行中    ┌─────────────────────────────────────┐
-            │ ⚙ bash  执行 npm test               │
-            └─────────────────────────────────────┘
+running   ◐ Bash  执行 npm test  运行中 ⠋
 
-✓ 成功      ┌─────────────────────────────────────┐
-            │ ✓ read  读取 src/app.ts             │
-            │   120 行已读取                        │
-            └─────────────────────────────────────┘
+done      ● Read  读取 src/app.ts  ✓  120 行已读取
 
-✗ 失败      ┌─────────────────────────────────────┐
-            │ ✗ bash  执行 npm run deploy         │
-            │   Error: connection refused          │
-            └─────────────────────────────────────┘
+error     ✗ Bash  执行 npm run deploy
+            Error: connection refused
 ```
 
 ---
@@ -333,37 +282,43 @@ LICode 调用工具时，会显示**工具调用卡片**，有 4 种状态：
 
 ### 整体架构
 
+LICode 运行时有**两条独立的事件通道**：Pipeline（请求编排）与 EventBus（流式 UI）。`createAgentLoopMiddleware` 是唯一桥梁——把 eventBus 注入 AgentLoop，所以 pipeline 包住 loop、loop 驱动 eventBus，两通道除此之外不交叉。
+
+```mermaid
+flowchart TD
+    CLI["CLI 交互层<br/>Ink TUI · App · useConversation"]
+    CLI -->|"user-message（/命令 -> CommandRouter）"| M1
+
+    subgraph Pipeline ["通道 A：Pipeline（请求编排，仅过 user-message）"]
+        direction TB
+        M1["① before:agentLoop 扩展"] --> M2["② createAgentLoopMiddleware<br/>拦截 user-message，跑循环"]
+        M2 --> M3["③ hook:after:agentLoop"]
+        M2 --> M4["④ 错误处理"]
+    end
+
+    M2 -->|"loop.run()（桥梁：注入 eventBus）"| AL["AgentLoop（ReAct 引擎）<br/>内部账：token 校准 observeUsage<br/>上下文压缩 compressor.compress"]
+    AL -->|"每步 emit"| EB
+
+    subgraph EventBus ["通道 B：EventBus（流式 UI）"]
+        direction TB
+        EB["llm-token / llm-thinking / tool-use-detected /<br/>tool-execute-start·complete /<br/>agent-loop-complete(带usage) / context-compressed / error"]
+        EB --> UI["switch 分发 -> React setState -> ink 重渲染<br/>setStreaming / setThinkingBlocks /<br/>setActiveToolCalls / setTokenCount /<br/>setContextWindow / setCommandMessage / setError"]
+    end
+
+    AL --> LLM["LLMProvider<br/>流式调用大模型"]
+    AL --> TR["ToolRegistry + Executor<br/>注册 / Zod 校验 / 权限 / 并行执行"]
 ```
-┌──────────────────────────────────────────────────────┐
-│                    CLI 交互层                          │
-│  Ink TUI → App(欢迎页/聊天界面) → useConversation     │
-└───────────────────────┬──────────────────────────────┘
-                        │
-┌───────────────────────▼──────────────────────────────┐
-│                  EventPipeline（事件管线）              │
-│  洋葱模型中间件链：                                     │
-│  token计数 → 上下文压缩 → Hooks → AgentLoop             │
-│  （记忆召回/提取挂在 AgentLoop 内外两侧，见 §17）          │
-└───────────────────────┬──────────────────────────────┘
-                        │
-┌───────────────────────▼──────────────────────────────┐
-│                  AgentLoop（Agent 引擎）               │
-│  ReAct 循环：用户输入 → LLM推理 → 工具调用 → 结果注入   │
-└─────────┬─────────────────────────┬──────────────────┘
-          │                         │
-┌─────────▼──────────┐   ┌─────────▼──────────────────┐
-│   LLMProvider      │   │   ToolRegistry + Executor   │
-│   流式调用大模型     │   │   注册/校验/执行工具          │
-└────────────────────┘   └─────────────────────────────┘
-```
+
+> **桥梁**：`createAgentLoopMiddleware` 构造时把 `eventBus` 作为参数注入 `AgentLoop`（loop.ts:278）——pipeline 包住 loop，loop 驱动 eventBus；两条通道除此之外不交叉。token 计数校准（`observeUsage`）与上下文压缩（`compressor.compress`）都在 AgentLoop 内部，不经过 pipeline 中间件；它们的 UI 通知（`agent-loop-complete` 带 usage、`context-compressed`）走 EventBus。
 
 **分层说明：**
 
 | 层 | 职责 | 关键组件 |
 |----|------|---------|
 | CLI 交互层 | 用户输入输出、界面渲染 | Ink/React 组件、useConversation Hook |
-| 事件管线层 | 事件分发与中间件处理 | EventPipeline（洋葱模型） |
-| Agent 引擎层 | 决策循环与任务编排 | AgentLoop（ReAct） |
+| 事件管线层（通道 A） | 请求编排，仅过 user-message | EventPipeline（before:agentLoop 扩展 -> createAgentLoopMiddleware -> hook:after:agentLoop -> 错误处理） |
+| 流式 UI 通道（通道 B） | 循环内事件 -> 界面刷新 | EventBus（llm-token/thinking/tool-execute-*/agent-loop-complete/context-compressed/error -> React setState） |
+| Agent 引擎层 | 决策循环与任务编排（含 token 校准、上下文压缩） | AgentLoop（ReAct）、TokenCalibrator、ContextCompressor |
 | 工具执行层 | 文件、命令、搜索操作 | 6 内置工具 + MCP + Skills |
 | LLM 适配层 | 大模型调用与 Token 管理 | LLMProvider、流式响应 |
 
@@ -385,30 +340,33 @@ LICode 使用 **Ink**（React for CLI）渲染终端界面。核心是一个**�
 
 ### 2. EventPipeline（事件管线）
 
-EventPipeline 采用**洋葱模型（Onion Model）**组织中间件：
+EventPipeline 用**洋葱模型**组织中间件：事件从外到内再从内到外流过每一层，每层可在进入时前置处理、`next()` 返回后做后置处理。实际注册的中间件链（`hooks.ts:706-729`，与 772-795 两处对称）只有 **4 层**：
 
 ```
-        ┌──────────────────────────────┐
-        │   tokenCountingMiddleware    │  ← 最外层：统计 token
-        │  ┌────────────────────────┐  │
-        │  │  contextMiddleware     │  │  ← 上下文压缩
-        │  │ ┌────────────────────┐ │  │
-        │  │ │  hookMiddleware    │ │  │  ← 用户钩子（before/after:agentLoop）
-        │  │ │ ┌────────────────┐ │ │  │
-        │  │ │ │   AgentLoop    │ │ │  │  ← 最内层：Agent
-        │  │ │ │  （记忆召回/提取  │ │ │  │
-        │  │ │ │   挂于此，§17）  │ │ │  │
-        │  │ │ └────────────────┘ │ │  │
-        │  │ └────────────────────┘ │  │
-        │  └────────────────────────┘  │
-        └──────────────────────────────┘
-
-事件流向：外 → 内 → 外
+① hookMiddleware(before:agentLoop)   ← 前置
+  ② createAgentLoopMiddleware         ← 最内：拦截 user-message，跑 AgentLoop
+  ③ hookMiddleware(after:agentLoop)   ← 后置
+④ 错误处理                            ← 兜底
 ```
 
-每个中间件都可以在事件进入时做前置处理，在 `next()` 返回后做后置处理。
+| 层 | 中间件 | 职责 |
+|----|--------|------|
+| ① 前置 | `hookMiddleware(before:agentLoop)` | 跑 before:agentLoop hook（见下） |
+| ② 最内 | `createAgentLoopMiddleware` | 拦截 user-message，注入 eventBus，跑 `AgentLoop.run()`；loop 内部做 token 校准 `observeUsage` + 上下文压缩 `compressor.compress` |
+| ③ 后置 | `hookMiddleware(after:agentLoop)` | 跑 after:agentLoop hook（见下），由 `emitAfterAgentLoop` 触发 |
+| ④ 兜底 | 错误处理 | 捕获异常 -> `setError` |
 
-> **运行时说明**：上面的洋葱图是中间件的**概念模型**。CLI 实际注册的 pipeline 链路是：`before:agentLoop` 扩展 → `createAgentLoopMiddleware` → `hook:after:agentLoop` → 错误处理。其中 `tokenCountingMiddleware`、`contextMiddleware`、`memoryMiddleware` 已不在 pipeline 上——token 计数走 AgentLoop 内部校准，UI 显示与上下文管理走下文的 EventBus 通道。
+**每个 hook 位置内置了哪些功能：**
+
+hook 系统支持两类：**in-process function hook**（代码注册的 JS 函数）与 **shell hook**（用户在 `.licode/hooks.json` 配置的命令，见 §15）。`hookMiddleware` 在对应位置依次跑这两类。
+
+- **before:agentLoop**：**无内置 function hook**（直通）；仅跑用户配置的 shell hook（若有）。
+- **after:agentLoop**（由第 ③ 层 `emitAfterAgentLoop` 触发，两个内置 function hook 均 fire-and-forget、不阻塞）：
+  - **memory-extraction**（`createMemoryExtractionHook`，hooks.ts:517）：每轮后由 `MemoryExtractor` 从对话提取记忆（5min 冷却等，见 §17）。
+  - **memory-dream**（`memoryDreamHook`，hooks.ts:534）：dream 整理（24h+5 会话门，见 §17）；`LICODE_MEMORY_DREAM=off` 可关。
+  - + 用户配置的 shell hook（若有）。
+
+> **旧 middleware 的去向**：早期设计曾把 token 计数、上下文压缩、记忆都做成 pipeline 中间件（`tokenCountingMiddleware` / `contextMiddleware` / `memoryMiddleware`）；重构后三者都**不在 pipeline 上**--token 计数移进 loop（`observeUsage`）、上下文压缩移进 loop（`compressor.compress`）、记忆提取改成 after:agentLoop **hook**。`token-count.ts` 留为死代码、`context/middleware.ts` 已删源码（仅 dist 残留）、`memory/middleware.ts` 标 `@deprecated`。
 
 ### 2.1 两条事件通道：Pipeline 与 EventBus
 
@@ -435,49 +393,41 @@ LICode 运行时有**两条独立的事件通道**。理解它们的关系，是
 │ 生产者：AgentLoop + collectResponse 每步 emit                   │
 │ 消费者：createEventBus 的 switch 分发到 setStreaming /          │
 │         setThinkingBlocks / setActiveToolCalls / setError /    │
-│         setTokenCount                                          │
+│         setTokenCount / setContextWindow / setCommandMessage   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 **一轮对话的流转（含通道交互）：**
 
-```
-用户输入
-   │  singleEvent() 产出 { user-message }
-   ▼
-═══════════════ 通道 A：Pipeline ═══════════════
- ① before:agentLoop 扩展中间件
-        │ next()
-        ▼
- ② createAgentLoopMiddleware ──┐  拦截 user-message，接管控制权
-        │                      │  loop.run(content):
-        │   ┌──────────────────┘
-        │   │
-        │   │   ═══════════════ 通道 B：EventBus ═══════════════
-        │   │   ┌─ eventBus 作为 config 参数注入 agent loop ──┐
-        │   │   │                                              │
-        │   │   │   loop 每步 emit(...)  ──▶  createEventBus.emit()
-        │   │   │        │                              │
-        │   │   │        │              ┌───────────────┼───────────────┐
-        │   │   │        │              ▼               ▼               ▼
-        │   │   │        │        setStreaming    setThinkingBlocks  setActiveToolCalls
-        │   │   │        │        (流式文本)      (推理折叠)        (工具卡片)
-        │   │   │        │
-        │   │   │   emit(agent-loop-complete, {usage}) ──┐
-        │   │   │                                        ▼
-        │   │   │                                   setTokenCount          ← 状态栏 token 数
-        │   │   │                                   (getTokenCount())        （校准后的上下文大小）
-        │   │   │                                          │
-        │   │   │        └──────────────► React 状态变更 ──▶ ink 重渲染
-        │   │   │
-        │   │   └──────────────────────────────────────────────┘
-        │   ◀──┐  loop.run() 返回（响应完成）
-        ▼      │
- ③ hook:after:agentLoop  （内存提取等 in-process hooks + shell hooks）
-        │ next()
-        ▼
- ④ 错误处理中间件
-════════════════════════════════════════════════════════════
+```mermaid
+flowchart TD
+    U([用户输入]) --> SE["singleEvent 产出 user-message"]
+    SE --> P1
+
+    subgraph Pipeline ["通道 A：Pipeline（仅过 user-message）"]
+        direction TB
+        P1["① before:agentLoop 扩展中间件"] -->|next| P2
+        P2["② createAgentLoopMiddleware<br/>拦截 user-message，接管控制权<br/>loop.run content"]
+        P2 -->|"loop.run 返回，响应完成"| P3
+        P3["③ hook:after:agentLoop<br/>内存提取等 in-process hooks + shell hooks"] -->|next| P4
+        P4["④ 错误处理中间件"]
+    end
+
+    subgraph EventBus ["通道 B：EventBus（流式 UI）"]
+        direction TB
+        P2 -.->|eventBus 作为 config 参数注入 loop| EB["loop 每步 emit -> createEventBus.emit"]
+        EB --> S1["setStreaming（流式文本）"]
+        EB --> S2["setThinkingBlocks（推理折叠）"]
+        EB --> S3["setActiveToolCalls（工具卡片）"]
+        EB --> ALC["emit agent-loop-complete（带 usage）"]
+        ALC --> S4["setTokenCount（getTokenCount）<br/>状态栏 token 数（校准后上下文大小）"]
+        S1 --> R["React 状态变更 -> ink 重渲染"]
+        S2 --> R
+        S3 --> R
+        S4 --> R
+    end
+
+    P4 --> END([完成])
 ```
 
 **通道交互的本质：**
@@ -510,6 +460,41 @@ LICode 运行时有**两条独立的事件通道**。理解它们的关系，是
 ### 3. AgentLoop（Agent 引擎）
 
 AgentLoop 是 LICode 的核心决策发动机，实现 **ReAct（Reasoning + Acting）** 模式。
+
+**AgentLoop 的组成：**
+
+AgentLoop 直接持有九类部件；Skill/MCP/SubAgent 不在其中——它们经 adapter 翻译成统一的 `Tool` 注册进 ToolRegistry，被 loop 透明使用。
+
+```mermaid
+flowchart LR
+    subgraph loop ["AgentLoop（ReAct 决策发动机）"]
+        direction TB
+        LLM["LLMProvider · 出招（stream）"]
+        CM["ConversationManager · 记忆"]
+        TR["ToolRegistry · 工具箱"]
+        TE["ToolExecutor · 校验+并行执行"]
+        TP["TerminationPolicy · 三重刹车"]
+        TC["TokenCounter · 估算 token"]
+        CC["ContextCompressor · 压缩上下文"]
+        EB["EventBus · 广播事件"]
+        OTS["onTurnStart · 召回记忆"]
+    end
+
+    subgraph ext ["扩展源（经 adapter 转 Tool，对 loop 透明）"]
+        direction TB
+        BUILTIN["内置工具 Read/Write/Edit/Bash/Glob/Grep"]
+        MCP["MCP 工具"]
+        SKL["Skill 工具"]
+        SUB["SubAgent 工具"]
+    end
+
+    BUILTIN -.->|registerAll| TR
+    MCP -.->|mcpToolToAdapter| TR
+    SKL -.->|skillToolToAdapter| TR
+    SUB -.->|createAgentTool| TR
+```
+
+其中 LLMProvider / ConversationManager / ToolRegistry / ContextCompressor / EventBus / onTurnStart 为**注入**（来自 `AgentConfig`），ToolExecutor / TerminationPolicy / TokenCounter 为**内部构造**；内置工具 + MCP + Skill + SubAgent 经 adapter 转 `Tool` 注册进 ToolRegistry，对 loop 完全透明——新增一类扩展只需写 adapter，loop 无需改动。
 
 **ReAct 循环时序：**
 
@@ -557,7 +542,7 @@ AgentLoop 是 LICode 的核心决策发动机，实现 **ReAct（Reasoning + Act
                     └──────────────┘
 ```
 
-**三步终止保护：**
+**三重刹车：**
 
 | 保护机制 | 默认值 | 触发后行为 |
 |----------|--------|-----------|
@@ -566,6 +551,10 @@ AgentLoop 是 LICode 的核心决策发动机，实现 **ReAct（Reasoning + Act
 | 超时（maxTimeMs） | 10 分钟 | 同上 |
 
 ### 4. LLMProvider（大模型适配层）
+
+所谓 Chunk，就是大模型流式返回时吐出的一个个"数据片段"，比如你使用的是Anthropic的规范，那么这个Chunk就是符合Anthropic规范的Chunk。Agent 建立在 LLMProvider 接口上（provider.ts:93-100），AnthropicProvider（anthropic.ts:14）只是这个接口的一个适配实现。ReAct 循环、工具执行、上下文管理都是 LICode 自己写的，anthropic SDK 只负责“把 LLM 调用适配成统一的 StreamChunk 流”。换 provider 时只要新 provider 也接收和产出 响应的StreamChunk，collectResponse 和上层 AgentLoop 一行都不用改。
+
+LICode 把它定义为 StreamChunk,一共 5 种,靠每个片段自带的 type 字段区分。和session的md文件中看到的"JSON Schema"其实是两回事:工具参数才走 JSON Schema,Chunk 是流式响应的内部 TS 类型,不在 schema 里;但 Chunk 的类型定义里确实有 type 字段标明它是哪一种。
 
 LICode 通过 `LLMProvider` 接口抽象大模型调用，当前支持 Anthropic 兼容 API。
 
@@ -578,6 +567,20 @@ LICode 通过 `LLMProvider` 接口抽象大模型调用，当前支持 Anthropic
 | `tool-use` | 请求调用工具 | ToolCallCards 显示工具名和参数 |
 | `stop` | 停止生成 | 返回最终 usage 统计 |
 | `error` | 流中断 | UI 显示红色错误信息 |
+
+**chunk 的去向：分叉为上下文与事件**
+
+`collectResponse` 消费这些 chunk 时，按类型分叉到两股去向（外加一股内部账）：
+
+| chunk | 写入上下文（ConversationManager） | 发出事件（EventBus） | 内部账 |
+|-------|----------------------------------|---------------------|--------|
+| `token` | `appendToAssistantMessage` 拼进助手消息 content | `llm-token` 逐字渲染 | |
+| `thinking` | 不落上下文 | `llm-thinking` 折叠展示 | |
+| `tool-use` | 收集后 `addToolMessages` 注入工具消息 | `tool-use-detected` / `tool-execute-*` | |
+| `stop` | | | `usage` -> `observeUsage` 校准 |
+| `error` | 不落上下文 | `error` 事件 | |
+
+同一个 `token` chunk 既写上下文又发事件：上下文是“记忆”（持久、下轮 `buildMessages` 再发给 LLM），事件是“直播”（瞬时、刷 UI 即弃）；`thinking` 只走事件，因为推理过程不进 `AssistantMessage.content`。`collectResponse` 是分叉器，分出的两股分别落进 §2.1 的上下文与 EventBus 通道 B。
 
 ### 5. ToolRegistry（工具注册表）
 
@@ -600,6 +603,20 @@ LLM 调用工具时：
     └── 4. tool.execute(params, context)
 ```
 
+**Zod schema 与 JSON Schema 的双重职责：**
+
+每个工具用 Zod 定义参数 schema，例如 Read：
+
+```ts
+const ReadParams = z.object({
+  file_path: z.string().describe("Absolute path to the file to read"),
+  offset: z.number().optional().describe("Line number to start reading from"),
+  limit: z.number().optional().describe("Number of lines to read"),
+});
+```
+
+注册时 `zodToJsonSchema` 把它转成 JSON Schema 缓存（`registry.ts:12-15`），`toLLMTools` 产出 `input_schema` 给 LLM（`registry.ts:44-52`）。一份 schema 服务两个对象：**Zod 给自己**（运行时 `safeParse` 校验 LLM 传回的参数 + `z.infer` 推导 execute 入参类型），**JSON Schema 给模型**（Anthropic API 的 function calling 只认 `input_schema` 格式）。
+
 ### 6. ToolExecutor（工具执行器）
 
 执行器负责参数校验、权限检查、并行执行：
@@ -607,6 +624,8 @@ LLM 调用工具时：
 - **参数校验**：用 Zod schema 自动验证 LLM 传回的参数
 - **权限检查**：工具标记 `requiresApproval: true` 时触发 PermissionGuard
 - **并行执行**：多个 tool-use 调用 `executeParallel()` → `Promise.all` 并发执行
+- **结果回灌模型**：`executeParallel` 返回 `ToolResult[]`（`executor.ts:37`），AgentLoop 调 `addToolMessages`（`loop.ts:248`）把结果注入对话（成 `ToolResultMessage`），下一轮 `buildMessages`（`loop.ts:183`）发给 LLM--模型据此决定继续调工具还是给最终回复（ReAct 的 Act->Observe）。
+- **并发原理**：`Promise.all` 是 JS 语言内置方法（非依赖、非自写），**不创建线程**--Node 单线程事件循环。`executeParallel` 把多个 `executeOne` 并发调度：Bash/Grep 走异步子进程（`exec`/`execFile`，libuv 线程池）可**真并行**；Read/Write/Edit/Glob 用同步 fs API（`readFileSync` 等）阻塞事件循环，实际**串行**。
 
 ### 7. 内置工具（6 基础 + 6 第二大脑）
 
@@ -680,8 +699,18 @@ Message 类型：
 |-------|------|---------|
 | 1 | 让 token 预测可信 | `TokenCounter` char-class 估算 + `TokenCalibrator` EMA 在线学习 ratio（用真实 `usage.input_tokens` 校准），零新依赖、后端无关 |
 | 2+3 | 长会话"摘要续命"替代"撞墙即死" | 激活 `SystemPrompt.assemble(budget)` 分层裁剪；重写 `ContextCompressor` 按轮次边界切；移除有缺陷的 `trimToBudget` |
-| 4 | 巨量工具输出不进会话 | `overflowToolResult`：>64KB 落盘 `.licode/overflow/` + 指针 + 预览 |
+| 4 | 巨量工具输出不进会话 | `overflowToolResult`：>64KB 落盘 `.licode/overflow/` + 指针 + 预览（独立于压缩链，事前拦截大输出，不参与三层降级/选择性保留） |
 | 5 | 减少跨压缩细节丢失 | 滚动演化摘要 + 三层选择性保留 + write 轮压缩为 `file_change` 笔记 + git blob 恢复指针 |
+
+**两个核心机制辨析：**
+
+- **三层降级**（Phase 2+3 建立）：token 超限时的多级削减链，逐级兜底--① 超 `compressThreshold`(0.85) 触发 `compressor.compress()` 压缩；② 压力下 `buildMessages(systemBudget)` 裁可选系统层；③ side-call 失败时降级 trim（丢中间、折 firstUser 进 recent）。maxTokens 从“一超即死”降为“压缩后仍超才硬停”。
+- **三层选择性保留**（Phase 5，`classifyMiddleTurns`，compressor.ts:105-140）：对中间轮次（首条 user 之后、最近 N 轮之前）按三维度取舍：
+  - **must-keep（结构必保）**：含 `is_error` 的 tool_result 的轮（工具报错，原样留）或含 Write/Edit 调用的轮（压成 file_change 笔记，留“改了啥”丢全文，全文进 git blob 可恢复）；硬规则判定，不依赖 side-call。
+  - **important（语义选保）**：其余普通轮（candidate）交 CompressionAssistant 判 important/normal，important 的在剩余预算内逐个贪心保留、超预算即停（已折进摘要），normal 不保留。
+  - **recent（时序全保）**：末尾 `keepRecentTurns` 轮（默认 2）不分类直接全保，保近期连贯。
+  - 组装：`[firstUser, SUMMARY, ...must-keep, ...important(预算允许), ...recent]`；fold（孤儿轮）不保留、折进摘要。三维互补，压力下优先砍 important、must-keep/recent 最后保。
+- **Phase 4 overflow 与上述并列**：工具执行后 >64KB 落盘 + 指针 + 预览，属**输入侧预防**（大输出不进对话），不参与压缩/裁剪链。
 
 **压缩触发**（`AgentLoop.run()` while 循环内、每步 LLM 调用前）：
 
@@ -795,7 +824,7 @@ MCPClientManager
 
 ### 15. Hooks 系统
 
-在 Agent 生命周期的关键节点执行用户定义的 Shell 命令：
+在 Agent 生命周期的关键节点执行用户定义的钩子（Shell 命令或 in-process 函数，二者互斥）：
 
 ```json
 // .licode/hooks.json - 扁平对象：name 作 key，每个值是一条 hook 配置（无 "hooks" 数组包裹；HookConfig 无 name 字段，name 即对象键）
@@ -808,6 +837,11 @@ MCPClientManager
   }
 }
 ```
+
+**两种 hook（互斥）：**
+
+- **Shell 命令 hook**：hooks.json 配置 `command`，`HookManager.load()` 加载，`spawn` 起子进程、事件 JSON 经 stdin 传入；适合用户自定义外部脚本。
+- **In-process 函数 hook**：程序化 `HookManager.register()` 注册 `fn`（`HookFunction = (event) => Promise<void>`），主进程内直接调用，能访问 `ConversationManager`/`MemoryStore` 等运行时对象；不可存 JSON（函数引用）。内存提取（`memory-extraction`）、做梦整理（`memory-dream`）即此类。
 
 **生命周期节点：**
 - `before:agentLoop` — Agent 开始处理前
@@ -931,7 +965,7 @@ pinned: false
 
 #### 做梦整理原理（Phase 3+4）：四阶段 + 零 LLM 门
 
-记忆库会定期"做梦"整理（`MemoryDream`，深度解析见 [面试 Q5-Q7](#亮点-1-名词解释与深挖问答)）：
+记忆库会定期"做梦"整理（`MemoryDream`，深度解析见 [面试 Q2-Q8](#亮点 2 名词解释与深挖问答)）：
 
 ```
 after:agentLoop hook（fire-and-forget，不阻塞用户）
