@@ -42,6 +42,7 @@ type: {{user|feedback|project|reference}}
 createdAt: {{ISO 时间}}
 updatedAt: {{ISO 时间}}
 pinned: {{false}}
+keywords: [kw1, kw2]
 ---
 
 {{记忆正文}}
@@ -49,6 +50,8 @@ pinned: {{false}}
 - 按主题组织，而非按时间；一个主题一个文件
 - 创建前先看索引（已注入上下文）判断有无同主题条目：有则 Read 该文件并更新；无则直接 Write 新文件，不要 Read 任何不相关的旧记忆
 - 需要文件格式时参照上方 frontmatter 模板，不要为看格式去 Read 旧记忆
+- description 写成检索 key：一句话、含判别性关键词、不叙事、不混无关话题、≤40 字
+- keywords：2-5 个判别性词（用于召回匹配，如技术名/人名/目标名），各类型都要填
 - 新信息与旧记忆矛盾时，直接改写旧文件，以最新信息为准
 - 把 description 与 content 中的相对日期转换为绝对日期；精确词（昨天/上周/去年）转确切日期，模糊词（最近/前阵子）转大致范围（如"2026年7月前后"）
 - MEMORY.md 索引由系统自动重建，无需手动维护
