@@ -393,49 +393,41 @@ LICode 运行时有**两条独立的事件通道**。理解它们的关系，是
 │ 生产者：AgentLoop + collectResponse 每步 emit                   │
 │ 消费者：createEventBus 的 switch 分发到 setStreaming /          │
 │         setThinkingBlocks / setActiveToolCalls / setError /    │
-│         setTokenCount                                          │
+│         setTokenCount / setContextWindow / setCommandMessage   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 **一轮对话的流转（含通道交互）：**
 
-```
-用户输入
-   │  singleEvent() 产出 { user-message }
-   ▼
-═══════════════ 通道 A：Pipeline ═══════════════
- ① before:agentLoop 扩展中间件
-        │ next()
-        ▼
- ② createAgentLoopMiddleware ──┐  拦截 user-message，接管控制权
-        │                      │  loop.run(content):
-        │   ┌──────────────────┘
-        │   │
-        │   │   ═══════════════ 通道 B：EventBus ═══════════════
-        │   │   ┌─ eventBus 作为 config 参数注入 agent loop ──┐
-        │   │   │                                              │
-        │   │   │   loop 每步 emit(...)  ──▶  createEventBus.emit()
-        │   │   │        │                              │
-        │   │   │        │              ┌───────────────┼───────────────┐
-        │   │   │        │              ▼               ▼               ▼
-        │   │   │        │        setStreaming    setThinkingBlocks  setActiveToolCalls
-        │   │   │        │        (流式文本)      (推理折叠)        (工具卡片)
-        │   │   │        │
-        │   │   │   emit(agent-loop-complete, {usage}) ──┐
-        │   │   │                                        ▼
-        │   │   │                                   setTokenCount          ← 状态栏 token 数
-        │   │   │                                   (getTokenCount())        （校准后的上下文大小）
-        │   │   │                                          │
-        │   │   │        └──────────────► React 状态变更 ──▶ ink 重渲染
-        │   │   │
-        │   │   └──────────────────────────────────────────────┘
-        │   ◀──┐  loop.run() 返回（响应完成）
-        ▼      │
- ③ hook:after:agentLoop  （内存提取等 in-process hooks + shell hooks）
-        │ next()
-        ▼
- ④ 错误处理中间件
-════════════════════════════════════════════════════════════
+```mermaid
+flowchart TD
+    U([用户输入]) --> SE["singleEvent 产出 user-message"]
+    SE --> P1
+
+    subgraph Pipeline ["通道 A：Pipeline（仅过 user-message）"]
+        direction TB
+        P1["① before:agentLoop 扩展中间件"] -->|next| P2
+        P2["② createAgentLoopMiddleware<br/>拦截 user-message，接管控制权<br/>loop.run content"]
+        P2 -->|"loop.run 返回，响应完成"| P3
+        P3["③ hook:after:agentLoop<br/>内存提取等 in-process hooks + shell hooks"] -->|next| P4
+        P4["④ 错误处理中间件"]
+    end
+
+    subgraph EventBus ["通道 B：EventBus（流式 UI）"]
+        direction TB
+        P2 -.->|eventBus 作为 config 参数注入 loop| EB["loop 每步 emit -> createEventBus.emit"]
+        EB --> S1["setStreaming（流式文本）"]
+        EB --> S2["setThinkingBlocks（推理折叠）"]
+        EB --> S3["setActiveToolCalls（工具卡片）"]
+        EB --> ALC["emit agent-loop-complete（带 usage）"]
+        ALC --> S4["setTokenCount（getTokenCount）<br/>状态栏 token 数（校准后上下文大小）"]
+        S1 --> R["React 状态变更 -> ink 重渲染"]
+        S2 --> R
+        S3 --> R
+        S4 --> R
+    end
+
+    P4 --> END([完成])
 ```
 
 **通道交互的本质：**
