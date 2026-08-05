@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import type { Message, ToolUseBlock, ToolResultBlock } from "../llm/provider.js";
 import type { Memory } from "./types.js";
+import type { LoadedMemoryEntry } from "./loaded-memory-registry.js";
 
 vi.mock("../llm/anthropic.js", () => ({
   AnthropicProvider: vi.fn().mockImplementation(() => ({
@@ -124,80 +125,88 @@ describe("MemoryRecall.select", () => {
     return { recall, mockChat };
   }
 
-  it("returns selected memories and puts index + query in the prompt", async () => {
-    const { recall, mockChat } = mockChatReturning('["user/food"]');
+  it("returns selected memories in add and puts index + query in prompt", async () => {
+    const { recall, mockChat } = mockChatReturning(JSON.stringify({ add: ["user/food"], prune: [] }));
     const result = await recall.select("今晚吃什么好？", store);
-    expect(result.map((m) => m.slug)).toEqual(["user/food"]);
+    expect(result.add.map((m) => m.slug)).toEqual(["user/food"]);
+    expect(result.prune).toEqual([]);
     const prompt = mockChat.mock.calls[0][0].messages[0].content as string;
     expect(prompt).toContain("食物偏好");
     expect(prompt).toContain("今晚吃什么好？");
   });
 
-  it("prompt encodes explicit relevance criteria and exclusion cases", async () => {
-    const { recall, mockChat } = mockChatReturning("[]");
+  it("prompt encodes relevance criteria and {add,prune} output contract", async () => {
+    const { recall, mockChat } = mockChatReturning(JSON.stringify({ add: [], prune: [] }));
     await recall.select("q", store);
     const prompt = mockChat.mock.calls[0][0].messages[0].content as string;
-    expect(prompt).toContain("满足以下任意一条");    // positive criteria header
-    expect(prompt).toContain("不算相关");             // exclusion header
-    expect(prompt).toContain("仅关键词或主题相似");   // a concrete exclusion
-    expect(prompt).toContain("默认");                 // default-empty bias
+    expect(prompt).toContain("满足以下任意一条");
+    expect(prompt).toContain("不算相关");
+    expect(prompt).toContain("默认");
+    expect(prompt).toContain("add");
+    expect(prompt).toContain("prune");
   });
 
   it("filters hallucinated slugs and tolerates code fences", async () => {
-    const { recall } = mockChatReturning('```json\n["user/food", "user/ghost"]\n```');
+    const { recall } = mockChatReturning('```json\n{"add":["user/food","user/ghost"],"prune":[]}\n```');
     const result = await recall.select("q", store);
-    expect(result.map((m) => m.slug)).toEqual(["user/food"]);
+    expect(result.add.map((m) => m.slug)).toEqual(["user/food"]);
   });
 
-  it("caps results at maxResults", async () => {
-    const { recall } = mockChatReturning('["user/food","user/editor"]');
+  it("caps add at maxResults", async () => {
+    const { recall } = mockChatReturning(JSON.stringify({ add: ["user/food", "user/editor"], prune: [] }));
     const limited = new MemoryRecall({ maxResults: 1 });
     (limited as any).llm.chat = (recall as any).llm.chat;
     const result = await limited.select("q", store);
-    expect(result).toHaveLength(1);
+    expect(result.add).toHaveLength(1);
   });
 
-  it("returns [] on LLM error", async () => {
+  it("returns {add:[],prune:[]} on LLM error", async () => {
     const recall = new MemoryRecall();
     (recall as any).llm.chat = vi.fn().mockRejectedValue(new Error("boom"));
-    expect(await recall.select("q", store)).toEqual([]);
+    expect(await recall.select("q", store)).toEqual({ add: [], prune: [] });
   });
 
-  it("returns [] on timeout", async () => {
+  it("returns {add:[],prune:[]} on timeout", async () => {
     const recall = new MemoryRecall({ timeoutMs: 50 });
     (recall as any).llm.chat = vi.fn().mockReturnValue(new Promise(() => {}));
-    expect(await recall.select("q", store)).toEqual([]);
+    expect(await recall.select("q", store)).toEqual({ add: [], prune: [] });
   });
 
-  it("returns [] for non-array JSON", async () => {
-    const { recall } = mockChatReturning('{"slug":"user/food"}');
-    expect(await recall.select("q", store)).toEqual([]);
+  it("returns {add:[],prune:[]} for non-object JSON", async () => {
+    const { recall } = mockChatReturning('["user/food"]');
+    expect(await recall.select("q", store)).toEqual({ add: [], prune: [] });
   });
 
-  it("skips the LLM call entirely when the index is empty", async () => {
+  it("skips the LLM call when index is empty", async () => {
     const emptyDir = mkdtempSync(path.join(tmpdir(), "recall-empty-"));
     try {
       const emptyStore = new MemoryStore(emptyDir);
       const recall = new MemoryRecall();
       const mockChat = vi.fn();
       (recall as any).llm.chat = mockChat;
-      expect(await recall.select("q", emptyStore)).toEqual([]);
+      expect(await recall.select("q", emptyStore)).toEqual({ add: [], prune: [] });
       expect(mockChat).not.toHaveBeenCalled();
-    } finally {
-      rmSync(emptyDir, { recursive: true, force: true });
-    }
+    } finally { rmSync(emptyDir, { recursive: true, force: true }); }
   });
 
-  // Contract: select() never rejects - every failure mode degrades to [].
-  // listAll() reads the filesystem and can throw on a race or EACCES; it must
-  // be covered by the never-rejects guard, not just the LLM/timeout path.
-  // (Phase 4 usage-counting will hang off this return.)
-  it("never rejects when store.listAll() throws (file race / EACCES)", async () => {
-    const failingStore = {
-      listAll: vi.fn().mockRejectedValue(new Error("EACCES")),
-    } as unknown as MemoryStore;
+  it("never rejects when store.listAll() throws", async () => {
+    const failingStore = { listAll: vi.fn().mockRejectedValue(new Error("EACCES")) } as unknown as MemoryStore;
     const recall = new MemoryRecall();
-    await expect(recall.select("q", failingStore)).resolves.toEqual([]);
+    await expect(recall.select("q", failingStore)).resolves.toEqual({ add: [], prune: [] });
+  });
+
+  it("excludes already-loaded slugs from add (dedup)", async () => {
+    const { recall } = mockChatReturning(JSON.stringify({ add: ["user/food", "user/editor"], prune: [] }));
+    const loaded: LoadedMemoryEntry[] = [{ slug: "user/food", source: "active" }];
+    const result = await recall.select("q", store, loaded);
+    expect(result.add.map((m) => m.slug)).toEqual(["user/editor"]); // user/food 已加载,排除
+  });
+
+  it("prune only includes already-loaded sidequery slugs", async () => {
+    const { recall } = mockChatReturning(JSON.stringify({ add: [], prune: ["user/food", "user/ghost"] }));
+    const loaded: LoadedMemoryEntry[] = [{ slug: "user/food", source: "sidequery" }];
+    const result = await recall.select("q", store, loaded);
+    expect(result.prune).toEqual(["user/food"]); // user/ghost 不在已加载 sidequery,排除
   });
 });
 
@@ -289,11 +298,14 @@ describe("createMemoryRecallHandler", () => {
     return new ConversationManager({ model: "test-model" });
   }
 
-  function fakeRecall(slugs: string[]) {
+  function fakeRecall(addSlugs: string[], pruneSlugs: string[] = []) {
     return {
       select: vi.fn(async (_q: string, s: MemoryStore) => {
         const all = await s.listAll();
-        return all.filter((m) => slugs.includes(m.slug));
+        return {
+          add: all.filter((m) => addSlugs.includes(m.slug)),
+          prune: pruneSlugs,
+        };
       }),
     } as unknown as MemoryRecall;
   }
