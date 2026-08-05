@@ -96,6 +96,10 @@ export class MemoryStore {
     let usageCount = 0;
     let lastUsedAt = "";
     let pinned = memory.pinned ?? false;
+    // keywords: default to caller-provided (create/update). The append branch
+    // overrides below to preserve the existing memory's keywords when the caller
+    // omits them (dream/extractor append ops usually pass no keywords).
+    let keywords = memory.keywords ?? [];
 
     if (effectiveAction === "update") {
       // Replace content wholesale; keep the original createdAt, refresh updatedAt
@@ -116,6 +120,9 @@ export class MemoryStore {
         usageCount = existing.usageCount ?? 0;
         lastUsedAt = existing.lastUsedAt ?? "";
         pinned = existing.pinned ?? false;
+        // Preserve existing keywords when caller passes none; caller wins if it
+        // provides any. Without this, append silently wrote `keywords: []`.
+        keywords = memory.keywords ?? existing.keywords ?? [];
       }
     }
 
@@ -144,7 +151,7 @@ export class MemoryStore {
       `usageCount: ${usageCount}`,
       `lastUsedAt: ${lastUsedAt}`,
       `pinned: ${pinned}`,
-      `keywords: ${JSON.stringify(memory.keywords ?? [])}`,
+      `keywords: ${JSON.stringify(keywords)}`,
       "---",
       "",
       finalContent,
