@@ -824,7 +824,7 @@ MCPClientManager
 
 ### 15. Hooks 系统
 
-在 Agent 生命周期的关键节点执行用户定义的 Shell 命令：
+在 Agent 生命周期的关键节点执行用户定义的钩子（Shell 命令或 in-process 函数，二者互斥）：
 
 ```json
 // .licode/hooks.json - 扁平对象：name 作 key，每个值是一条 hook 配置（无 "hooks" 数组包裹；HookConfig 无 name 字段，name 即对象键）
@@ -837,6 +837,11 @@ MCPClientManager
   }
 }
 ```
+
+**两种 hook（互斥）：**
+
+- **Shell 命令 hook**：hooks.json 配置 `command`，`HookManager.load()` 加载，`spawn` 起子进程、事件 JSON 经 stdin 传入；适合用户自定义外部脚本。
+- **In-process 函数 hook**：程序化 `HookManager.register()` 注册 `fn`（`HookFunction = (event) => Promise<void>`），主进程内直接调用，能访问 `ConversationManager`/`MemoryStore` 等运行时对象；不可存 JSON（函数引用）。内存提取（`memory-extraction`）、做梦整理（`memory-dream`）即此类。
 
 **生命周期节点：**
 - `before:agentLoop` — Agent 开始处理前
@@ -960,7 +965,7 @@ pinned: false
 
 #### 做梦整理原理（Phase 3+4）：四阶段 + 零 LLM 门
 
-记忆库会定期"做梦"整理（`MemoryDream`，深度解析见 [面试 Q5-Q7](#亮点-1-名词解释与深挖问答)）：
+记忆库会定期"做梦"整理（`MemoryDream`，深度解析见 [面试 Q2-Q8](#亮点 2 名词解释与深挖问答)）：
 
 ```
 after:agentLoop hook（fire-and-forget，不阻塞用户）
