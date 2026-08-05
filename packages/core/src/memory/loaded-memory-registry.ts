@@ -40,7 +40,7 @@ export class LoadedMemoryRegistry {
 
   /** Rebuild from a message list (session restore). Pairs tool_use id -> name,
    *  then extracts `## name (slug)` from memory_recall/memory_fetch tool_results. */
-  rebuild(messages: Message[]): void {
+  rebuild(messages: readonly Message[]): void {
     this.map.clear();
     const useNameById = new Map<string, string>();
     for (const m of messages) {
