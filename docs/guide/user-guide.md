@@ -302,7 +302,7 @@ flowchart TD
     subgraph EventBus ["通道 B：EventBus（流式 UI）"]
         direction TB
         EB["llm-token / llm-thinking / tool-use-detected /<br/>tool-execute-start·complete /<br/>agent-loop-complete(带usage) / context-compressed / error"]
-        EB --> UI["switch 分发 -> React setState -> ink 重渲染<br/>setStreaming / setThinkingBlocks /<br/>setActiveToolCalls / setTokenCount / setError"]
+        EB --> UI["switch 分发 -> React setState -> ink 重渲染<br/>setStreaming / setThinkingBlocks /<br/>setActiveToolCalls / setTokenCount /<br/>setContextWindow / setCommandMessage / setError"]
     end
 
     AL --> LLM["LLMProvider<br/>流式调用大模型"]
