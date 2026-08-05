@@ -340,30 +340,33 @@ LICode 使用 **Ink**（React for CLI）渲染终端界面。核心是一个**�
 
 ### 2. EventPipeline（事件管线）
 
-EventPipeline 采用**洋葱模型（Onion Model）**组织中间件：
+EventPipeline 用**洋葱模型**组织中间件：事件从外到内再从内到外流过每一层，每层可在进入时前置处理、`next()` 返回后做后置处理。实际注册的中间件链（`hooks.ts:706-729`，与 772-795 两处对称）只有 **4 层**：
 
 ```
-        ┌──────────────────────────────┐
-        │   tokenCountingMiddleware    │  ← 最外层：统计 token
-        │  ┌────────────────────────┐  │
-        │  │  contextMiddleware     │  │  ← 上下文压缩
-        │  │ ┌────────────────────┐ │  │
-        │  │ │  hookMiddleware    │ │  │  ← 用户钩子（before/after:agentLoop）
-        │  │ │ ┌────────────────┐ │ │  │
-        │  │ │ │   AgentLoop    │ │ │  │  ← 最内层：Agent
-        │  │ │ │  （记忆召回/提取  │ │ │  │
-        │  │ │ │   挂于此，§17）  │ │ │  │
-        │  │ │ └────────────────┘ │ │  │
-        │  │ └────────────────────┘ │  │
-        │  └────────────────────────┘  │
-        └──────────────────────────────┘
-
-事件流向：外 → 内 → 外
+① hookMiddleware(before:agentLoop)   ← 前置
+  ② createAgentLoopMiddleware         ← 最内：拦截 user-message，跑 AgentLoop
+  ③ hookMiddleware(after:agentLoop)   ← 后置
+④ 错误处理                            ← 兜底
 ```
 
-每个中间件都可以在事件进入时做前置处理，在 `next()` 返回后做后置处理。
+| 层 | 中间件 | 职责 |
+|----|--------|------|
+| ① 前置 | `hookMiddleware(before:agentLoop)` | 跑 before:agentLoop hook（见下） |
+| ② 最内 | `createAgentLoopMiddleware` | 拦截 user-message，注入 eventBus，跑 `AgentLoop.run()`；loop 内部做 token 校准 `observeUsage` + 上下文压缩 `compressor.compress` |
+| ③ 后置 | `hookMiddleware(after:agentLoop)` | 跑 after:agentLoop hook（见下），由 `emitAfterAgentLoop` 触发 |
+| ④ 兜底 | 错误处理 | 捕获异常 -> `setError` |
 
-> **运行时说明**：上面的洋葱图是中间件的**概念模型**。CLI 实际注册的 pipeline 链路是：`before:agentLoop` 扩展 → `createAgentLoopMiddleware` → `hook:after:agentLoop` → 错误处理。其中 `tokenCountingMiddleware`、`contextMiddleware`、`memoryMiddleware` 已不在 pipeline 上——token 计数走 AgentLoop 内部校准，UI 显示与上下文管理走下文的 EventBus 通道。
+**每个 hook 位置内置了哪些功能：**
+
+hook 系统支持两类：**in-process function hook**（代码注册的 JS 函数）与 **shell hook**（用户在 `.licode/hooks.json` 配置的命令，见 §15）。`hookMiddleware` 在对应位置依次跑这两类。
+
+- **before:agentLoop**：**无内置 function hook**（直通）；仅跑用户配置的 shell hook（若有）。
+- **after:agentLoop**（由第 ③ 层 `emitAfterAgentLoop` 触发，两个内置 function hook 均 fire-and-forget、不阻塞）：
+  - **memory-extraction**（`createMemoryExtractionHook`，hooks.ts:517）：每轮后由 `MemoryExtractor` 从对话提取记忆（5min 冷却等，见 §17）。
+  - **memory-dream**（`memoryDreamHook`，hooks.ts:534）：dream 整理（24h+5 会话门，见 §17）；`LICODE_MEMORY_DREAM=off` 可关。
+  - + 用户配置的 shell hook（若有）。
+
+> **旧 middleware 的去向**：早期设计曾把 token 计数、上下文压缩、记忆都做成 pipeline 中间件（`tokenCountingMiddleware` / `contextMiddleware` / `memoryMiddleware`）；重构后三者都**不在 pipeline 上**--token 计数移进 loop（`observeUsage`）、上下文压缩移进 loop（`compressor.compress`）、记忆提取改成 after:agentLoop **hook**。`token-count.ts` 留为死代码、`context/middleware.ts` 已删源码（仅 dist 残留）、`memory/middleware.ts` 标 `@deprecated`。
 
 ### 2.1 两条事件通道：Pipeline 与 EventBus
 
