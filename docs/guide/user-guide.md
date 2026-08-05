@@ -282,37 +282,47 @@ error     ✗ Bash  执行 npm run deploy
 
 ### 整体架构
 
+LICode 运行时有**两条独立的事件通道**：Pipeline（请求编排）与 EventBus（流式 UI）。`createAgentLoopMiddleware` 是唯一桥梁——把 eventBus 注入 AgentLoop，所以 pipeline 包住 loop、loop 驱动 eventBus，两通道除此之外不交叉。
+
 ```
 ┌──────────────────────────────────────────────────────┐
-│                    CLI 交互层                          │
-│  Ink TUI → App(欢迎页/聊天界面) → useConversation     │
-└───────────────────────┬──────────────────────────────┘
-                        │
-┌───────────────────────▼──────────────────────────────┐
-│                  EventPipeline（事件管线）              │
-│  洋葱模型中间件链：                                     │
-│  token计数 → 上下文压缩 → Hooks → AgentLoop             │
-│  （记忆召回/提取挂在 AgentLoop 内外两侧，见 §17）          │
-└───────────────────────┬──────────────────────────────┘
-                        │
-┌───────────────────────▼──────────────────────────────┐
-│                  AgentLoop（Agent 引擎）               │
-│  ReAct 循环：用户输入 → LLM推理 → 工具调用 → 结果注入   │
-└─────────┬─────────────────────────┬──────────────────┘
-          │                         │
-┌─────────▼──────────┐   ┌─────────▼──────────────────┐
-│   LLMProvider      │   │   ToolRegistry + Executor   │
-│   流式调用大模型     │   │   注册/校验/执行工具          │
-└────────────────────┘   └─────────────────────────────┘
+│                     CLI 交互层                         │
+│   Ink TUI · App(欢迎页/聊天) · useConversation         │
+└──────────────────────────┬───────────────────────────┘
+                           │ user-message（/命令走 CommandRouter）
+        ┌──────────────────┴──────────────────┐
+        │                                     │
+   通道 A：Pipeline                      通道 B：EventBus
+   （请求编排，仅过 user-message）        （流式 UI，循环内每步 emit）
+   ┌─────────────────────────┐           ┌──────────────────────────┐
+   │ ① before:agentLoop 扩展  │           │ llm-token / llm-thinking  │
+   │ ② createAgentLoopMidware │           │ tool-use-detected         │
+   │    （拦截，跑循环）       │           │ tool-execute-start/complete│
+   │ ③ hook:after:agentLoop   │           │ agent-loop-complete(usage) │
+   │ ④ 错误处理               │           │ context-compressed / error │
+   │ 注：token计数·上下文压缩 │           │ -> setStreaming/           │
+   │   ·memory 不在 pipeline  │           │    setThinkingBlocks/      │
+   │   （见 §2 运行时说明）   │           │    setActiveToolCalls/     │
+   └────────────┬────────────┘           │    setTokenCount/setError  │
+                │ loop.run()             └─────────────▲──────────────┘
+        ┌───────▼─────────────────────────────────────┴──────┐
+        │              AgentLoop（ReAct 引擎）                │
+        │   内部账：token 校准 observeUsage                   │
+        │           上下文压缩 compressor.compress            │
+        │   调用 LLMProvider（流式）+ ToolRegistry/Executor    │
+        └─────────────────────────────────────────────────────┘
 ```
+
+> **桥梁**：`createAgentLoopMiddleware` 构造时把 `eventBus` 作为参数注入 `AgentLoop`（loop.ts:278）——pipeline 包住 loop，loop 驱动 eventBus；两条通道除此之外不交叉。token 计数校准（`observeUsage`）与上下文压缩（`compressor.compress`）都在 AgentLoop 内部，不经过 pipeline 中间件；它们的 UI 通知（`agent-loop-complete` 带 usage、`context-compressed`）走 EventBus。
 
 **分层说明：**
 
 | 层 | 职责 | 关键组件 |
 |----|------|---------|
 | CLI 交互层 | 用户输入输出、界面渲染 | Ink/React 组件、useConversation Hook |
-| 事件管线层 | 事件分发与中间件处理 | EventPipeline（洋葱模型） |
-| Agent 引擎层 | 决策循环与任务编排 | AgentLoop（ReAct） |
+| 事件管线层（通道 A） | 请求编排，仅过 user-message | EventPipeline（before:agentLoop 扩展 -> createAgentLoopMiddleware -> hook:after:agentLoop -> 错误处理） |
+| 流式 UI 通道（通道 B） | 循环内事件 -> 界面刷新 | EventBus（llm-token/thinking/tool-execute-*/agent-loop-complete/context-compressed/error -> React setState） |
+| Agent 引擎层 | 决策循环与任务编排（含 token 校准、上下文压缩） | AgentLoop（ReAct）、TokenCalibrator、ContextCompressor |
 | 工具执行层 | 文件、命令、搜索操作 | 6 内置工具 + MCP + Skills |
 | LLM 适配层 | 大模型调用与 Token 管理 | LLMProvider、流式响应 |
 
