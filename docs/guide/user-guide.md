@@ -943,6 +943,10 @@ pinned: false
   6. MEMORY.md 索引自动重建
 ```
 
+**后台提取非每轮必跑**——4 道门槛漏斗，任一不通过即跳过（前 3 关零 LLM 成本）：① 互斥（已有提取在跑，不排队）；② dream 在跑让位；③ mtime 检测：loop 开始记 `loopStartedAt`，hook 遍历记忆文件，任一 `mtimeMs >= loopStartedAt` 即判定主 Agent 用 Write 直写过 -> 只重建索引 + 补归一化、跳过提取（`loopStartedAt=0` 恢复 session 时跳过检查，免旧文件全 match）；④ `shouldExtract`（不调 LLM）：无新 user 消息 / 全问句 / 5 分钟冷却内跳过；含“记住/记一下/不要忘记/别忘了/remember”绕过冷却立即跑。
+
+**create/update/append 由 LLM 判定 + store 兜底**：extractor prompt 让 LLM 对每条记忆输出 action——create（新主题）/ update（改写已有，矛盾必须重写）/ append（补充新段落）。`store.save` 按 action 执行并兜底：`create` 已存在文件降级 append（绝不丢内容）；`update` 保留 createdAt、刷新 updatedAt；`append` 用 mergeAppend 段落去重追加。
+
 **矛盾处理的关键**：提取 prompt 携带现有记忆的**正文**（而非仅索引）——LLM 发现"不喜欢红烧排骨了"与旧的"喜欢红烧排骨"冲突时，输出 `update` 整体改写该文件（保留 createdAt，刷新 updatedAt），以最新信息为准。
 
 #### 召回原理（Phase 2）：side query + 合成 tool_call 注入
