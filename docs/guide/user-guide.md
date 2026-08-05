@@ -705,7 +705,11 @@ Message 类型：
 **两个核心机制辨析：**
 
 - **三层降级**（Phase 2+3 建立）：token 超限时的多级削减链，逐级兜底--① 超 `compressThreshold`(0.85) 触发 `compressor.compress()` 压缩；② 压力下 `buildMessages(systemBudget)` 裁可选系统层；③ side-call 失败时降级 trim（丢中间、折 firstUser 进 recent）。maxTokens 从“一超即死”降为“压缩后仍超才硬停”。
-- **三层选择性保留**（Phase 5）：压缩时对轮次的三层取舍--`must-keep`（含 is_error / Write·Edit，原样或压成 file_change 笔记）/ `important`（candidate 里重要轮次，预算允许才保）/ `recent`（近期轮次全保）。组装为 `[firstUser, SUMMARY, ...mustKeep, ...important, ...recent]`。
+- **三层选择性保留**（Phase 5，`classifyMiddleTurns`，compressor.ts:105-140）：对中间轮次（首条 user 之后、最近 N 轮之前）按三维度取舍：
+  - **must-keep（结构必保）**：含 `is_error` 的 tool_result 的轮（工具报错，原样留）或含 Write/Edit 调用的轮（压成 file_change 笔记，留“改了啥”丢全文，全文进 git blob 可恢复）；硬规则判定，不依赖 side-call。
+  - **important（语义选保）**：其余普通轮（candidate）交 CompressionAssistant 判 important/normal，important 的在剩余预算内逐个贪心保留、超预算即停（已折进摘要），normal 不保留。
+  - **recent（时序全保）**：末尾 `keepRecentTurns` 轮（默认 2）不分类直接全保，保近期连贯。
+  - 组装：`[firstUser, SUMMARY, ...must-keep, ...important(预算允许), ...recent]`；fold（孤儿轮）不保留、折进摘要。三维互补，压力下优先砍 important、must-keep/recent 最后保。
 - **Phase 4 overflow 与上述并列**：工具执行后 >64KB 落盘 + 指针 + 预览，属**输入侧预防**（大输出不进对话），不参与压缩/裁剪链。
 
 **压缩触发**（`AgentLoop.run()` while 循环内、每步 LLM 调用前）：
