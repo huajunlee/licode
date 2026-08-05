@@ -529,6 +529,20 @@ LICode 通过 `LLMProvider` 接口抽象大模型调用，当前支持 Anthropic
 | `stop` | 停止生成 | 返回最终 usage 统计 |
 | `error` | 流中断 | UI 显示红色错误信息 |
 
+**chunk 的去向：分叉为上下文与事件**
+
+`collectResponse` 消费这些 chunk 时，按类型分叉到两股去向（外加一股内部账）：
+
+| chunk | 写入上下文（ConversationManager） | 发出事件（EventBus） | 内部账 |
+|-------|----------------------------------|---------------------|--------|
+| `token` | `appendToAssistantMessage` 拼进助手消息 content | `llm-token` 逐字渲染 | |
+| `thinking` | 不落上下文 | `llm-thinking` 折叠展示 | |
+| `tool-use` | 收集后 `addToolMessages` 注入工具消息 | `tool-use-detected` / `tool-execute-*` | |
+| `stop` | | | `usage` -> `observeUsage` 校准 |
+| `error` | 不落上下文 | `error` 事件 | |
+
+同一个 `token` chunk 既写上下文又发事件：上下文是“记忆”（持久、下轮 `buildMessages` 再发给 LLM），事件是“直播”（瞬时、刷 UI 即弃）；`thinking` 只走事件，因为推理过程不进 `AssistantMessage.content`。`collectResponse` 是分叉器，分出的两股分别落进 §2.1 的上下文与 EventBus 通道 B。
+
 ### 5. ToolRegistry（工具注册表）
 
 所有工具（内置、MCP、Skills）统一注册到 `ToolRegistry`。
