@@ -26,9 +26,9 @@
 
 ### 环境要求
 
-- **Node.js** >= 18
+- **Node.js** >= 20（package.json engines 要求）
 - **包管理器**：pnpm（推荐）、npm 或 yarn
-- **LLM API Key**：支持 Anthropic 兼容 API（如 Anthropic、DeepSeek、OpenAI 等）
+- **LLM API Key**：支持 Anthropic Messages API 兼容端点（如 Anthropic 官方、DeepSeek 的 /anthropic 端点；OpenAI 原生 /v1/chat/completions 不直接兼容，需第三方代理）
 
 ### 安装
 
@@ -244,7 +244,7 @@ LICode 会用 `edit` 精确替换 Zod schema 中的正则表达式，然后重�
 | 操作 | 快捷键 | 效果 |
 |------|--------|------|
 | 切换焦点 | `Ctrl+↑` / `Ctrl+↓` | 在不同卡片间移动 |
-| 展开/收起 | `Enter`（焦点在卡片时） | 查看完整推理内容 |
+| 收起 | `Enter`（焦点在卡片时） | 取消焦点/收起（展开靠 Ctrl+↑/↓ 聚焦） |
 
 展开推理卡片可以看到 LICode 的完整思考链：
 
@@ -502,7 +502,7 @@ LICode 运行时有**两条独立的事件通道**。理解它们的关系，是
 原 tokenCountingMiddleware  →  挂在 pipeline 上等 llm-response-complete
                                   ① agent-loop 路径不发该事件
                                   ② 就算发也只到 eventBus，pipeline 收不到
-                                  故已移除（Phase 1 收尾）
+                                  故已从 pipeline 摘除（函数定义保留为死代码，Phase 1 收尾）
 ```
 
 一句话：**pipeline 管"跑这一轮"，eventBus 管"把这轮的过程播给 UI"；校准是 loop 的内部账，显示是 eventBus 的播报——两者都不该、也不能接在 pipeline 的 `tokenCountingMiddleware` 上。**
@@ -612,18 +612,20 @@ LLM 调用工具时：
 
 | 工具 | 功能 | 适用场景 |
 |------|------|---------|
-| **read** | 按行读取文件，支持 offset/limit | 查看代码、配置文件 |
-| **write** | 创建或覆盖文件 | 新建文件、更新内容 |
-| **edit** | 精确字符串替换 | 修改函数名、修改变量 |
-| **bash** | 执行 Shell 命令 | 构建、测试、git 操作 |
-| **glob** | 文件名模式匹配 | 查找特定类型文件 |
-| **grep** | 文件内容正则搜索 | 搜索函数调用、引用 |
+| **Read** | 按行读取文件，支持 offset/limit | 查看代码、配置文件 |
+| **Write** | 创建或覆盖文件 | 新建文件、更新内容 |
+| **Edit** | 精确字符串替换 | 修改函数名、修改变量 |
+| **Bash** | 执行 Shell 命令 | 构建、测试、git 操作 |
+| **Glob** | 文件名模式匹配 | 查找特定类型文件 |
+| **Grep** | 文件内容正则搜索 | 搜索函数调用、引用 |
 | **decide** | 汇聚历史决定/事实/人物/近期日记，给决策分析（B/C framing） | 简单决策：二选一、低 stakes、当前上下文够用（见 §22） |
 | **decide_plan** | 复杂决策的结构化规划：模型自填维度/选项/步骤，产出计划并驱动反思收敛 | 复杂决策：多维度/高 stakes/需定向召回（见 §22） |
 | **decide_reflect** | side-call 小模型评估计划完备性，返回 passed/gaps/suggestions | decide_plan 产出计划后自动调用（见 §22） |
 | **decide_save** | 用户确认后把决策记入日记（两步 gating，直写 journal 不进 memory） | decide/decide_plan 分析后用户同意记下 |
 | **journal_recall** | 按话题/关键词搜索历史日记 | 回忆"之前那件事" |
 | **profile_recall** | 按名字查找人物档案 | 回忆某人的特质/关系/互动 |
+
+> 注：六基础工具注册名为 PascalCase（Read/Write/Edit/Bash/Glob/Grep），ToolRegistry 另有大小写不敏感回退，故小写亦可命中；第二大脑六工具为小写（decide 等）。
 
 ### 8. ConversationManager（对话管理器）
 
@@ -659,12 +661,13 @@ Message 类型：
   ─────────────────────────────────────────
    0    role（角色定义）     always    内置模板
    1    safety（安全规则）   always    内置模板
+   3    current-date（今天日期）always  内置模板（相对日期归一化锚点，见 §17）
    4    memory-guide（记忆指引）按需   内置模板（见 §17）
    5    memory（记忆索引）   按需      MEMORY.md 自动注入（见 §17）
   10    tool-use（工具说明）  按需     内置模板
+  10    CLAUDE.md           always    项目根目录（loaders 注入，always 不裁剪）
+  12    spec files           按需      spec-kit 加载
   15    skills（技能描述）   按需      用户/项目配置
-  动态  CLAUDE.md           按需      项目根目录
-  动态  spec files           按需      spec-kit 加载
 ```
 
 **组装策略：** `always: true` 的层始终包含，可选层按优先级依次填充，最后一个可选层可能被截断。
@@ -703,7 +706,7 @@ buildMessages(systemBudget)     // 压力下裁可选系统层
 5. 失败降级 trim（丢中间、折 firstUser 进 recent[0]），method="trim"，永不中断主循环
 ```
 
-> ⚠️ **关键设计**：① 摘要用 `assistant` 角色放首条 user **之后**（不能用 system--会被 `extractSystem` 提顶层乱序；不能放第一条--数组 assistant 开头 API 报错）；② 旧 `trimToBudget` 按下标切会孤立 tool_result 导致 API 报错，已移除；③ 被压缩的 write 全文用 `git hash-object -w --stdin` 写成 git blob（**不产生 commit**，内容寻址 + 天然去重），可经 hash 精确恢复；④ 状态栏百分比直对应 `compressThreshold`（85% 即将压缩、100% 硬上限）。
+> ⚠️ **关键设计**：① 摘要用 `assistant` 角色放首条 user **之后**（不能用 system--会被 `extractSystem` 提顶层乱序；不能放第一条--数组 assistant 开头 API 报错）；② 旧 `trimToBudget` 按下标切会孤立 tool_result 导致 API 报错，已移除；③ 被压缩的 write 全文用 `git hash-object -w --stdin` 写成 git blob（**不产生 commit**，内容寻址 + 天然去重），可经 hash 精确恢复；④ 状态栏百分比直对应 `compressThreshold`（85% 即将压缩；100% 为硬上限仅在 maxContextTokens 与 maxTokens 都为默认 200k 时严格成立，二者是独立配置）。
 
 ### 11. TerminationPolicy（终止策略）
 
@@ -729,7 +732,7 @@ CommandRouter 拦截 `/` 开头的输入并路由到对应命令处理器：
 | `/clear` | 清空对话历史 | ✅ |
 | `/context` | 显示模型、token、消息数、会话 ID | ✅ |
 | `/memory`、`/memory-list`、`/memory-add`、`/memory-delete` | 记忆管理：查看、手动添加、删除 | ✅ |
-| `/memory-archive`、`/memory-restore`、`/memory-pin`、`/memory-unpin` | 记忆归档/恢复/置顶（见 §17） | ✅ |
+| `/memory archive`、`/memory restore`、`/memory pin`、`/memory unpin` | 记忆归档/恢复/置顶（`/memory` 子命令，见 §17） | ✅ |
 | `/diary`、`/diary-end`、`/diary-list`、`/diary-find`、`/diary-show`、`/diary-curate` | 第二大脑日记（见 §20、§23） | ✅ |
 | `/subagent` | 开关子 Agent 支持 | ✅ |
 
@@ -785,7 +788,7 @@ MCPClientManager
 ```
 
 **加载流程：**
-1. SkillLoader 扫描用户目录（`~/.licode/skills/`）和项目目录（`.licode/skills/`）
+1. SkillLoader 设计上扫描用户目录（`~/.licode/skills/`）和项目目录（`.licode/skills/`）；注：当前 CLI 接线仅传入项目目录，`~/.licode/skills/` 暂未扫描
 2. 项目级 skill 覆盖用户级同名 skill
 3. 技能描述注入为系统提示词层（priority 15）
 4. 技能工具注册到 ToolRegistry，命名空间 `skill__{toolName}`
@@ -795,17 +798,14 @@ MCPClientManager
 在 Agent 生命周期的关键节点执行用户定义的 Shell 命令：
 
 ```json
-// .licode/hooks.json
+// .licode/hooks.json - 扁平对象：name 作 key，每个值是一条 hook 配置（无 "hooks" 数组包裹；HookConfig 无 name 字段，name 即对象键）
 {
-  "hooks": [
-    {
-      "name": "log-conversation",
-      "events": ["agent-loop-complete"],
-      "command": "echo '对话完成' >> licode.log",
-      "position": "after:agentLoop",
-      "blocking": false
-    }
-  ]
+  "log-conversation": {
+    "events": ["agent-loop-complete"],
+    "command": "echo '对话完成' >> licode.log",
+    "position": "after:agentLoop",
+    "blocking": false
+  }
 }
 ```
 
@@ -880,6 +880,9 @@ description: 用户喜欢吃辣，不喜欢红烧排骨
 type: user
 createdAt: 2026-07-27T10:00:00.000Z
 updatedAt: 2026-07-28T09:30:00.000Z
+usageCount: 3
+lastUsedAt: 2026-08-01T09:30:00.000Z
+pinned: false
 ---
 
 用户喜欢吃辣；2026-07-28 起不再喜欢红烧排骨。
@@ -958,7 +961,7 @@ after:agentLoop hook（fire-and-forget，不阻塞用户）
 | `packages/core/src/memory/hook.ts` | **提取钩子**——共享状态（互斥锁 / 上次提取时间 / 本轮开始时间），协调"主 Agent 已写则跳过提取"与索引重建 |
 | `packages/core/src/memory/recall.ts` | **MemoryRecall**——召回引擎。side query 选择（永不抛异常，失败返回空）；召回对的构造/剪除纯函数；`createMemoryRecallHandler` 生成每轮回调（刷新索引层 → 剪除 → 选择 → 注入） |
 | `packages/core/src/memory/loader.ts` | **MemoryLoader**——会话启动时把 MEMORY.md 索引注入 system prompt（priority 5 层） |
-| `packages/core/src/memory/dream.ts` | **MemoryDream**--做梦整理引擎（Phase 3+4）。四阶段 Orient/Gather/Consolidate/Prune；零 LLM 门 shouldDream；O_EXCL 锁；archive/restore/recordUsage/setPinned 等存储操作；createMemoryDreamHook fire-and-forget |
+| `packages/core/src/memory/dream.ts` | **MemoryDream**--做梦整理引擎（Phase 3+4）。四阶段 Orient/Gather/Consolidate/Prune；零 LLM 门 shouldDream；O_EXCL 锁；createMemoryDreamHook fire-and-forget（archive/restore/recordUsage/setPinned 等存储操作实现在 store.ts 的 MemoryStore 上，dream 仅调用） |
 | `packages/core/src/conversation/templates/memory-guide.md` | **主 Agent 指引层**（priority 4）——教主 Agent 何时写 / 如何写 / 不写什么 / 如何用 Read 查记忆 |
 | `packages/core/src/agent/loop.ts` | **AgentLoop**——`AgentConfig.onTurnStart` 挂点：召回注入的唯一入口（addUserMessage 之后、首次 LLM 调用之前，异常不阻断 loop） |
 | `packages/cli/src/hooks.ts` | **CLI 接线**——创建 store/extractor/recall，注册 after:agentLoop 提取 hook，为两处 pipeline 配置 onTurnStart，读取 `LICODE_MEMORY_RECALL` 开关 |
@@ -1022,18 +1025,20 @@ after:agentLoop hook（fire-and-forget，不阻塞用户）
 **Git Worktree 隔离：**
 ```
 .licode/worktrees/
-  └── licode/{agent-name}/     ← 独立的工作树
+  └── {agent-name}/            ← 独立的工作树
       ├── 独立分支 licode/{agent-name}
       └── 与主仓库文件系统隔离
 ```
 
 子 Agent 在隔离环境中修改文件，不会影响主工作区。
 
+> **实现状态**：core 层（SubAgentManager + WorktreeManager + Agent 工具，工具名 `Agent`）已实现并通过单测；CLI 默认未传 `subAgentRunner`，故 Agent 工具默认未注册、多智能体在主流程暂未启用。`/subagent on|off|status` 为预留开关位（翻转一个当前未被读取的标记）。补接线只需在 CLI 传入一个基于 WorktreeManager + 子 AgentLoop 的 runner。
+
 ### 19. 会话与 Spec
 
 **会话管理：**
 - `SessionManager` — 会话的增删改查
-- `recoverLatestSession` — 启动时自动恢复最近会话
+- `recoverLatestSession` — 恢复最近会话的工具函数（已实现；CLI 启动目前走 `--session` 参数或欢迎页会话选择，未自动调用此函数）
 - 会话文件：`.licode/sessions/{id}.json` — 完整 JSON 序列化
 
 **Spec 模式：**
@@ -1061,7 +1066,7 @@ interface DiaryEntry {
   facts: Fact[];                             // 离散事件 {what, when, tags}
   decisions: Decision[];                     // 明确决定 {decision, reasoning, context}
   emotions: Emotion[];                       // 推断情绪 {state, intensity:1-5, trigger, inferred}
-  people: PersonRef[];                       // 提到的人 {name, relation, interaction, specific}
+  people: PersonRef[];                       // 提到的人 {name, relation, relationInferred, interaction, note, specific}
   futureMemory: Candidate[];                 // 候选记忆 {content, type, importance, promotability, reason}
 }
 ```
@@ -1271,7 +1276,7 @@ MemoryCuration.curate（side-model）
 
 > **项目名称：融合个人记忆与决策智能的第二大脑 Agent（代号 LICode）**
 >
-> **项目概述**：本项目是运行于终端的 AI 编程助手与个人第二大脑 Agent。技术栈采用 TypeScript 与 Node.js，以 pnpm monorepo 划分 core、cli、spec-kit 三层包，终端界面用 Ink 渲染、Zod 校验参数、Vitest 测试并遵循严格 TDD 工作流，经 Anthropic 兼容 API 接入大模型，通过 MCP 协议扩展外部工具。功能上实现了 ReAct 推理行动 Agent 引擎与洋葱模型双事件通道管线，内置 read、write、edit、bash、glob、grep 六个工具并统一接入 MCP、Skills、Hooks、Slash 命令扩展体系；构建了跨会话持久记忆系统，具备双路径生产、side-query 严格召回、四阶段做梦整理与日期归一化等机制；并实现第二大脑日记的结构化提取与三层提升、人物档案、决策顾问与复杂决策规划反思、长对话上下文管理，以及基于 Git Worktree 隔离的多智能体协作。
+> **项目概述**：本项目是运行于终端的 AI 编程助手与个人第二大脑 Agent。技术栈采用 TypeScript 与 Node.js，以 pnpm monorepo 划分 core、cli、spec-kit 三层包，终端界面用 Ink 渲染、Zod 校验参数、Vitest 测试并遵循严格 TDD 工作流，经 Anthropic 兼容 API 接入大模型，通过 MCP 协议扩展外部工具。功能上实现了 ReAct 推理行动 Agent 引擎与洋葱模型双事件通道管线，内置 Read、Write、Edit、Bash、Glob、Grep 六个工具并统一接入 MCP、Skills、Hooks、Slash 命令扩展体系；构建了跨会话持久记忆系统，具备双路径生产、side-query 严格召回、四阶段做梦整理与日期归一化等机制；并实现第二大脑日记的结构化提取与三层提升、人物档案、决策顾问与复杂决策规划反思、长对话上下文管理，以及基于 Git Worktree 隔离的多智能体协作（core 层已实现，CLI 接线为可选扩展，见 §18）。
 >
 > 以下七条亮点可作为该项目的简历条目，每条按 STAR 法则展开。简历上使用每节开头的「简历条目」，面试时展开 STAR 细节并配合下方的「面试深挖问答」。
 
@@ -1414,7 +1419,7 @@ MemoryCuration.curate（side-model）
 **Q6：为什么要做梦整理记忆，不能实时整理吗？**
 
 - **通俗**：实时整理太贵也太干扰，你每说一句它就翻一遍整个记忆库，既慢又可能在你对话时改东西。所以模仿人脑，白天记晚上整理，且只在攒够了新材料时才做。
-- **详细**：shouldDream 是零 LLM 门，距上次整理不少于二十四小时且自上次起不少于五个新会话才触发。整理是 fire-and-forget，hook 立即返回不 await，用户从不被阻塞。四阶段中只有 Consolidate 用 LLM，Gather 是纯 grep 无 LLM 成本。
+- **详细**：shouldDream 是零 LLM 门，距上次整理不少于二十四小时且自上次起不少于五个新会话才触发。整理是 fire-and-forget，hook 立即返回不 await，用户从不被阻塞。四阶段中 Orient 与 Consolidate 用 LLM（Prune 在索引超 200 行或 25KB 时也用 LLM），Gather 是纯 grep 无 LLM 成本。
 
 **Q7：dream 会误删我的记忆吗？怎么保证安全？**
 
@@ -1441,7 +1446,7 @@ MemoryCuration.curate（side-model）
 **Q9：为什么不用 tiktoken 之类的真 tokenizer 算 token？**
 
 - **通俗**：tiktoken 是给 OpenAI 模型用的，对 Claude 与 DeepSeek 只是近似，而且引入它就多了一个依赖。本项目先粗估，再用模型真实返回的 token 数不断校准，越用越准且不绑定后端。
-- **详细**：TokenCounter 用 char-class 估算，CJK、字母数字、符号、空白四类不同权重，加内嵌 TokenCalibrator 的 EMA 在线学习 ratio，首次用 real 除 base，后续用零点七乘旧 ratio 加零点三乘新样本，clamp 在零点五到四之间。AgentLoop 每轮把真实 usage input tokens 喂回 observeUsage。Phase 2 把 base 升级为含 system 与 tools，ratio 退化为约一的纯修正系数，把缺 system 与 tools 从靠乘数硬吸收改成显式纳入 base，零新依赖且后端无关。
+- **详细**：TokenCounter 用 char-class 估算，CJK、字母数字、符号、空白四类字符（空白复用字母数字权重，实为三种权重：CJK=1.5、字母数字/空白=4、符号=2），加内嵌 TokenCalibrator 的 EMA 在线学习 ratio，首次用 real 除 base，后续用零点七乘旧 ratio 加零点三乘新样本，clamp 在零点五到四之间。AgentLoop 每轮把真实 usage input tokens 喂回 observeUsage。Phase 2 把 base 升级为含 system 与 tools，ratio 退化为约一的纯修正系数，把缺 system 与 tools 从靠乘数硬吸收改成显式纳入 base，零新依赖且后端无关。
 
 **Q10：压缩时怎么切消息？按下标切到 maxTokens 的一半不行吗？**
 
@@ -1543,8 +1548,7 @@ MemoryCuration.curate（side-model）
 │   │   └── go-review/
 │   │       └── skill.md
 │   ├── worktrees/                    ← 子 Agent 的 Git 隔离工作区
-│   │   └── licode/
-│   │       └── core-migration/       ← 每个子 Agent 一个目录
+│   │   └── core-migration/          ← 每个子 Agent 一个目录（路径 .licode/worktrees/{agent-name}）
 │   └── logs/                         ← Hook 输出日志（如果你配置了）
 │       └── conversations.log
 ├── specs/                            ← Spec 驱动开发的规格文件
@@ -1661,7 +1665,7 @@ updatedAt: 2026-07-27T08:00:00.000Z
 **作用**：每个子 Agent 获得独立的 Git worktree，在隔离环境中修改文件，不影响主工作区。
 
 ```
-.licode/worktrees/licode/
+.licode/worktrees/
 ├── core-migration/        ← 子 Agent "core-migration" 的工作区
 │   ├── packages/core/     ← 只包含该子 Agent 需要修改的文件
 │   └── ...
@@ -1716,7 +1720,7 @@ specs/用户通知功能/
 | 配置 MCP 服务端 | 无新文件（已手动创建） | `.licode/mcp/config.json` |
 | 配置 Hooks | Hook 日志文件（可选） | `.licode/logs/` (由 Hook 命令决定) |
 | 创建 Skill | skill.md + 工具注册 | `.licode/skills/{name}/skill.md` |
-| 使用子 Agent | Git worktree 目录 | `.licode/worktrees/licode/{name}/` |
+| 使用子 Agent | Git worktree 目录 | `.licode/worktrees/{name}/` |
 | 运行 `licode spec init` | spec + tasks + checklist | `specs/{name}/` |
 | 编写 CLAUDE.md | 无新文件（已手动创建） | `./CLAUDE.md` |
 | LICode 修改了你的代码 | 修改后的源文件 | 你的项目源文件（如 `src/`） |
@@ -1743,7 +1747,7 @@ specs/用户通知功能/
 | `/clear` | 清空当前对话历史 |
 | `/context` | 显示 token 用量和会话信息 |
 | `/memory`、`/memory-list`、`/memory-add`、`/memory-delete` | 记忆管理：查看、手动添加、删除 |
-| `/memory-archive`、`/memory-restore`、`/memory-pin`、`/memory-unpin` | 记忆归档/恢复/置顶（pinned 永不自动归档，见 §17） |
+| `/memory archive`、`/memory restore`、`/memory pin`、`/memory unpin` | 记忆归档/恢复/置顶（`/memory` 子命令；pinned 永不自动归档，见 §17） |
 | `/diary`、`/diary-end` | 进入/结束日记模式（第二大脑，见 §20） |
 | `/diary-list`、`/diary-find`、`/diary-show` | 列出/搜索/查看日记 |
 | `/diary-curate` | 人审整理日记候选到记忆/档案（`/diary-curate apply` 确认，见 §23） |
@@ -1776,7 +1780,7 @@ specs/用户通知功能/
 |------|------|
 | `Enter` | 发送消息 |
 | `Ctrl+↑` / `Ctrl+↓` | 在推理卡片间切换焦点 |
-| `Enter`（焦点在卡片时） | 展开/收起推理内容 |
+| `Enter`（焦点在卡片时） | 收起推理内容（展开靠 Ctrl+↑/↓ 聚焦） |
 | `↑` / `↓`（输入框） | 回溯/前进输入历史 |
 | `Ctrl+Q` | 返回欢迎页（会话列表） |
 | `Ctrl+C` | 退出 LICode |
@@ -1792,7 +1796,7 @@ specs/用户通知功能/
 | `ANTHROPIC_API_KEY` | API 密钥 | ✅ 是 |
 | `ANTHROPIC_BASE_URL` | API 地址（使用第三方兼容 API 时设置） | 否 |
 | `LICODE_MEMORY_RECALL` | 设为 `off` 时关闭每轮记忆召回（side query），退回仅索引模式（见架构原理 §17） | 否 |
-| `LICODE_DIARY_ENABLED` | 设为 `1`/`true` 时启用第二大脑日记捕获（默认关，见 §20） | 否 |
+| `LICODE_DIARY` | 设为 `off` 时关闭第二大脑日记捕获（默认开，见 §20） | 否 |
 | `LICODE_DIARY_MODEL` | 日记结构化提取用的 side 模型（默认 `deepseek-chat`） | 否 |
 | `LICODE_DIARY_CURATE_MODEL` | 整理（curation）side 模型（默认同 `LICODE_DIARY_MODEL`） | 否 |
 
@@ -1819,47 +1823,47 @@ specs/用户通知功能/
 
 ## 内置工具参考
 
-### read — 读取文件
+### Read — 读取文件
 
 ```
-参数：path（文件路径）、offset（起始行）、limit（行数）
-示例：read { path: "src/app.ts", offset: 10, limit: 50 }
+参数：file_path（文件路径）、offset（起始行）、limit（行数）
+示例：Read { file_path: "src/app.ts", offset: 10, limit: 50 }
 ```
 
-### write — 写入文件
+### Write — 写入文件
 
 ```
-参数：path（文件路径）、content（内容）
-示例：write { path: "src/utils.ts", content: "export const foo = 1;" }
+参数：file_path（文件路径）、content（内容）
+示例：Write { file_path: "src/utils.ts", content: "export const foo = 1;" }
 ```
 
-### edit — 精确替换
+### Edit — 精确替换
 
 ```
-参数：path（文件路径）、old_string（原字符串）、new_string（新字符串）、replace_all（是否全部替换）
-示例：edit { path: "src/app.ts", old_string: "var x = 1", new_string: "const x = 1" }
+参数：file_path（文件路径）、old_string（原字符串）、new_string（新字符串）、replace_all（是否全部替换）
+示例：Edit { file_path: "src/app.ts", old_string: "var x = 1", new_string: "const x = 1" }
 ```
 
-### bash — 执行命令
+### Bash — 执行命令
 
 ```
 参数：command（命令）、timeout（超时，默认 120s）
-示例：bash { command: "npm test -- --grep 'login'" }
+示例：Bash { command: "npm test -- --grep 'login'" }
 ```
 > ⚠️ Bash 工具需要权限确认，LICode 会弹窗询问是否允许执行。
 
-### glob — 文件名搜索
+### Glob — 文件名搜索
 
 ```
 参数：pattern（匹配模式，支持 * 和 **）
-示例：glob { pattern: "src/**/*.test.ts" }
+示例：Glob { pattern: "src/**/*.test.ts" }
 ```
 
-### grep — 内容搜索
+### Grep — 内容搜索
 
 ```
 参数：pattern（正则表达式）、path（搜索目录）、include（文件过滤）
-示例：grep { pattern: "useState", path: "src/", include: "*.tsx" }
+示例：Grep { pattern: "useState", path: "src/", include: "*.tsx" }
 ```
 
 ### decide - 决策顾问
@@ -1936,7 +1940,7 @@ specs/用户通知功能/
 
 **Q: LICode 支持哪些模型？**
 
-支持所有兼容 Anthropic Messages API 的模型。默认使用 `deepseek-v4-pro`，可通过 `--model` 参数或 `ANTHROPIC_BASE_URL` 环境变量切换到其他 Provider（如 Anthropic 官方 API、OpenAI 兼容 API 等）。
+支持所有兼容 Anthropic Messages API 的模型。默认使用 `deepseek-chat`，可通过 `--model` 参数或 `ANTHROPIC_BASE_URL` 环境变量切换到其他 Provider（如 Anthropic 官方 API、DeepSeek 等；OpenAI 原生 API 需第三方代理转接为 Anthropic Messages 格式）。
 
 ```bash
 # 使用 Anthropic 官方 API
@@ -1950,7 +1954,7 @@ licode --model deepseek-v4-pro
 
 **Q: LICode 会偷偷修改我的文件吗？**
 
-不会。LICode 只有在你的明确指令下才会修改文件。写操作前 LICode 会解释要做什么，`bash` 工具需要权限确认。同时内置安全规则禁止执行 `rm -rf`、`sudo` 等危险命令。如果你不确定，可以在 LICode 执行前要求它先说明计划。
+不会。LICode 只有在你的明确指令下才会修改文件。写操作前 LICode 会解释要做什么，`bash` 工具需要权限确认。同时内置安全规则禁止执行 `rm -rf`（目录外）、`git push --force`、删库等危险命令。如果你不确定，可以在 LICode 执行前要求它先说明计划。
 
 **Q: LICode 和 Claude Code / Cursor / Copilot 有什么区别？**
 
@@ -1958,9 +1962,9 @@ licode --model deepseek-v4-pro
 |------|--------|-------------|--------|---------|
 | 运行环境 | 终端 CLI | 终端 CLI | IDE 插件 | IDE 插件 |
 | 自主执行 | ✅ 全自动 | ✅ 全自动 | ⚠️ 需确认 | ❌ 仅补全 |
-| 多 Agent | ✅ 原生支持 | ✅ | ❌ | ❌ |
+| 多 Agent | ⚠️ core 已实现，CLI 待接线 | ✅ | ❌ | ❌ |
 | MCP 协议 | ✅ | ✅ | ✅ | ❌ |
-| 开源 | ✅ | ❌ | ❌ | ❌ |
+| 开源 | ⚠️ 待补 LICENSE | ❌ | ❌ | ❌ |
 | 适合场景 | 自主开发、CI/CD | 日常编码 | 代码补全 | 代码补全 |
 
 LICode 的定位是"能自主完成复杂开发任务的终端 AI 助手"，而不是代码补全工具。
@@ -1993,7 +1997,7 @@ LICode 的定位是"能自主完成复杂开发任务的终端 AI 助手"，而�
 **Q: LICode 的工具会不会执行危险命令？**
 
 LICode 有三层安全防护：
-1. **系统提示词**：内置安全规则，禁止执行 `rm -rf`、`sudo`、`chmod 777` 等危险命令
+1. **系统提示词**：内置安全规则，禁止执行 `rm -rf`（目录外）、`git push --force`、删库等危险命令
 2. **权限守卫**：`bash` 工具标记 `requiresApproval: true`，执行前弹窗确认
 3. **macOS 沙箱**（仅 macOS）：限制命令只能写入项目目录
 
@@ -2022,7 +2026,7 @@ export ANTHROPIC_API_KEY="sk-your-api-key-here"
 2. 模型名称不匹配（不同 Provider 的模型名称不同）
 3. 网络问题（检查是否能访问 API 地址）
 
-用 `/context` 命令可以查看当前使用的模型和 API 地址。
+用 `/context` 命令可以查看当前使用的模型、token 用量与会话信息（注：不显示 API 地址，仅 Model/Tokens/Messages/Session/Window/Memory/Overflow）。
 
 **Q: LICode 似乎"卡住"了，怎么办？**
 
