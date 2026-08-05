@@ -603,6 +603,20 @@ LLM 调用工具时：
     └── 4. tool.execute(params, context)
 ```
 
+**Zod schema 与 JSON Schema 的双重职责：**
+
+每个工具用 Zod 定义参数 schema，例如 Read：
+
+```ts
+const ReadParams = z.object({
+  file_path: z.string().describe("Absolute path to the file to read"),
+  offset: z.number().optional().describe("Line number to start reading from"),
+  limit: z.number().optional().describe("Number of lines to read"),
+});
+```
+
+注册时 `zodToJsonSchema` 把它转成 JSON Schema 缓存（`registry.ts:12-15`），`toLLMTools` 产出 `input_schema` 给 LLM（`registry.ts:44-52`）。一份 schema 服务两个对象：**Zod 给自己**（运行时 `safeParse` 校验 LLM 传回的参数 + `z.infer` 推导 execute 入参类型），**JSON Schema 给模型**（Anthropic API 的 function calling 只认 `input_schema` 格式）。
+
 ### 6. ToolExecutor（工具执行器）
 
 执行器负责参数校验、权限检查、并行执行：
@@ -610,6 +624,8 @@ LLM 调用工具时：
 - **参数校验**：用 Zod schema 自动验证 LLM 传回的参数
 - **权限检查**：工具标记 `requiresApproval: true` 时触发 PermissionGuard
 - **并行执行**：多个 tool-use 调用 `executeParallel()` → `Promise.all` 并发执行
+- **结果回灌模型**：`executeParallel` 返回 `ToolResult[]`（`executor.ts:37`），AgentLoop 调 `addToolMessages`（`loop.ts:248`）把结果注入对话（成 `ToolResultMessage`），下一轮 `buildMessages`（`loop.ts:183`）发给 LLM--模型据此决定继续调工具还是给最终回复（ReAct 的 Act->Observe）。
+- **并发原理**：`Promise.all` 是 JS 语言内置方法（非依赖、非自写），**不创建线程**--Node 单线程事件循环。`executeParallel` 把多个 `executeOne` 并发调度：Bash/Grep 走异步子进程（`exec`/`execFile`，libuv 线程池）可**真并行**；Read/Write/Edit/Glob 用同步 fs API（`readFileSync` 等）阻塞事件循环，实际**串行**。
 
 ### 7. 内置工具（6 基础 + 6 第二大脑）
 
