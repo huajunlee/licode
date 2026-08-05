@@ -464,7 +464,7 @@ LICode 运行时有**两条独立的事件通道**。理解它们的关系，是
         │   │   │        │        (流式文本)      (推理折叠)        (工具卡片)
         │   │   │        │
         │   │   │   emit(agent-loop-complete, {usage}) ──┐
-        │   │   │                                          ▼
+        │   │   │                                        ▼
         │   │   │                                   setTokenCount          ← 状态栏 token 数
         │   │   │                                   (getTokenCount())        （校准后的上下文大小）
         │   │   │                                          │
@@ -1275,9 +1275,21 @@ MemoryCuration.curate（side-model）
 >
 > 以下七条亮点可作为该项目的简历条目，每条按 STAR 法则展开。简历上使用每节开头的「简历条目」，面试时展开 STAR 细节并配合下方的「面试深挖问答」。
 
-### 亮点 1：跨会话持久记忆系统
+### 亮点 1：**构建推理行动循环的Agent引擎与洋葱模型事件管线**
 
-**简历条目**：设计并实现跨会话持久记忆系统。该系统采用双路径生产机制，用户明确指令时由助手直接写入，日常对话则由后台模型自动提取，两条路径通过五分钟冷却、互斥锁、文件修改时间检测防止重复写入。召回层用独立小模型严格筛选相关记忆并注入当轮对话，每轮清除上一轮注入的内容以防止上下文膨胀，失败时自动降级不干扰对话。系统还包含四阶段做梦整理机制，自动归档超过三十天未使用的记忆，最终实现无关问题零成本、相关问题精准注入。
+**简历条目**：设计双事件通道架构，分别负责对话请求编排与界面流式刷新，实现请求处理与UI渲染的完全解耦。设置步数、token用量、运行时长三重安全上限，任一阈值触发即终止循环并返回已有结果，有效防止Agent陷入死循环或资源无限消耗，保障系统在长时间运行下的稳定性与可控性。
+
+- **Situation**：需要一个能自主推理、调用工具、多轮循环的 Agent 核心，且 UI 要实时流式更新，token 要准确显示。
+- **Task**：设计清晰的引擎与事件架构，职责分离，可扩展，且修复 token 显示断链。
+- **Action**：
+  - ReAct 循环从用户输入到 LLM 推理到工具调用到结果注入再到继续循环，直到终止，三步保护为 maxSteps 五十、maxTokens 二十万、maxTimeMs 十分钟。
+  - 双事件通道中，Pipeline 作为洋葱模型中间件链只过 user-message 一个事件负责预处理、跑循环、后处理，EventBus 作为循环内部流式通道每步 emit 更新 UI，createAgentLoopMiddleware 把 eventBus 注入 loop，即 pipeline 包住 loop 而 loop 驱动 eventBus。
+  - token 断链诊断发现原 tokenCountingMiddleware 监听 llm-response-complete，但 agent-loop 路径根本不发该事件，导致状态栏恒显零，修复为改挂 EventBus 的 agent-loop-complete 与 context-compressed 分支。
+- **Result**：引擎职责清晰、UI 实时流式、token 准确显示，架构可扩展，MCP、Skills、Hooks、记忆均挂载于明确挂点。
+
+### 亮点 2：**设计并实现跨会话持久记忆系统**
+
+**简历条目**：采用用户明确指令与后台模型自动提取的双路径生产机制，结合互斥锁与文件修改时间检测确保写入操作的原子性与幂等性，杜绝重复写入。召回层通过独立小模型对候选记忆进行严格相关性筛选，仅将高价值记忆注入当轮对话，并在每轮结束后自动清除注入内容以防止上下文膨胀。系统内置四阶段做梦整理机制，自动归档超过三十天未使用的记忆，最终实现无关问题零成本响应、相关问题精准注入的高效记忆管理。
 
 - **Situation**：AI 对话助手普遍存在失忆问题，会话结束即丢失上下文，用户每次都要重述偏好和项目背景。已有方案要么只存不召回而变成只进不出的记事本，要么召回粗糙，依赖关键词匹配、无关记忆干扰对话且 token 持续累积。
 - **Task**：设计一套跨会话记忆系统，能自动生产、按需召回、定期整理，且不干扰主对话、不浪费 token、不出现矛盾。
@@ -1289,22 +1301,9 @@ MemoryCuration.curate（side-model）
   - 日期归一化三处封堵，extractor prompt 注入日期、save 程序化归一化、Write-path hook 在主 Agent 直写时补归一化，消除昨天和上周等相对日期导致的记忆错乱。
 - **Result**：记忆从只进不出的记事本升级为会更新、会召回、不打扰的完整闭环，无关问题零召回零成本，相关问题精准注入正文，矛盾自动消解，旧记忆自动归档不堆积。
 
-### 亮点 2：第二大脑日记系统
+### 亮点 3：**设计并实现长对话上下文管理**
 
-**简历条目**：实现第二大脑日记系统。该系统用独立模型将口述日记结构化为事实、决定、情绪、人物与候选记忆五类字段，设计重要性与可提升性两个维度作为提升门槛，将候选分流到自动提升为记忆、自动归档为人物档案、人审整理三层，并用去重索引协调三层避免重复处理，日记与人物档案通过条目编号双向链接。
-
-- **Situation**：个人日记和记录散落各处，写完即忘，无法被 AI 复用，也无法沉淀为长期记忆和人物关系。
-- **Task**：把口述日记变成可被 AI 结构化理解、可自动沉淀为长期记忆和人物档案的第二大脑。
-- **Action**：
-  - 结构化提取由独立 side-model 把口述拆成事实、决定、情绪、人物、候选记忆五类字段，候选带 importance 与 promotability 双维度，提取规则为不臆造、推断必标注、相对日期转绝对。
-  - 三层提升中，autoPromoteEntry 对高重要性候选 deriveMemory 直写记忆，autoFileEntry 对专有人物写档案且 interaction 带 entryId 反链日记、relationshipState 只记变化，低可提升性候选走 diary-curate 人审。
-  - CuratedIndex 去重用 entryId 加候选序号作键记录已处理候选，三层共用，防重复提升、归档与整理。
-  - 可读文件名与 id 解耦，文件名为日期加时间加标题供人阅读，id 为 opaque 程序标识，重命名不破坏引用。
-- **Result**：日记从死文本变成会自动沉淀为记忆和人物档案的活数据，高价值信息自动入库，低价值信息留待人审，不丢也不噪音。
-
-### 亮点 3：长对话上下文管理
-
-**简历条目**：设计并实现长对话上下文管理，分五期演进。用校准式 token 计数替代专用分词器，按字符类别估算并用模型真实返回值在线校准，实现零额外依赖与后端无关。压缩时按对话轮次边界切分，从结构上避免切断工具调用与结果配对导致的接口报错。被压缩掉的文件全文用 git 底层对象存储做恢复指针，不产生提交且天然去重。滚动演化摘要配合三层选择性保留与三层降级，永不中断对话主流程。
+**简历条目**：以滚动演化摘要为核心轴，配合三层选择性保留策略、三层降级机制与对话轮次边界切分，实现高保真上下文压缩。被压缩的全文通过git底层对象存储建立恢复指针，不产生额外提交记录且天然具备内容去重能力。同时提供token计数功能，按字符类别进行估算，并利用模型真实返回值实现在线校准，确保上下文长度控制的精准性。
 
 - **Situation**：长对话 token 涨上去撞 maxTokens 硬墙直接 TerminationError 终止，无摘要续命也无降级，token 计数是粗略启发式不可信，trimToBudget 按下标切会孤立 tool_result 导致 API 报错，工具大段输出全量灌进上下文。
 - **Task**：让长对话从撞墙即死变为摘要续命，且压缩不丢关键信息、不破坏消息结构、不中断主循环。
@@ -1316,9 +1315,22 @@ MemoryCuration.curate（side-model）
   - 三层降级在 side-call 失败时降级 trim，丢中间并把 firstUser 折进 recent，maxTokens 从一超即死降为压缩后仍超的最终兜底。
 - **Result**：长对话可持续续命不撞墙，压缩按结构边界切不报错，被压缩的文件全文可经 git blob 精确恢复，token 计数后端无关且自校准。
 
-### 亮点 4：决策顾问工具
+### 亮点 4：**实现第二大脑日记系统**
 
-**简历条目**：实现决策顾问工具。该工具汇聚历史决定、事实、人物档案与近期日记构建决策上下文，设计两种回答模式，证据充足时给出带倾向的建议，证据不足时坦诚降级、摆清事实交还判断权而不硬编模糊答案。采用两步确认机制，用户明确同意才保存，且直接写入日记不污染长期记忆。
+**简历条目**：调用独立模型将口述日记结构化解析为事实、决定、情绪、人物与候选记忆五类字段，设计重要性与可提升性双维度评估门槛，将候选内容分流至自动提升为记忆、自动归档为人物档案、人审整理三层处理通道，并通过去重索引协调三层间的协同工作，避免重复处理。
+
+- **Situation**：个人日记和记录散落各处，写完即忘，无法被 AI 复用，也无法沉淀为长期记忆和人物关系。
+- **Task**：把口述日记变成可被 AI 结构化理解、可自动沉淀为长期记忆和人物档案的第二大脑。
+- **Action**：
+  - 结构化提取由独立 side-model 把口述拆成事实、决定、情绪、人物、候选记忆五类字段，候选带 importance 与 promotability 双维度，提取规则为不臆造、推断必标注、相对日期转绝对。
+  - 三层提升中，autoPromoteEntry 对高重要性候选 deriveMemory 直写记忆，autoFileEntry 对专有人物写档案且 interaction 带 entryId 反链日记、relationshipState 只记变化，低可提升性候选走 diary-curate 人审。
+  - CuratedIndex 去重用 entryId 加候选序号作键记录已处理候选，三层共用，防重复提升、归档与整理。
+  - 可读文件名与 id 解耦，文件名为日期加时间加标题供人阅读，id 为 opaque 程序标识，重命名不破坏引用。
+- **Result**：日记从死文本变成会自动沉淀为记忆和人物档案的活数据，高价值信息自动入库，低价值信息留待人审，不丢也不噪音。
+
+### 亮点 5：**实现第二大脑决策顾问工具**
+
+**简历条目**：汇聚历史决定、事实、人物档案与近期日记构建完整决策上下文，设计证据充足与证据不足两种回答模式——证据充分时输出带明确倾向性的建议，证据不足时坦诚降级、清晰摆出事实并将判断权交还用户，杜绝硬编模糊答案。采用两步确认机制，仅在用户明确同意后保存决策，且直接写入日记模块，避免污染长期记忆系统。
 
 - **Situation**：用户请 AI 帮忙做决定时，AI 往往要么给空洞建议，要么在信息不足时编造貌似有理的判断，且决策记录无处沉淀。
 - **Task**：让 AI 的决策建议有依据、知边界、可沉淀，即基于用户历史、信息不足时坦诚降级、用户确认后记入日记。
@@ -1328,33 +1340,11 @@ MemoryCuration.curate（side-model）
   - 两步 gating 中，decide 给分析后必须问是否记下来，用户明确同意才调 decide_save，buildDecisionEntry 构造 DiaryEntry 直写 journal 不进 memory。
 - **Result**：决策建议从用户真实历史出发而非泛泛而谈，信息不足时坦诚降级而非编造，决策按用户意愿沉淀为可追溯的日记条目，不污染永久记忆。
 
-### 亮点 5：ReAct Agent 引擎与双事件通道
 
-**简历条目**：构建推理行动循环的 Agent 引擎与洋葱模型事件管线。设计双事件通道，一条负责编排对话请求，一条负责流式刷新界面。实现步数、token 用量、超时三步终止保护。诊断并修复 token 计数显示断链问题，定位到对话循环路径不触发原有的计数事件，改挂到每轮必然触发的完成事件上。
 
-- **Situation**：需要一个能自主推理、调用工具、多轮循环的 Agent 核心，且 UI 要实时流式更新，token 要准确显示。
-- **Task**：设计清晰的引擎与事件架构，职责分离，可扩展，且修复 token 显示断链。
-- **Action**：
-  - ReAct 循环从用户输入到 LLM 推理到工具调用到结果注入再到继续循环，直到终止，三步保护为 maxSteps 五十、maxTokens 二十万、maxTimeMs 十分钟。
-  - 双事件通道中，Pipeline 作为洋葱模型中间件链只过 user-message 一个事件负责预处理、跑循环、后处理，EventBus 作为循环内部流式通道每步 emit 更新 UI，createAgentLoopMiddleware 把 eventBus 注入 loop，即 pipeline 包住 loop 而 loop 驱动 eventBus。
-  - token 断链诊断发现原 tokenCountingMiddleware 监听 llm-response-complete，但 agent-loop 路径根本不发该事件，导致状态栏恒显零，修复为改挂 EventBus 的 agent-loop-complete 与 context-compressed 分支。
-- **Result**：引擎职责清晰、UI 实时流式、token 准确显示，架构可扩展，MCP、Skills、Hooks、记忆均挂载于明确挂点。
+### 亮点 6：**实现复杂决策的规划与审查机制**
 
-### 亮点 6：多智能体协作与统一扩展体系
-
-**简历条目**：设计多智能体协作与统一扩展体系。子 Agent 在独立 git 工作树中隔离执行，文件系统互不干扰。通过 MCP 协议接入的外部工具、技能包、生命周期钩子、斜杠命令等扩展能力统一注册到一个工具表，统一做参数校验与权限检查。
-
-- **Situation**：复杂任务需并行拆解，子 Agent 改文件会互相冲突，外部工具、领域专长、生命周期自动化缺乏统一接入点。
-- **Task**：让多 Agent 安全并行，让扩展能力统一可插拔。
-- **Action**：
-  - Git Worktree 隔离让每个子 Agent 获得独立 git worktree，在隔离工作区改文件互不干扰，完成后父 Agent 收集结果可 merge 或 discard。
-  - 统一 ToolRegistry 将内置六工具、MCP 工具、Skills 工具统一注册，Zod schema 校验参数，PermissionGuard 权限检查，executeParallel 并发执行。
-  - Skills 注入 system prompt 层加专属工具，Hooks 在 before 与 after agentLoop 执行 Shell 命令，CommandRouter 拦截斜杠命令。
-- **Result**：复杂任务可安全并行拆解，外部能力即插即用，权限与沙箱三层防护为系统提示词、PermissionGuard、macOS sandbox-exec。
-
-### 亮点 7：决策 Planner 与反思收敛循环
-
-**简历条目**：实现复杂决策的规划与反思收敛机制。主模型在调用工具时直接填写结构化计划，维度拆成方面加具体评估目标、人物带关系，计划作为工具结果注入上下文以约束后续执行路径，而非由额外模型生成。独立的 side-call 小模型在看不到主模型推理的隔离条件下评估计划完备性，只报实质遗漏，未通过则带焦点重规划再评估，最多两轮收敛，仍不通过则接受当前计划执行，避免无限循环。计划与评估结果在终端完整展开，并对简单与复杂决策做条件路由，简单决策仍走一次性上下文汇聚的快路径不受影响。
+**简历条目**：主模型在调用决策工具时若判断为复杂决策，生成结构化计划，维度拆成方面加具体评估目标、人物带关系。独立的 side-call 小模型在看不到主模型推理的隔离条件下评估计划完备性，只报实质遗漏，未通过则主模型重新规划再评估，最多两轮收敛，避免无限循环。
 
 - **Situation**：复杂决策若一次性给答案，模型容易走偏、漏维度、选项狭窄，且自我检查有锚定偏见，倾向于认为自己写得没问题。
 - **Task**：让复杂决策先规划再执行，且计划经独立视角检验后才动手，既不无限循环也不放过实质缺陷。
@@ -1375,6 +1365,22 @@ MemoryCuration.curate（side-model）
 
 #### 名词解释
 
+- **ReAct 循环**：推理与行动交替的 Agent 模式，用户输入到 LLM 推理到工具调用到结果注入再到继续循环，直到终止条件，三步保护为步数五十、Token 二十万、超时十分钟。
+- **洋葱模型事件管线**：EventPipeline 用洋葱模型组织中间件，事件从外到内再从内到外流过每一层，每层可做前置与后置处理，用 next 串联。
+- **双事件通道**：Pipeline 与 EventBus 两条独立通道。Pipeline 是外层控制流，只过 user-message 一个事件，负责预处理、跑循环、后处理。EventBus 是内层流式通道，循环内部每步 emit 事件更新 UI。createAgentLoopMiddleware 把 eventBus 注入 loop，即 pipeline 包住 loop 而 loop 驱动 eventBus。
+- **token 计数断链**：原 tokenCountingMiddleware 监听 llm-response-complete 事件，但 agent-loop 路径根本不发该事件，导致状态栏恒显零，修复为改挂 EventBus 的 agent-loop-complete 与 context-compressed 分支。
+
+#### 深挖问答
+
+**Q1：为什么要分 Pipeline 和 EventBus 两条通道，合成一条不行吗？**
+
+- **通俗**：一条通道会把跑对话和刷界面混在一起，职责不清。本项目把跑这一轮和把这轮的过程播给界面分成两件事，各走各的，互不干扰。
+- **详细**：Pipeline 是请求编排，洋葱模型中间件链只过 user-message 一个事件，中间件之间用 next 串联，负责预处理、跑循环、后处理。EventBus 是流式 UI 更新，循环内每步 emit token、工具调用、完成等事件，switch 分发到 React setState 重渲染。两条通道不交叉，pipeline 上的中间件看不到 eventBus 事件，eventBus 也看不到 pipeline 的 user-message。唯一桥梁是 createAgentLoopMiddleware 把 eventBus 注入 loop，所以 loop 跑在 pipeline 内部却把事件发到 eventBus。
+
+### 亮点 2 名词解释与深挖问答
+
+#### 名词解释
+
 - **双路径生产**：记忆写入有两条路径。第一条是明确指令路径，用户说记住什么时主 Agent 当场用 Write 工具直接写入记忆文件。第二条是后台提取路径，每轮对话结束后由 after:agentLoop hook 调用 LLM 自动从对话中提取偏好、纠正、决策等，两条路径共用同一个 MemoryStore 作为真相源。
 - **side-query 严格召回**：每轮对话开始前，用一个独立的小模型读取记忆索引和当前用户消息，判断哪些记忆与当前问题相关。严格过滤 prompt 默认不召回任何记忆，只有满足明确相关性条件才召回，无关问题一条都不选。
 - **合成 tool_call 注入**：把召回的记忆正文包装成一对消息，即 assistant 的 tool_use 调用加 user 的 tool_result 结果，追加到用户消息之后。模型从这对消息后继续回答，不改动 system prompt 也不改动用户原文。
@@ -1385,56 +1391,39 @@ MemoryCuration.curate（side-model）
 
 #### 深挖问答
 
-**Q1：为什么不把相关记忆直接拼进 system prompt 或用户消息，而要用合成 tool_call？**
+**Q2：为什么不把相关记忆直接拼进 system prompt 或用户消息，而要用合成 tool_call？**
 
 - **通俗**：就像你问朋友问题，朋友想起某件事，你不能把想起的过程塞进朋友嘴里改他说的话，也不能偷偷改他的世界观。本项目让助手做个查记忆的动作，把查到的内容作为工具结果放在你的问题后面，助手从那里接着回答，既不改你的原话也不动系统设定。
 - **详细**：三个原因。第一，不改 system prompt，system prompt 是分层组装的，每轮往里塞正文会破坏分层裁剪逻辑且 token 累积。第二，不改用户原文，保留用户消息原样便于调试和恢复。第三，消息角色严格交替，Anthropic API 要求 user 与 assistant 严格交替，合成 assistant 的 tool_use 加 user 的 tool_result 对天然合法，所有 provider 兼容。附带好处是 TUI 把它渲染成 memory_recall 工具卡片，召回过程透明可见。
 
-**Q2：每轮都注入记忆，token 不会越积越多吗？**
+**Q3：每轮都注入记忆，token 不会越积越多吗？**
 
 - **通俗**：不会。每轮开始前本项目先把上一轮查记忆的那对消息剪掉，再决定这轮要不要查新的，历史里任意时刻最多只有一对召回消息。
 - **详细**：onTurnStart 回调分四步，第一步刷新索引层，第二步 pruneRecallMessages 剪除上一轮的合成对，按 memory_recall tool 名与 tool_use_id 定位，能处理 restored session 里历史中间的对，第三步 side-query 选不超过五条，第四步注入新对，所以 token 不累积且每轮开销恒定。
 
-**Q3：side-query 召回失败或超时了怎么办？会不会卡住对话？**
+**Q4：side-query 召回失败或超时了怎么办？会不会卡住对话？**
 
 - **通俗**：不会。查记忆是锦上添花，查不到就当没查，对话照常进行，只是这轮不注入记忆。
 - **详细**：三层 best-effort 永不抛异常。第一层 MemoryRecall.select 整体 try catch，LLM 错误或超时十秒用 Promise.race 计时器则返回空数组。第二层索引为空则根本不发起 LLM 调用，零成本。第三层 createMemoryRecallHandler 最外层 try catch，任何异常都不阻断 loop。降级后本轮只剪除不注入，退回仅有索引模式。LICODE_MEMORY_RECALL 设为 off 可整体关闭。
 
-**Q4：用户改口了，记忆会矛盾并存吗？**
+**Q5：用户改口了，记忆会矛盾并存吗？**
 
 - **通俗**：不会。提取时本项目把已有的记忆全文都给 LLM 看，LLM 发现不喜欢了和旧的喜欢冲突，就直接把旧文件整体改写成最新的，不会两条并存。
 - **详细**：这是 Phase 1 生产层的关键设计，提取 prompt 携带现有记忆的正文而非仅索引，LLM 输出 update 时 MemoryStore.save 整体替换正文，保留 createdAt 刷新 updatedAt。如果是补充而非冲突用 append 做段落级去重合并。create 在目标已存在时防御性降级为 append，绝不丢旧内容。
 
-**Q5：为什么要做梦整理记忆，不能实时整理吗？**
+**Q6：为什么要做梦整理记忆，不能实时整理吗？**
 
 - **通俗**：实时整理太贵也太干扰，你每说一句它就翻一遍整个记忆库，既慢又可能在你对话时改东西。所以模仿人脑，白天记晚上整理，且只在攒够了新材料时才做。
 - **详细**：shouldDream 是零 LLM 门，距上次整理不少于二十四小时且自上次起不少于五个新会话才触发。整理是 fire-and-forget，hook 立即返回不 await，用户从不被阻塞。四阶段中只有 Consolidate 用 LLM，Gather 是纯 grep 无 LLM 成本。
 
-**Q6：dream 会误删我的记忆吗？怎么保证安全？**
+**Q7：dream 会误删我的记忆吗？怎么保证安全？**
 
 - **通俗**：三重保险。删除前先备份，超过三十天没用过的记忆只是归档不是删除且能恢复，置顶的记忆永远不会被归档。
 - **详细**：第一，backupAndDelete 在 delete 前把文件与 MEMORY.md 拷到 dream-backup 目录。第二，自动归档用 archive 做软删除移到 archive 目录，memory-restore 可恢复，归档候选判定用 lastUsedAt 而非 createdAt，避免召回关闭时误归档所有从未召回的记忆，pinned 是硬条件排除。第三，dream 整体永不 reject，失败时不更新 dream state 下次可重试，O_EXCL 原子锁加三十分钟过期覆盖，崩溃不永久阻塞。
 
-**Q7：dream 整理时和召回提取并发写怎么办？**
+**Q8：dream 整理时和召回提取并发写怎么办？**
 
 - **详细**：让位机制。createMemoryRecallHandler 在 dreamState running 时跳过 recordUsage 以避免与 dream consolidate 的写写竞态，但召回的读路径 select 与 inject 不让位以服务用户当轮。提取 hook 同理检测 dream 状态。recordUsage 写回后用 utimes 恢复原 mtime，这是关键技巧，否则召回计数会 bump mtime 触发主 Agent 已写则跳过提取的误判。
-
-### 亮点 2 名词解释与深挖问答
-
-#### 名词解释
-
-- **结构化提取**：用独立的 side-model LLM 把口述日记拆成五类结构化字段，分别是事实、决定、情绪、人物、候选记忆，每个候选记忆带重要性 importance 与可提升性 promotability 两个维度。提取规则为不臆造、推断必标注、相对日期转绝对。
-- **importance 与 promotability 双维度提升门**：importance 衡量这事重不重要，promotability 衡量这事适不适合直接写成记忆。自动提升门要求类型属于偏好决定或目标、重要性为高、可提升性不为低，三者同时满足才自动入库，否则走人审。
-- **三层提升**：候选记忆分流到三层。自动提升把高置信度候选写成记忆，自动归档把专有人物写成人物档案，人审整理把低可提升性候选留待 diary-curate 确认。
-- **CuratedIndex 去重**：一个 JSON 索引文件，用 entryId 加候选序号作键记录已处理候选，三层共用，防止同一条候选被重复提升、归档或整理。
-- **entryId 双向链接**：人物档案的每条 interaction 带 entryId 反向链接到产生它的日记条目，人物与日记双向可追溯。
-
-#### 深挖问答
-
-**Q8：futureMemory 候选为什么要 importance 和 promotability 两个维度？一个不够吗？**
-
-- **通俗**：importance 是这事重不重要，promotability 是这事适不适合直接写成记忆。比如计划拿大厂 Offer 既重要又适合存可自动入库，对某技术有了了解重要但不适合直接存因太泛得人审整理，两个维度分开才能正确分流。
-- **详细**：autoPromoteEntry 的自动门是类型属于偏好决定或目标、重要性为高、可提升性不为低。可提升性为低的候选即使重要也走 curation 人审，因为直接写成记忆质量差需合并。这把高置信度自动入库与低置信度人审分流，避免自动提升产生低质量记忆噪声。
 
 ### 亮点 3 名词解释与深挖问答
 
@@ -1472,36 +1461,37 @@ MemoryCuration.curate（side-model）
 
 #### 名词解释
 
+- **结构化提取**：用独立的 side-model LLM 把口述日记拆成五类结构化字段，分别是事实、决定、情绪、人物、候选记忆，每个候选记忆带重要性 importance 与可提升性 promotability 两个维度。提取规则为不臆造、推断必标注、相对日期转绝对。
+- **importance 与 promotability 双维度提升门**：importance 衡量这事重不重要，promotability 衡量这事适不适合直接写成记忆。自动提升门要求类型属于偏好决定或目标、重要性为高、可提升性不为低，三者同时满足才自动入库，否则走人审。
+- **三层提升**：候选记忆分流到三层。自动提升把高置信度候选写成记忆，自动归档把专有人物写成人物档案，人审整理把低可提升性候选留待 diary-curate 确认。
+- **CuratedIndex 去重**：一个 JSON 索引文件，用 entryId 加候选序号作键记录已处理候选，三层共用，防止同一条候选被重复提升、归档或整理。
+- **entryId 双向链接**：人物档案的每条 interaction 带 entryId 反向链接到产生它的日记条目，人物与日记双向可追溯。
+
+#### 深挖问答
+
+**Q13：futureMemory 候选为什么要 importance 和 promotability 两个维度？一个不够吗？**
+
+- **通俗**：importance 是这事重不重要，promotability 是这事适不适合直接写成记忆。比如计划拿大厂 Offer 既重要又适合存可自动入库，对某技术有了了解重要但不适合直接存因太泛得人审整理，两个维度分开才能正确分流。
+- **详细**：autoPromoteEntry 的自动门是类型属于偏好决定或目标、重要性为高、可提升性不为低。可提升性为低的候选即使重要也走 curation 人审，因为直接写成记忆质量差需合并。这把高置信度自动入库与低置信度人审分流，避免自动提升产生低质量记忆噪声。
+
+### 亮点 5 名词解释与深挖问答
+
+#### 名词解释
+
 - **gatherDecisionContext 多源汇聚**：decide 工具调用时汇聚五块上下文，话题匹配的历史决定、相关事实、相关人物档案、近期日记、分析指引，截断只截上下文而 framing 始终保留。
 - **B 与 C framing**：两种回答模式。B 式为默认，列两到三条可选路径加利弊加倾向建议。C 式为降级，在证据不足、矛盾或超范围时不硬编模糊答案，摆清事实明说信息不足并把判断权交还用户。
 - **两步 gating**：decide 给出分析后必须询问是否记下来，用户明确同意才调 decide_save 落盘，用户拒绝或不回应则不保存，绝不主动调用。
 
 #### 深挖问答
 
-**Q13：decide 的 B 与 C framing 是什么？为什么不直接给建议？**
+**Q14：decide 的 B 与 C framing 是什么？为什么不直接给建议？**
 
 - **通俗**：B 式是我给你几个选项加利弊加我倾向哪个，C 式是信息不够我把已知摆出来你自己定，总比不懂装懂瞎建议强。
 - **详细**：B 式默认列两到三条可选路径加各自利弊风险加倾向建议，基于用户历史与处境。C 式触发条件为证据不足、互相矛盾、超出可判断范围，不硬编模糊答案，把事实与各方立场摆清，明说信息不足，交还判断权。这是安全阀，避免 AI 在信息不足时编造貌似有理的建议。截断时只截上下文 bulk，framing 始终保留在末尾以保证 B 与 C 指引不丢。
 
-**Q14：decide_save 为什么直写 journal 而不进 memory？**
+**Q15：decide_save 为什么直写 journal 而不进 memory？**
 
 - **详细**：决策是发生在某时的情境事件，不是永久事实。放日记它能被 journal_recall 按话题召回、被未来 decide 汇聚为历史决定，放 memory 会污染永久记忆库因每次决策都成一条记忆很快膨胀。gating 也是两步，decide 给分析后必须问是否记下来，用户明确同意才调 decide_save，绝不主动保存。
-
-### 亮点 5 名词解释与深挖问答
-
-#### 名词解释
-
-- **ReAct 循环**：推理与行动交替的 Agent 模式，用户输入到 LLM 推理到工具调用到结果注入再到继续循环，直到终止条件，三步保护为步数五十、Token 二十万、超时十分钟。
-- **洋葱模型事件管线**：EventPipeline 用洋葱模型组织中间件，事件从外到内再从内到外流过每一层，每层可做前置与后置处理，用 next 串联。
-- **双事件通道**：Pipeline 与 EventBus 两条独立通道。Pipeline 是外层控制流，只过 user-message 一个事件，负责预处理、跑循环、后处理。EventBus 是内层流式通道，循环内部每步 emit 事件更新 UI。createAgentLoopMiddleware 把 eventBus 注入 loop，即 pipeline 包住 loop 而 loop 驱动 eventBus。
-- **token 计数断链**：原 tokenCountingMiddleware 监听 llm-response-complete 事件，但 agent-loop 路径根本不发该事件，导致状态栏恒显零，修复为改挂 EventBus 的 agent-loop-complete 与 context-compressed 分支。
-
-#### 深挖问答
-
-**Q15：为什么要分 Pipeline 和 EventBus 两条通道，合成一条不行吗？**
-
-- **通俗**：一条通道会把跑对话和刷界面混在一起，职责不清。本项目把跑这一轮和把这轮的过程播给界面分成两件事，各走各的，互不干扰。
-- **详细**：Pipeline 是请求编排，洋葱模型中间件链只过 user-message 一个事件，中间件之间用 next 串联，负责预处理、跑循环、后处理。EventBus 是流式 UI 更新，循环内每步 emit token、工具调用、完成等事件，switch 分发到 React setState 重渲染。两条通道不交叉，pipeline 上的中间件看不到 eventBus 事件，eventBus 也看不到 pipeline 的 user-message。唯一桥梁是 createAgentLoopMiddleware 把 eventBus 注入 loop，所以 loop 跑在 pipeline 内部却把事件发到 eventBus。
 
 ### 亮点 6 名词解释与深挖问答
 
