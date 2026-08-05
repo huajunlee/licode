@@ -175,6 +175,7 @@ export class MemoryExtractor {
           name: item.name,
           description: item.description,
           content: item.content,
+          keywords: item.keywords,
           createdAt: now,
           updatedAt: now,
         };
@@ -269,7 +270,7 @@ export class MemoryExtractor {
       "## Instructions",
       "",
       "从对话中识别值得跨会话保存的信息，输出 JSON 数组（无新信息则输出 []）：",
-      '[{"action":"create|update|append","slug":"<type>/<kebab-case>","type":"user|feedback|project|reference","name":"简短名称","description":"一句话描述","content":"完整正文"}]',
+      '[{"action":"create|update|append","slug":"<type>/<kebab-case>","type":"user|feedback|project|reference","name":"简短名称","description":"检索key:一句话含判别词,不叙事,≤40字","keywords":["kw1","kw2"],"content":"完整正文"}]',
       "",
       "Rules:",
       "类型判别(按顺序,命中即停):",
@@ -277,6 +278,8 @@ export class MemoryExtractor {
       "2. reference - 外部系统入口(看板/频道/URL/账号)",
       "3. project - 代码与 git 推导不出的项目背景/决策/截止日期",
       "4. user - 兜底(用户是谁:角色/经验/偏好/目标)",
+      "- description 写成检索 key:一句话、含判别性关键词、不叙事、不混无关话题、≤40字",
+      "- keywords:2-5 个判别性词(用于召回匹配,如技术名/人名/目标名),四类都要产",
       "- create：新主题；update：改写已有文件正文（slug 必须匹配现有文件）；append：向已有文件补充新段落",
       "- 新信息与现有记忆矛盾时，必须用 update 重写，以最新信息为准——禁止让矛盾并存",
       "- feedback 类型只记录用户明确纠正过的行为或确认过的非显然做法，content 中必须包含规则、原因（Why:）和适用范围（How to apply:）",
@@ -315,6 +318,7 @@ export class MemoryExtractor {
     name: string;
     description: string;
     content: string;
+    keywords?: string[];
   }> {
     try {
       // Extract JSON from possible markdown code fences
@@ -326,19 +330,46 @@ export class MemoryExtractor {
 
       const parsed = JSON.parse(json);
       if (!Array.isArray(parsed)) return [];
-      return parsed.filter(
-        (item: any) =>
-          item &&
-          typeof item.action === "string" &&
-          MEMORY_ACTIONS.includes(item.action) &&
-          typeof item.type === "string" &&
-          MEMORY_TYPES.includes(item.type) &&
-          typeof item.slug === "string" &&
-          item.slug.startsWith(`${item.type}/`) &&
-          typeof item.name === "string" &&
-          typeof item.description === "string" &&
-          typeof item.content === "string"
-      );
+      return parsed
+        .filter(
+          (item: any) =>
+            item &&
+            typeof item.action === "string" &&
+            MEMORY_ACTIONS.includes(item.action) &&
+            typeof item.type === "string" &&
+            MEMORY_TYPES.includes(item.type) &&
+            typeof item.slug === "string" &&
+            item.slug.startsWith(`${item.type}/`) &&
+            typeof item.name === "string" &&
+            typeof item.description === "string" &&
+            typeof item.content === "string"
+        )
+        .map((item: any) => {
+          const result: {
+            action: MemoryAction;
+            slug: string;
+            type: string;
+            name: string;
+            description: string;
+            content: string;
+            keywords?: string[];
+          } = {
+            action: item.action,
+            slug: item.slug,
+            type: item.type,
+            name: item.name,
+            description: item.description,
+            content: item.content,
+          };
+          // keywords: 容错解析。缺失（旧 LLM 输出）或非字符串数组 -> undefined，绝不抛。
+          if (
+            Array.isArray(item.keywords) &&
+            item.keywords.every((k: unknown) => typeof k === "string")
+          ) {
+            result.keywords = item.keywords;
+          }
+          return result;
+        });
     } catch {
       return [];
     }

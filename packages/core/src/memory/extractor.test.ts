@@ -224,6 +224,28 @@ describe("MemoryExtractor prompt", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("buildPrompt asks for keywords and retrieval-key description", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "licode-mem-"));
+    try {
+      const store = new MemoryStore(dir);
+      const ext = new MemoryExtractor();
+      let captured = "";
+      (ext as unknown as { llm: { chat: (req: { messages: Array<{ content: string }> }) => Promise<unknown> } })
+        .llm.chat = vi.fn(async (req) => {
+          captured = req.messages[0].content;
+          return { content: "[]", usage: { input: 1, output: 1 }, model: "mock", stopReason: "end_turn" };
+        });
+      await ext.extract(
+        [{ role: "user", content: "我喜欢番茄炒蛋", timestamp: "2026-08-04T00:00:00.000Z" }] as any,
+        store
+      );
+      expect(captured).toContain("keywords");
+      expect(captured).toMatch(/description.*(检索|关键|不叙事)/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("MemoryExtractor prompt date injection", () => {
@@ -247,6 +269,78 @@ describe("MemoryExtractor prompt date injection", () => {
       expect(captured).toContain("description");
     } finally {
       vi.useRealTimers();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("MemoryExtractor keywords (Phase B)", () => {
+  function parseResponse(ext: MemoryExtractor, raw: string): any[] {
+    return (ext as unknown as { parseResponse: (raw: string) => any[] }).parseResponse(raw);
+  }
+
+  it("parseResponse attaches valid keywords", () => {
+    const ext = new MemoryExtractor();
+    const items = parseResponse(ext, JSON.stringify([
+      {
+        action: "create", slug: "user/x", type: "user",
+        name: "X", description: "d", content: "c",
+        keywords: ["番茄炒蛋", "中餐"],
+      },
+    ]));
+    expect(items).toHaveLength(1);
+    expect(items[0].keywords).toEqual(["番茄炒蛋", "中餐"]);
+  });
+
+  it("parseResponse leaves keywords undefined when missing", () => {
+    const ext = new MemoryExtractor();
+    const items = parseResponse(ext, JSON.stringify([
+      { action: "create", slug: "user/x", type: "user", name: "X", description: "d", content: "c" },
+    ]));
+    expect(items).toHaveLength(1);
+    expect(items[0].keywords).toBeUndefined();
+  });
+
+  it("parseResponse leaves keywords undefined when malformed (not a string array)", () => {
+    const ext = new MemoryExtractor();
+    const items = parseResponse(ext, JSON.stringify([
+      {
+        action: "create", slug: "user/x", type: "user", name: "X", description: "d", content: "c",
+        keywords: ["ok", 5, null],
+      },
+    ]));
+    expect(items).toHaveLength(1);
+    expect(items[0].keywords).toBeUndefined();
+  });
+
+  it("extract persists keywords from LLM response end-to-end", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "licode-mem-"));
+    try {
+      const store = new MemoryStore(dir);
+      const ext = new MemoryExtractor();
+      const mockChat = vi.fn().mockResolvedValue({
+        content: JSON.stringify([
+          {
+            action: "create",
+            slug: "user/food-preferences",
+            type: "user",
+            name: "Food Preferences",
+            description: "喜欢番茄炒蛋",
+            content: "用户喜欢番茄炒蛋。",
+            keywords: ["番茄炒蛋", "中餐"],
+          },
+        ]),
+        usage: { input: 1, output: 1 },
+      });
+      (ext as unknown as { llm: { chat: typeof mockChat } }).llm.chat = mockChat;
+      await ext.extract(
+        [{ role: "user", content: "我喜欢番茄炒蛋", timestamp: new Date().toISOString() }] as any,
+        store
+      );
+      const all = await store.listAll();
+      expect(all).toHaveLength(1);
+      expect(all[0].keywords).toEqual(["番茄炒蛋", "中餐"]);
+    } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
