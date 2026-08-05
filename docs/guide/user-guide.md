@@ -284,33 +284,29 @@ error     ✗ Bash  执行 npm run deploy
 
 LICode 运行时有**两条独立的事件通道**：Pipeline（请求编排）与 EventBus（流式 UI）。`createAgentLoopMiddleware` 是唯一桥梁——把 eventBus 注入 AgentLoop，所以 pipeline 包住 loop、loop 驱动 eventBus，两通道除此之外不交叉。
 
-```
-┌──────────────────────────────────────────────────────┐
-│                     CLI 交互层                         │
-│   Ink TUI · App(欢迎页/聊天) · useConversation         │
-└──────────────────────────┬───────────────────────────┘
-                           │ user-message（/命令走 CommandRouter）
-        ┌──────────────────┴──────────────────┐
-        │                                     │
-   通道 A：Pipeline                      通道 B：EventBus
-   （请求编排，仅过 user-message）        （流式 UI，循环内每步 emit）
-   ┌─────────────────────────┐           ┌──────────────────────────┐
-   │ ① before:agentLoop 扩展  │           │ llm-token / llm-thinking  │
-   │ ② createAgentLoopMidware │           │ tool-use-detected         │
-   │    （拦截，跑循环）       │           │ tool-execute-start/complete│
-   │ ③ hook:after:agentLoop   │           │ agent-loop-complete(usage) │
-   │ ④ 错误处理               │           │ context-compressed / error │
-   │ 注：token计数·上下文压缩 │           │ -> setStreaming/           │
-   │   ·memory 不在 pipeline  │           │    setThinkingBlocks/      │
-   │   （见 §2 运行时说明）   │           │    setActiveToolCalls/     │
-   └────────────┬────────────┘           │    setTokenCount/setError  │
-                │ loop.run()             └─────────────▲──────────────┘
-        ┌───────▼─────────────────────────────────────┴──────┐
-        │              AgentLoop（ReAct 引擎）                │
-        │   内部账：token 校准 observeUsage                   │
-        │           上下文压缩 compressor.compress            │
-        │   调用 LLMProvider（流式）+ ToolRegistry/Executor    │
-        └─────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    CLI["CLI 交互层<br/>Ink TUI · App · useConversation"]
+    CLI -->|"user-message（/命令 -> CommandRouter）"| M1
+
+    subgraph Pipeline ["通道 A：Pipeline（请求编排，仅过 user-message）"]
+        direction TB
+        M1["① before:agentLoop 扩展"] --> M2["② createAgentLoopMiddleware<br/>拦截 user-message，跑循环"]
+        M2 --> M3["③ hook:after:agentLoop"]
+        M2 --> M4["④ 错误处理"]
+    end
+
+    M2 -->|"loop.run()（桥梁：注入 eventBus）"| AL["AgentLoop（ReAct 引擎）<br/>内部账：token 校准 observeUsage<br/>上下文压缩 compressor.compress"]
+    AL -->|"每步 emit"| EB
+
+    subgraph EventBus ["通道 B：EventBus（流式 UI）"]
+        direction TB
+        EB["llm-token / llm-thinking / tool-use-detected /<br/>tool-execute-start·complete /<br/>agent-loop-complete(带usage) / context-compressed / error"]
+        EB --> UI["switch 分发 -> React setState -> ink 重渲染<br/>setStreaming / setThinkingBlocks /<br/>setActiveToolCalls / setTokenCount / setError"]
+    end
+
+    AL --> LLM["LLMProvider<br/>流式调用大模型"]
+    AL --> TR["ToolRegistry + Executor<br/>注册 / Zod 校验 / 权限 / 并行执行"]
 ```
 
 > **桥梁**：`createAgentLoopMiddleware` 构造时把 `eventBus` 作为参数注入 `AgentLoop`（loop.ts:278）——pipeline 包住 loop，loop 驱动 eventBus；两条通道除此之外不交叉。token 计数校准（`observeUsage`）与上下文压缩（`compressor.compress`）都在 AgentLoop 内部，不经过 pipeline 中间件；它们的 UI 通知（`agent-loop-complete` 带 usage、`context-compressed`）走 EventBus。
