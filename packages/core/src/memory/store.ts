@@ -110,6 +110,9 @@ export class MemoryStore {
           usageCount = existing.usageCount ?? 0;
           lastUsedAt = existing.lastUsedAt ?? "";
           pinned = existing.pinned ?? false;
+          // Preserve existing keywords when caller passes none; caller wins if it
+          // provides any. Without this, update silently wrote `keywords: []`.
+          keywords = memory.keywords ?? existing.keywords ?? [];
         }
       }
       updatedAt = new Date().toISOString();

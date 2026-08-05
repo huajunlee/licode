@@ -834,4 +834,22 @@ describe("MemoryStore keywords (Phase B)", () => {
     // Keywords preserved, not silently wiped to []
     expect(loaded?.keywords).toEqual(["pnpm"]);
   });
+
+  it("update preserves existing keywords when caller passes none (B1-followup)", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "licode-memory-"));
+    const store = new MemoryStore(dir);
+    // Create WITH keywords
+    await store.save({ ...makeMemory(), keywords: ["pnpm"] });
+    // Update content/description with NO keywords (common dream/extractor update case)
+    await store.save(
+      { ...makeMemory(), content: "Switched to preferring TypeScript.", description: "Updated preference" },
+      "update"
+    );
+    const loaded = await store.load("user/test-preference");
+    // Content was actually replaced wholesale (guard against false pass)
+    expect(loaded?.content).toBe("Switched to preferring TypeScript.");
+    expect(loaded?.description).toBe("Updated preference");
+    // Keywords preserved, not silently wiped to []
+    expect(loaded?.keywords).toEqual(["pnpm"]);
+  });
 });
