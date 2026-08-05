@@ -309,6 +309,31 @@ describe("MemoryDream.dream (consolidate + prune)", () => {
     expect(await readState(path.join(memoryDir, ".dream.state"))).toBeGreaterThan(0);
   });
 
+  it("consolidate persists keywords from LLM response (backfill on update)", async () => {
+    const store = new MemoryStore(memoryDir);
+    await store.save(makeMemory("user/food"));
+    const dream = new MemoryDream({ minIntervalMs: 1, minNewSessions: 1 });
+    (dream as any).llm.chat = vi
+      .fn()
+      .mockResolvedValueOnce({
+        content: "[]",
+        usage: { input: 1, output: 1 },
+        model: "mock",
+        stopReason: "end_turn",
+      })
+      .mockResolvedValueOnce({
+        content:
+          '[{"action":"update","slug":"user/food","type":"user","name":"食物偏好","description":"d","content":"不喜欢红烧排骨","keywords":["红烧排骨","口味"]}]',
+        usage: { input: 1, output: 1 },
+        model: "mock",
+        stopReason: "end_turn",
+      });
+    await dream.dream(store, sessionsDir, memoryDir);
+    const updated = await store.load("user/food");
+    expect(updated?.content).toBe("不喜欢红烧排骨");
+    expect(updated?.keywords).toEqual(["红烧排骨", "口味"]);
+  });
+
   it("consolidate prompt contains the type decision tree (feedback->reference->project->user)", async () => {
     const store = new MemoryStore(memoryDir);
     await store.save(makeMemory("user/food"));
@@ -384,6 +409,39 @@ describe("MemoryDream.dream (consolidate + prune)", () => {
     expect(await readState(path.join(memoryDir, ".dream.state"))).toBe(0);
   });
 });
+
+describe("MemoryDream.parseDreamResponse keywords", () => {
+  it("attaches valid keywords on create/update/append ops", () => {
+    const dream = new MemoryDream();
+    const ops = (dream as any).parseDreamResponse(
+      '[{"action":"update","slug":"user/food","type":"user","name":"n","description":"d","content":"c","keywords":["k1","k2"]}]',
+      new Set(["user/food"])
+    );
+    expect(ops).toHaveLength(1);
+    expect(ops[0].keywords).toEqual(["k1", "k2"]);
+  });
+
+  it("tolerates missing keywords (op still valid, no keywords)", () => {
+    const dream = new MemoryDream();
+    const ops = (dream as any).parseDreamResponse(
+      '[{"action":"create","slug":"user/food","type":"user","name":"n","description":"d","content":"c"}]',
+      new Set()
+    );
+    expect(ops).toHaveLength(1);
+    expect(ops[0].keywords).toBeUndefined();
+  });
+
+  it("tolerates malformed keywords (op still valid, no keywords)", () => {
+    const dream = new MemoryDream();
+    const ops = (dream as any).parseDreamResponse(
+      '[{"action":"update","slug":"user/food","type":"user","name":"n","description":"d","content":"c","keywords":["ok",5,null]}]',
+      new Set(["user/food"])
+    );
+    expect(ops).toHaveLength(1);
+    expect(ops[0].keywords).toBeUndefined();
+  });
+});
+
 
 describe("createMemoryDreamHook", () => {
   let memoryDir: string;
@@ -613,5 +671,14 @@ describe("MemoryDream.buildConsolidatePrompt date injection", () => {
     expect(prompt).toMatch(/相对日期/);
     expect(prompt).toContain("description");
     expect(prompt).toContain("去年定的口味"); // description 现在可见
+  });
+
+  it("includes keywords in output format and a backfill rule", () => {
+    const dream = new MemoryDream();
+    const prompt = (dream as any).buildConsolidatePrompt(
+      "## index", [makeMemory("user/food")], [], new Map(), new Set(), Date.now()
+    );
+    expect(prompt).toContain('"keywords"');
+    expect(prompt).toMatch(/补全 keywords/);
   });
 });

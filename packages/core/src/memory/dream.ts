@@ -295,6 +295,7 @@ export class MemoryDream {
             name: op.name!,
             description: op.description!,
             content: op.content!,
+            keywords: op.keywords,
             createdAt: nowIso,
             updatedAt: nowIso,
           },
@@ -358,7 +359,7 @@ export class MemoryDream {
       "",
       "## Instructions",
       "基于证据整理记忆，输出 JSON 数组（无改动则 []）：",
-      '[{"action":"create|update|append|delete","slug":"<type>/<kebab-case>","type":"user|feedback|project|reference","name":"简短名称","description":"一句话描述","content":"完整正文"}]',
+      '[{"action":"create|update|append|delete","slug":"<type>/<kebab-case>","type":"user|feedback|project|reference","name":"简短名称","description":"一句话描述","keywords":["kw1","kw2"],"content":"完整正文"}]',
       "",
       "Rules:",
       "类型判别(按顺序,命中即停):",
@@ -372,6 +373,7 @@ export class MemoryDream {
       "- 新信息与现有记忆矛盾时，用 update 重写或 delete 删除，禁止矛盾并存",
       "- 优先把新信息合并进已有 topic 文件，避免创建重复文件",
       "- 把 description 与 content 中的相对日期转换为绝对日期；精确词（昨天/上周/去年）转确切日期，模糊词（最近/前阵子）转大致范围（如\"2026年7月前后\"）",
+      "- update/create 时为记忆补全 keywords(2-5 个判别词)",
       "- 遵守\"What NOT to save\"（不存代码模式、git 历史、调试方案、任务进度）",
       "- 只使用上述证据中的内容；不要臆测",
     ].join("\n");
@@ -388,6 +390,7 @@ export class MemoryDream {
     description?: string;
     content?: string;
     reason?: string;
+    keywords?: string[];
   }> {
     try {
       let json = raw.trim();
@@ -403,6 +406,7 @@ export class MemoryDream {
         description?: string;
         content?: string;
         reason?: string;
+        keywords?: string[];
       }> = [];
       for (const item of parsed) {
         if (!item || typeof item.action !== "string" || typeof item.slug !== "string") continue;
@@ -423,14 +427,31 @@ export class MemoryDream {
           typeof item.description === "string" &&
           typeof item.content === "string"
         ) {
-          out.push({
+          const op: {
+            action: string;
+            slug: string;
+            type?: string;
+            name?: string;
+            description?: string;
+            content?: string;
+            reason?: string;
+            keywords?: string[];
+          } = {
             action: item.action,
             slug: item.slug,
             type: item.type,
             name: item.name,
             description: item.description,
             content: item.content,
-          });
+          };
+          // keywords: 容错解析。缺失或非字符串数组 -> 不附加，绝不抛、不拒绝 op。
+          if (
+            Array.isArray(item.keywords) &&
+            item.keywords.every((k: unknown) => typeof k === "string")
+          ) {
+            op.keywords = item.keywords;
+          }
+          out.push(op);
         }
       }
       return out;
