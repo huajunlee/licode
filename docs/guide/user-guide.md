@@ -991,6 +991,12 @@ after:agentLoop hook（fire-and-forget，不阻塞用户）
    4. Prune：重建索引；>200 行或 >25KB 则 LLM 缩短 description 至 ≤150 字符
 ```
 
+**Orient 详解**：给 LLM **索引 + 全部记忆全文**（每条 slug/name/description/content），LLM 自主按“漂移/重复/失效/相对日期”方向判断哪些可疑，输出 suspicions（每条 slug + 2-5 个搜索关键词 + reason）；`parseSuspicions` 过滤幻觉 slug（必须真实存在）。
+
+**Gather 详解**：不调 LLM（零成本）。“近期会话”= `updatedAt > lastConsolidatedAt` 的会话（**上次整理后的增量**，非最近修改）；只看 `timestamp > lastConsolidatedAt` 的新消息；grep suspicion 的 keywords，取匹配消息 ±1 上下文、截断 500 字符，每 suspicion ≤5 条；抽取的是**消息全文片段**，非摘要。
+
+**用户交互**：dream 全自动、fire-and-forget，过程中不问用户（Consolidate 出 ops 直接执行）；完成后通知归档结果（`已归档 X 条，可用 /memory-restore 恢复`）；用户事后可 `/memory-restore <slug>` 恢复、`/memory-pin <slug>` 置顶防归档。安全网：delete 前备份 `.dream-backup/`、archive 软删除可回滚。
+
 **安全机制**：① 删除前 `backupAndDelete` 备份文件 + MEMORY.md；② 归档是软删除（移到 `archive/{type}/`），`/memory-restore` 可恢复；③ pinned 记忆硬条件排除，永不归档；④ 失败时不更新 `.dream.state`，下次重试。
 
 **并发让位**：dream 运行时，召回的 `recordUsage` 让位（避免写写竞态），但召回读路径不让位；提取 hook 同理检测 dream 状态。`recordUsage` 写回后用 `utimes` 恢复原 mtime，避免触发"主 Agent 已写则跳过提取"的误判。
