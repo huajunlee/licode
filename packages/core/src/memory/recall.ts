@@ -10,7 +10,7 @@ import type { ConversationManager } from "../conversation/manager.js";
 import type { MemoryStore } from "./store.js";
 import type { Memory } from "./types.js";
 import type { DreamState } from "./dream.js";
-import type { LoadedMemoryEntry } from "./loaded-memory-registry.js";
+import type { LoadedMemoryRegistry, LoadedMemoryEntry } from "./loaded-memory-registry.js";
 
 /** tool_use name identifying a synthetic recall pair (also the prune key). */
 export const MEMORY_RECALL_TOOL_NAME = "memory_recall";
@@ -46,6 +46,65 @@ export function pruneRecallMessages(messages: Message[]): Message[] {
       const blocks = m.content as ToolResultBlock[];
       const hasRecall = blocks.some((b) => recallIds.has(b.tool_use_id));
       return !(hasRecall && blocks.every((b) => recallIds.has(b.tool_use_id)));
+    }
+    return true;
+  });
+}
+
+/**
+ * Selectively prune: remove only synthetic memory_recall pairs whose slug is in
+ * `pruneSlugs`. Keep other memory_recall pairs (still relevant) and all
+ * memory_fetch tool_results (active, never pruned). Returns the SAME array
+ * reference when pruneSlugs is empty.
+ */
+export function pruneIrrelevantRecallMessages(
+  messages: Message[],
+  pruneSlugs: Set<string>
+): Message[] {
+  if (pruneSlugs.size === 0) return messages;
+
+  // Pair tool_use id -> extracted slugs from its tool_result content.
+  const slugsByUseId = new Map<string, string[]>();
+  for (const m of messages) {
+    if (m.role === "user" && Array.isArray(m.content)) {
+      for (const b of m.content as ToolResultBlock[]) {
+        if (!b.tool_use_id) continue;
+        const content = typeof b.content === "string" ? b.content : "";
+        const slugs: string[] = [];
+        for (const line of content.split("\n")) {
+          const match = line.match(/^## .* \(([^)]+)\)$/);
+          if (match) slugs.push(match[1]);
+        }
+        if (slugs.length) slugsByUseId.set(b.tool_use_id, slugs);
+      }
+    }
+  }
+
+  const recallIdsToPrune = new Set<string>();
+  for (const m of messages) {
+    if (m.role === "assistant" && Array.isArray(m.content)) {
+      for (const b of m.content as ToolUseBlock[]) {
+        if (b && b.name === MEMORY_RECALL_TOOL_NAME && b.id) {
+          const slugs = slugsByUseId.get(b.id) ?? [];
+          if (slugs.some((s) => pruneSlugs.has(s))) {
+            recallIdsToPrune.add(b.id);
+          }
+        }
+      }
+    }
+  }
+  if (recallIdsToPrune.size === 0) return messages;
+
+  return messages.filter((m) => {
+    if (m.role === "assistant" && Array.isArray(m.content)) {
+      const blocks = m.content as ToolUseBlock[];
+      const hasPrune = blocks.some((b) => recallIdsToPrune.has(b.id));
+      return !(hasPrune && blocks.every((b) => recallIdsToPrune.has(b.id)));
+    }
+    if (m.role === "user" && Array.isArray(m.content)) {
+      const blocks = m.content as ToolResultBlock[];
+      const hasPrune = blocks.some((b) => recallIdsToPrune.has(b.tool_use_id));
+      return !(hasPrune && blocks.every((b) => recallIdsToPrune.has(b.tool_use_id)));
     }
     return true;
   });
@@ -253,17 +312,19 @@ export class MemoryRecall {
 
 /**
  * Build the AgentConfig.onTurnStart callback for memory recall.
- * Per turn: refresh the index layer (content-changed only) -> prune the
- * previous recall pair -> select -> append the new pair after the current
- * user message. Best-effort: never throws.
+ * Per turn: refresh the index layer (content-changed only) -> select against
+ * the current user message -> selectively prune irrelevant sidequery pairs
+ * (registry syncs) -> append the new pair. Best-effort: never throws.
  */
 export function createMemoryRecallHandler(deps: {
   recall: MemoryRecall;
   store: MemoryStore;
   /** Phase 4: when provided and running, skip usage recording (yield to Dream). */
   dreamState?: DreamState;
+  /** Two-stage recall: track loaded memories for dedup + selective prune. */
+  registry?: LoadedMemoryRegistry;
 }): (conversation: ConversationManager) => Promise<void> {
-  const { recall, store, dreamState } = deps;
+  const { recall, store, dreamState, registry } = deps;
   let lastIndexContent: string | null = null;
 
   return async (conversation: ConversationManager) => {
@@ -285,15 +346,10 @@ export function createMemoryRecallHandler(deps: {
         // keep the previous layer content
       }
 
-      // 2. Prune the previous recall pair (at most one pair in history).
-      const before = conversation.getMessages();
-      const pruned = pruneRecallMessages([...before]);
-      if (pruned.length !== before.length) {
-        conversation.replaceMessages(pruned);
-      }
+      // 2. Selective prune: remove sidequery pairs whose slug select marks
+      //    irrelevant. registry syncs (removed). Active memories never pruned.
+      const loaded = registry ? registry.getAll() : [];
 
-      // 3. Select against the current user message (the one addUserMessage
-      //    just appended) and append the fresh pair after it.
       const messages = conversation.getMessages();
       const last = messages[messages.length - 1];
       const query =
@@ -302,19 +358,35 @@ export function createMemoryRecallHandler(deps: {
           : "";
       if (!query) return;
 
-      const { add: memories } = await recall.select(query, store);
-      if (memories.length === 0) return;
+      const { add, prune } = await recall.select(query, store, loaded);
+
+      // prune irrelevant sidequery pairs + sync registry
+      if (prune.length > 0) {
+        const pruned = pruneIrrelevantRecallMessages([...messages], new Set(prune));
+        if (pruned.length !== messages.length) {
+          conversation.replaceMessages(pruned);
+        }
+        if (registry) {
+          for (const slug of prune) registry.remove(slug);
+        }
+      }
+
+      if (add.length === 0) return;
 
       // Phase 4: 注入即计数（best-effort）。Dream 整理期间让位（同提取），
       // 避免 recordUsage 与 Dream consolidate 的写写竞态；recall 的读路径
       // （select/inject）服务用户当轮，不让位。
       if (!dreamState?.running) {
         await Promise.all(
-          memories.map((m) => store.recordUsage(m.slug).catch(() => {}))
+          add.map((m) => store.recordUsage(m.slug).catch(() => {}))
         ).catch(() => {});
       }
 
-      const [toolUse, toolResult] = buildRecallPair(query, memories);
+      if (registry) {
+        for (const m of add) registry.add(m.slug, "sidequery");
+      }
+
+      const [toolUse, toolResult] = buildRecallPair(query, add);
       conversation.replaceMessages([...conversation.getMessages(), toolUse, toolResult]);
     } catch {
       // recall is best-effort - never break the agent loop

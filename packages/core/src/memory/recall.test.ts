@@ -3,11 +3,13 @@ import {
   MEMORY_RECALL_TOOL_NAME,
   buildRecallPair,
   pruneRecallMessages,
+  pruneIrrelevantRecallMessages,
   MemoryRecall,
   createMemoryRecallHandler,
 } from "./recall.js";
 import { MemoryStore } from "./store.js";
 import { createMemoryDreamState } from "./dream.js";
+import { createLoadedMemoryRegistry } from "./loaded-memory-registry.js";
 import { ConversationManager } from "../conversation/manager.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -93,6 +95,33 @@ describe("pruneRecallMessages", () => {
   it("returns the same array reference when there is nothing to prune", () => {
     const messages: Message[] = [userText("hello")];
     expect(pruneRecallMessages(messages)).toBe(messages);
+  });
+});
+
+describe("pruneIrrelevantRecallMessages", () => {
+  it("prunes only sidequery pairs whose slug is in pruneSlugs", () => {
+    const [tu1, tr1] = buildRecallPair("q", [makeMemory("user/a")]);
+    const [tu2, tr2] = buildRecallPair("q", [makeMemory("user/b")]);
+    const messages: Message[] = [userText("问"), tu1, tr1, tu2, tr2, userText("再问")];
+    const pruned = pruneIrrelevantRecallMessages(messages, new Set(["user/a"]));
+    // user/a pair pruned, user/b pair kept
+    const slugsKept = pruned
+      .filter((m) => m.role === "user" && Array.isArray(m.content))
+      .flatMap((m) => (m.content as ToolResultBlock[]).map((b) => b.content as string));
+    expect(slugsKept.some((c) => c.includes("user/a"))).toBe(false);
+    expect(slugsKept.some((c) => c.includes("user/b"))).toBe(true);
+  });
+
+  it("returns same array reference when pruneSlugs is empty", () => {
+    const messages: Message[] = [userText("hello")];
+    expect(pruneIrrelevantRecallMessages(messages, new Set())).toBe(messages);
+  });
+
+  it("preserves normal (non-memory_recall) tool pairs", () => {
+    const normalUse: Message = { role: "assistant", content: [{ id: "t1", name: "Read", input: {} }], timestamp: "" };
+    const normalResult: Message = { role: "user", content: [{ tool_use_id: "t1", content: "file" }], timestamp: "" };
+    const pruned = pruneIrrelevantRecallMessages([normalUse, normalResult], new Set(["user/a"]));
+    expect(pruned).toEqual([normalUse, normalResult]);
   });
 });
 
@@ -325,15 +354,15 @@ describe("createMemoryRecallHandler", () => {
 
   it("prunes the previous pair and injects the new one (at most one pair)", async () => {
     const mgr = makeManager();
-    const handler = createMemoryRecallHandler({ recall: fakeRecall(["user/food"]), store });
-    mgr.addUserMessage("第一问");
-    await handler(mgr);                       // [U1, A1, R1]
-    mgr.addUserMessage("第二问");             // [U1, A1, R1, U2]
-    await handler(mgr);                       // prune -> [U1, U2] -> inject -> [U1, U2, A2, R2]
+    // seed an old sidequery pair with a different slug
+    const seeded = buildRecallPair("old", [makeMemory("user/old")]);
+    mgr.replaceMessages([...seeded]);
+    mgr.addUserMessage("第二问");
+    const handler = createMemoryRecallHandler({ recall: fakeRecall(["user/food"], ["user/old"]), store });
+    await handler(mgr);                       // prune old -> [U2] -> inject -> [U2, A2, R2]
     const msgs = mgr.getMessages();
-    expect(msgs).toHaveLength(4);
-    expect(msgs[0].content).toBe("第一问");
-    expect(msgs[1].content).toBe("第二问");
+    expect(msgs).toHaveLength(3);
+    expect(msgs[0].content).toBe("第二问");
     // exactly one recall pair remains: one assistant array + one user array
     const arrayMsgs = msgs.filter((m) => Array.isArray(m.content));
     expect(arrayMsgs).toHaveLength(2);
@@ -346,7 +375,7 @@ describe("createMemoryRecallHandler", () => {
     const seeded = buildRecallPair("old", [makeMemory("user/food")]);
     mgr.replaceMessages([...seeded]);
     mgr.addUserMessage("无关问题");
-    const handler = createMemoryRecallHandler({ recall: fakeRecall([]), store });
+    const handler = createMemoryRecallHandler({ recall: fakeRecall([], ["user/food"]), store });
     await handler(mgr);
     const msgs = mgr.getMessages();
     expect(msgs).toHaveLength(1);
@@ -415,5 +444,42 @@ describe("createMemoryRecallHandler", () => {
     const handler = createMemoryRecallHandler({ recall: fakeRecall(["user/food"]), store });
     await expect(handler(mgr)).resolves.toBeUndefined();
     expect(mgr.getMessages().some((m) => Array.isArray(m.content))).toBe(true); // 仍注入
+  });
+
+  it("registry: add slugs are registered as sidequery after inject", async () => {
+    const mgr = makeManager();
+    const registry = createLoadedMemoryRegistry();
+    mgr.addUserMessage("今晚吃什么好？");
+    const handler = createMemoryRecallHandler({ recall: fakeRecall(["user/food"]), store, registry });
+    await handler(mgr);
+    expect(registry.get("user/food")).toBe("sidequery");
+  });
+
+  it("registry: prune slugs are removed from registry", async () => {
+    const mgr = makeManager();
+    const registry = createLoadedMemoryRegistry();
+    // seed: a sidequery pair already in history + registry
+    const seeded = buildRecallPair("old", [makeMemory("user/food")]);
+    mgr.replaceMessages([...seeded]);
+    registry.add("user/food", "sidequery");
+    mgr.addUserMessage("无关问题");
+    const handler = createMemoryRecallHandler({ recall: fakeRecall([], ["user/food"]), store, registry });
+    await handler(mgr);
+    expect(registry.has("user/food")).toBe(false); // pruned -> removed
+  });
+
+  it("registry: non-pruned sidequery slug is retained (cross-turn)", async () => {
+    const mgr = makeManager();
+    const registry = createLoadedMemoryRegistry();
+    const seeded = buildRecallPair("old", [makeMemory("user/food")]);
+    mgr.replaceMessages([...seeded]);
+    registry.add("user/food", "sidequery");
+    mgr.addUserMessage("继续食物话题");
+    // select returns no add, no prune -> user/food retained
+    const handler = createMemoryRecallHandler({ recall: fakeRecall([], []), store, registry });
+    await handler(mgr);
+    expect(registry.get("user/food")).toBe("sidequery"); // still there
+    // and the pair is still in messages
+    expect(mgr.getMessages().some((m) => Array.isArray(m.content))).toBe(true);
   });
 });
