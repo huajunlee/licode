@@ -59,5 +59,5 @@ keywords: [kw1, kw2]
 
 ## 使用记忆时
 
-- 索引（MEMORY.md）已注入你的上下文；需要正文时用 Read 读取对应文件
+- 索引（MEMORY.md）已注入你的上下文；需要某条记忆正文时，调用 `memory_fetch(slug)`（若该工具可用）；召回关闭时用 Read 读 `.licode/memory/<type>/<slug>.md`
 - 记忆可能过期：涉及文件路径、函数、命令时，先对照当前代码/git 状态验证

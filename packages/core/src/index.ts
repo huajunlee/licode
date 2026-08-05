@@ -47,6 +47,8 @@ export {
   decideTool,
   decideSaveTool,
 } from "./tools/builtin/index.js";
+export { createMemoryFetchTool } from "./tools/builtin/memory-fetch.js";
+export type { MemoryFetchToolDeps } from "./tools/builtin/memory-fetch.js";
 
 // Phase 2: agent/
 export { AgentLoop, createAgentLoopMiddleware } from "./agent/loop.js";
@@ -137,6 +139,8 @@ export { createMemoryExtractionHook, createMemoryExtractionState } from "./memor
 export type { MemoryExtractionHookFn, MemoryExtractionState } from "./memory/hook.js";
 export { MemoryRecall, MEMORY_RECALL_TOOL_NAME, pruneRecallMessages, buildRecallPair, createMemoryRecallHandler } from "./memory/recall.js"; // Phase 2: side-query recall
 export type { MemoryRecallConfig } from "./memory/recall.js";
+export { LoadedMemoryRegistry, createLoadedMemoryRegistry } from "./memory/loaded-memory-registry.js";
+export type { LoadedMemoryEntry, LoadedMemorySource } from "./memory/loaded-memory-registry.js";
 export { MemoryDream, createMemoryDreamHook, createMemoryDreamState, acquireLock, releaseLock, readState, writeState } from "./memory/dream.js"; // Phase 3: dream consolidation
 export type { DreamConfig, DreamState, Suspicion } from "./memory/dream.js";
 export type { Memory, MemoryType, MemoryEntry } from "./memory/types.js";

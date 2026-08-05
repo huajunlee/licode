@@ -3,17 +3,20 @@ import {
   MEMORY_RECALL_TOOL_NAME,
   buildRecallPair,
   pruneRecallMessages,
+  pruneIrrelevantRecallMessages,
   MemoryRecall,
   createMemoryRecallHandler,
 } from "./recall.js";
 import { MemoryStore } from "./store.js";
 import { createMemoryDreamState } from "./dream.js";
+import { createLoadedMemoryRegistry } from "./loaded-memory-registry.js";
 import { ConversationManager } from "../conversation/manager.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import type { Message, ToolUseBlock, ToolResultBlock } from "../llm/provider.js";
 import type { Memory } from "./types.js";
+import type { LoadedMemoryEntry } from "./loaded-memory-registry.js";
 
 vi.mock("../llm/anthropic.js", () => ({
   AnthropicProvider: vi.fn().mockImplementation(() => ({
@@ -95,6 +98,53 @@ describe("pruneRecallMessages", () => {
   });
 });
 
+describe("pruneIrrelevantRecallMessages", () => {
+  it("prunes only sidequery pairs whose slug is in pruneSlugs", () => {
+    const [tu1, tr1] = buildRecallPair("q", [makeMemory("user/a")]);
+    const [tu2, tr2] = buildRecallPair("q", [makeMemory("user/b")]);
+    const messages: Message[] = [userText("问"), tu1, tr1, tu2, tr2, userText("再问")];
+    const pruned = pruneIrrelevantRecallMessages(messages, new Set(["user/a"]));
+    // user/a pair pruned, user/b pair kept
+    const slugsKept = pruned
+      .filter((m) => m.role === "user" && Array.isArray(m.content))
+      .flatMap((m) => (m.content as ToolResultBlock[]).map((b) => b.content as string));
+    expect(slugsKept.some((c) => c.includes("user/a"))).toBe(false);
+    expect(slugsKept.some((c) => c.includes("user/b"))).toBe(true);
+  });
+
+  it("returns same array reference when pruneSlugs is empty", () => {
+    const messages: Message[] = [userText("hello")];
+    expect(pruneIrrelevantRecallMessages(messages, new Set())).toBe(messages);
+  });
+
+  it("preserves normal (non-memory_recall) tool pairs", () => {
+    const normalUse: Message = { role: "assistant", content: [{ id: "t1", name: "Read", input: {} }], timestamp: "" };
+    const normalResult: Message = { role: "user", content: [{ tool_use_id: "t1", content: "file" }], timestamp: "" };
+    const pruned = pruneIrrelevantRecallMessages([normalUse, normalResult], new Set(["user/a"]));
+    expect(pruned).toEqual([normalUse, normalResult]);
+  });
+
+  it("multi-memory pair is NOT pruned when only some slugs are irrelevant", () => {
+    const [tu, tr] = buildRecallPair("q", [makeMemory("user/a"), makeMemory("user/b")]);
+    const messages: Message[] = [userText("问"), tu, tr, userText("再问")];
+    const pruned = pruneIrrelevantRecallMessages(messages, new Set(["user/a"]));
+    // pair kept (user/b still relevant) - both contents survive
+    const keptContents = pruned
+      .filter((m) => m.role === "user" && Array.isArray(m.content))
+      .flatMap((m) => (m.content as ToolResultBlock[]).map((b) => b.content as string));
+    expect(keptContents.some((c) => c.includes("user/a"))).toBe(true);
+    expect(keptContents.some((c) => c.includes("user/b"))).toBe(true);
+  });
+
+  it("multi-memory pair IS pruned when all slugs are irrelevant", () => {
+    const [tu, tr] = buildRecallPair("q", [makeMemory("user/a"), makeMemory("user/b")]);
+    const messages: Message[] = [userText("问"), tu, tr, userText("再问")];
+    const pruned = pruneIrrelevantRecallMessages(messages, new Set(["user/a", "user/b"]));
+    expect(pruned).toHaveLength(2); // only the two user text messages remain
+    expect(pruned.every((m) => typeof m.content === "string")).toBe(true);
+  });
+});
+
 describe("MemoryRecall.select", () => {
   let dir: string | null = null;
   let store: MemoryStore;
@@ -124,80 +174,88 @@ describe("MemoryRecall.select", () => {
     return { recall, mockChat };
   }
 
-  it("returns selected memories and puts index + query in the prompt", async () => {
-    const { recall, mockChat } = mockChatReturning('["user/food"]');
+  it("returns selected memories in add and puts index + query in prompt", async () => {
+    const { recall, mockChat } = mockChatReturning(JSON.stringify({ add: ["user/food"], prune: [] }));
     const result = await recall.select("今晚吃什么好？", store);
-    expect(result.map((m) => m.slug)).toEqual(["user/food"]);
+    expect(result.add.map((m) => m.slug)).toEqual(["user/food"]);
+    expect(result.prune).toEqual([]);
     const prompt = mockChat.mock.calls[0][0].messages[0].content as string;
     expect(prompt).toContain("食物偏好");
     expect(prompt).toContain("今晚吃什么好？");
   });
 
-  it("prompt encodes explicit relevance criteria and exclusion cases", async () => {
-    const { recall, mockChat } = mockChatReturning("[]");
+  it("prompt encodes relevance criteria and {add,prune} output contract", async () => {
+    const { recall, mockChat } = mockChatReturning(JSON.stringify({ add: [], prune: [] }));
     await recall.select("q", store);
     const prompt = mockChat.mock.calls[0][0].messages[0].content as string;
-    expect(prompt).toContain("满足以下任意一条");    // positive criteria header
-    expect(prompt).toContain("不算相关");             // exclusion header
-    expect(prompt).toContain("仅关键词或主题相似");   // a concrete exclusion
-    expect(prompt).toContain("默认");                 // default-empty bias
+    expect(prompt).toContain("满足以下任意一条");
+    expect(prompt).toContain("不算相关");
+    expect(prompt).toContain("默认");
+    expect(prompt).toContain("add");
+    expect(prompt).toContain("prune");
   });
 
   it("filters hallucinated slugs and tolerates code fences", async () => {
-    const { recall } = mockChatReturning('```json\n["user/food", "user/ghost"]\n```');
+    const { recall } = mockChatReturning('```json\n{"add":["user/food","user/ghost"],"prune":[]}\n```');
     const result = await recall.select("q", store);
-    expect(result.map((m) => m.slug)).toEqual(["user/food"]);
+    expect(result.add.map((m) => m.slug)).toEqual(["user/food"]);
   });
 
-  it("caps results at maxResults", async () => {
-    const { recall } = mockChatReturning('["user/food","user/editor"]');
+  it("caps add at maxResults", async () => {
+    const { recall } = mockChatReturning(JSON.stringify({ add: ["user/food", "user/editor"], prune: [] }));
     const limited = new MemoryRecall({ maxResults: 1 });
     (limited as any).llm.chat = (recall as any).llm.chat;
     const result = await limited.select("q", store);
-    expect(result).toHaveLength(1);
+    expect(result.add).toHaveLength(1);
   });
 
-  it("returns [] on LLM error", async () => {
+  it("returns {add:[],prune:[]} on LLM error", async () => {
     const recall = new MemoryRecall();
     (recall as any).llm.chat = vi.fn().mockRejectedValue(new Error("boom"));
-    expect(await recall.select("q", store)).toEqual([]);
+    expect(await recall.select("q", store)).toEqual({ add: [], prune: [] });
   });
 
-  it("returns [] on timeout", async () => {
+  it("returns {add:[],prune:[]} on timeout", async () => {
     const recall = new MemoryRecall({ timeoutMs: 50 });
     (recall as any).llm.chat = vi.fn().mockReturnValue(new Promise(() => {}));
-    expect(await recall.select("q", store)).toEqual([]);
+    expect(await recall.select("q", store)).toEqual({ add: [], prune: [] });
   });
 
-  it("returns [] for non-array JSON", async () => {
-    const { recall } = mockChatReturning('{"slug":"user/food"}');
-    expect(await recall.select("q", store)).toEqual([]);
+  it("returns {add:[],prune:[]} for non-object JSON", async () => {
+    const { recall } = mockChatReturning('["user/food"]');
+    expect(await recall.select("q", store)).toEqual({ add: [], prune: [] });
   });
 
-  it("skips the LLM call entirely when the index is empty", async () => {
+  it("skips the LLM call when index is empty", async () => {
     const emptyDir = mkdtempSync(path.join(tmpdir(), "recall-empty-"));
     try {
       const emptyStore = new MemoryStore(emptyDir);
       const recall = new MemoryRecall();
       const mockChat = vi.fn();
       (recall as any).llm.chat = mockChat;
-      expect(await recall.select("q", emptyStore)).toEqual([]);
+      expect(await recall.select("q", emptyStore)).toEqual({ add: [], prune: [] });
       expect(mockChat).not.toHaveBeenCalled();
-    } finally {
-      rmSync(emptyDir, { recursive: true, force: true });
-    }
+    } finally { rmSync(emptyDir, { recursive: true, force: true }); }
   });
 
-  // Contract: select() never rejects - every failure mode degrades to [].
-  // listAll() reads the filesystem and can throw on a race or EACCES; it must
-  // be covered by the never-rejects guard, not just the LLM/timeout path.
-  // (Phase 4 usage-counting will hang off this return.)
-  it("never rejects when store.listAll() throws (file race / EACCES)", async () => {
-    const failingStore = {
-      listAll: vi.fn().mockRejectedValue(new Error("EACCES")),
-    } as unknown as MemoryStore;
+  it("never rejects when store.listAll() throws", async () => {
+    const failingStore = { listAll: vi.fn().mockRejectedValue(new Error("EACCES")) } as unknown as MemoryStore;
     const recall = new MemoryRecall();
-    await expect(recall.select("q", failingStore)).resolves.toEqual([]);
+    await expect(recall.select("q", failingStore)).resolves.toEqual({ add: [], prune: [] });
+  });
+
+  it("excludes already-loaded slugs from add (dedup)", async () => {
+    const { recall } = mockChatReturning(JSON.stringify({ add: ["user/food", "user/editor"], prune: [] }));
+    const loaded: LoadedMemoryEntry[] = [{ slug: "user/food", source: "active" }];
+    const result = await recall.select("q", store, loaded);
+    expect(result.add.map((m) => m.slug)).toEqual(["user/editor"]); // user/food 已加载,排除
+  });
+
+  it("prune only includes already-loaded sidequery slugs", async () => {
+    const { recall } = mockChatReturning(JSON.stringify({ add: [], prune: ["user/food", "user/ghost"] }));
+    const loaded: LoadedMemoryEntry[] = [{ slug: "user/food", source: "sidequery" }];
+    const result = await recall.select("q", store, loaded);
+    expect(result.prune).toEqual(["user/food"]); // user/ghost 不在已加载 sidequery,排除
   });
 });
 
@@ -289,11 +347,14 @@ describe("createMemoryRecallHandler", () => {
     return new ConversationManager({ model: "test-model" });
   }
 
-  function fakeRecall(slugs: string[]) {
+  function fakeRecall(addSlugs: string[], pruneSlugs: string[] = []) {
     return {
       select: vi.fn(async (_q: string, s: MemoryStore) => {
         const all = await s.listAll();
-        return all.filter((m) => slugs.includes(m.slug));
+        return {
+          add: all.filter((m) => addSlugs.includes(m.slug)),
+          prune: pruneSlugs,
+        };
       }),
     } as unknown as MemoryRecall;
   }
@@ -313,15 +374,15 @@ describe("createMemoryRecallHandler", () => {
 
   it("prunes the previous pair and injects the new one (at most one pair)", async () => {
     const mgr = makeManager();
-    const handler = createMemoryRecallHandler({ recall: fakeRecall(["user/food"]), store });
-    mgr.addUserMessage("第一问");
-    await handler(mgr);                       // [U1, A1, R1]
-    mgr.addUserMessage("第二问");             // [U1, A1, R1, U2]
-    await handler(mgr);                       // prune -> [U1, U2] -> inject -> [U1, U2, A2, R2]
+    // seed an old sidequery pair with a different slug
+    const seeded = buildRecallPair("old", [makeMemory("user/old")]);
+    mgr.replaceMessages([...seeded]);
+    mgr.addUserMessage("第二问");
+    const handler = createMemoryRecallHandler({ recall: fakeRecall(["user/food"], ["user/old"]), store });
+    await handler(mgr);                       // prune old -> [U2] -> inject -> [U2, A2, R2]
     const msgs = mgr.getMessages();
-    expect(msgs).toHaveLength(4);
-    expect(msgs[0].content).toBe("第一问");
-    expect(msgs[1].content).toBe("第二问");
+    expect(msgs).toHaveLength(3);
+    expect(msgs[0].content).toBe("第二问");
     // exactly one recall pair remains: one assistant array + one user array
     const arrayMsgs = msgs.filter((m) => Array.isArray(m.content));
     expect(arrayMsgs).toHaveLength(2);
@@ -334,7 +395,7 @@ describe("createMemoryRecallHandler", () => {
     const seeded = buildRecallPair("old", [makeMemory("user/food")]);
     mgr.replaceMessages([...seeded]);
     mgr.addUserMessage("无关问题");
-    const handler = createMemoryRecallHandler({ recall: fakeRecall([]), store });
+    const handler = createMemoryRecallHandler({ recall: fakeRecall([], ["user/food"]), store });
     await handler(mgr);
     const msgs = mgr.getMessages();
     expect(msgs).toHaveLength(1);
@@ -403,5 +464,55 @@ describe("createMemoryRecallHandler", () => {
     const handler = createMemoryRecallHandler({ recall: fakeRecall(["user/food"]), store });
     await expect(handler(mgr)).resolves.toBeUndefined();
     expect(mgr.getMessages().some((m) => Array.isArray(m.content))).toBe(true); // 仍注入
+  });
+
+  it("registry: add slugs are registered as sidequery after inject", async () => {
+    const mgr = makeManager();
+    const registry = createLoadedMemoryRegistry();
+    mgr.addUserMessage("今晚吃什么好？");
+    const handler = createMemoryRecallHandler({ recall: fakeRecall(["user/food"]), store, registry });
+    await handler(mgr);
+    expect(registry.get("user/food")).toBe("sidequery");
+  });
+
+  it("registry: prune slugs are removed from registry", async () => {
+    const mgr = makeManager();
+    const registry = createLoadedMemoryRegistry();
+    // seed: a sidequery pair already in history + registry
+    const seeded = buildRecallPair("old", [makeMemory("user/food")]);
+    mgr.replaceMessages([...seeded]);
+    registry.add("user/food", "sidequery");
+    mgr.addUserMessage("无关问题");
+    const handler = createMemoryRecallHandler({ recall: fakeRecall([], ["user/food"]), store, registry });
+    await handler(mgr);
+    expect(registry.has("user/food")).toBe(false); // pruned -> removed
+  });
+
+  it("registry: non-pruned sidequery slug is retained (cross-turn)", async () => {
+    const mgr = makeManager();
+    const registry = createLoadedMemoryRegistry();
+    const seeded = buildRecallPair("old", [makeMemory("user/food")]);
+    mgr.replaceMessages([...seeded]);
+    registry.add("user/food", "sidequery");
+    mgr.addUserMessage("继续食物话题");
+    // select returns no add, no prune -> user/food retained
+    const handler = createMemoryRecallHandler({ recall: fakeRecall([], []), store, registry });
+    await handler(mgr);
+    expect(registry.get("user/food")).toBe("sidequery"); // still there
+    // and the pair is still in messages
+    expect(mgr.getMessages().some((m) => Array.isArray(m.content))).toBe(true);
+  });
+
+  it("passes loaded memories (registry.getAll()) as 3rd arg to recall.select", async () => {
+    const mgr = makeManager();
+    const registry = createLoadedMemoryRegistry();
+    registry.add("user/food", "sidequery");
+    const expectedLoaded = registry.getAll();
+    const select = vi.fn(async () => ({ add: [], prune: [] }));
+    const recall = { select } as unknown as MemoryRecall;
+    mgr.addUserMessage("继续食物话题");
+    const handler = createMemoryRecallHandler({ recall, store, registry });
+    await handler(mgr);
+    expect(select).toHaveBeenCalledWith("继续食物话题", store, expectedLoaded);
   });
 });

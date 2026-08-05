@@ -874,7 +874,7 @@ Hook 可以设为 `blocking: true`（阻塞等待完成）或非阻塞（fire-an
 
 ### 17. Memory（记忆系统）
 
-LICode 拥有跨会话的持久记忆：它能记住你是谁、你喜欢怎样协作、项目有哪些不成文的约定，并在后续对话中主动用上。经过 Phase 1-4 的持续演进（**Phase 1 生产层修复** + **Phase 2 召回层升级** + **Phase 3 做梦整理** + **Phase 4 归档/置顶/用量追踪**）以及日期归一化、可读文件名两项加固，记忆从"只进不出的记事本"升级为"会更新、会召回、会整理、不打扰"的完整系统。
+LICode 拥有跨会话的持久记忆：它能记住你是谁、你喜欢怎样协作、项目有哪些不成文的约定，并在后续对话中主动用上。经过 Phase 1-4 的持续演进（**Phase 1 生产层修复** + **Phase 2 召回层升级** + **Phase 3 做梦整理** + **Phase 4 归档/置顶/用量追踪**）以及日期归一化、可读文件名两项加固，并进一步升级为**两阶段召回**（被动 side-query + 主动 `memory_fetch` + 统一去重注册表），记忆从"只进不出的记事本"升级为"会更新、会召回、会整理、不打扰"的完整系统。
 
 #### 改进亮点
 
@@ -891,6 +891,9 @@ LICode 拥有跨会话的持久记忆：它能记住你是谁、你喜欢怎样�
 | **自动归档与恢复** | >30 天未被召回的记忆自动归档（软删除，`/memory-restore` 可恢复）；`/memory-pin` 标记的永不归档；归档判定用 lastUsedAt 而非 createdAt（避免召回关闭时误归档所有从未召回的记忆） | Phase 4 |
 | **日期归一化** | 相对日期（昨天/上周/下个月）在三处统一转绝对日期：extractor prompt 注入今天 + `save()` 程序化归一化 + Write-path hook（主 Agent 直写时补归一化），消除"昨天"导致的记忆错乱 | 2026-08-01 |
 | **可读文件名** | 文件名用 `cleanName`（保留中文，人可读）与 slug（`toSlug`，中文 hash 兜底，程序标识）解耦；人物档案用 canonicalName（中文）做文件名，重命名不破坏引用 | 2026-08-01 |
+| **主动召回（两阶段）** | 主模型读到索引后可主动调 `memory_fetch(slug)` 取回记忆正文，补 side-query 只看当前消息的上下文盲区（如"继续上次那个方案"） | 两阶段召回 |
+| **双向去重** | `LoadedMemoryRegistry` 统一跟踪 side-query 与主动召回的记忆，二者互不重复注入；主动召回的记忆留历史不每轮剪除 | 两阶段召回 |
+| **选择性剪除** | side-query 召回的相关记忆跨轮保留（不再每轮全剪重选），仅 select 明确判无关的才剪；漏输出=保留（反转默认，不误剪相关） | 两阶段召回 |
 
 #### 存储层：四类记忆 + 自动索引（两阶段共用）
 
@@ -949,7 +952,7 @@ pinned: false
 ```
 1. 刷新索引层：重读 MEMORY.md，内容有变化才更新 system prompt 的 memory 层
    （本会话新写的记忆由此进入索引）
-2. 剪除：移除上一轮注入的召回对（历史中任意时刻最多一对，token 不累积）
+2. 选择性剪除：仅移除 select 判定与当前问题无关的 side-query 召回对（相关记忆跨轮保留，不再每轮全剪；主动召回的记忆永不剪除）
 3. side query：小模型读取磁盘最新索引 + 你的当前消息，
    选出 ≤5 条相关记忆（slug 必须真实存在于索引，幻觉被过滤）
 4. 注入：把选中记忆的正文作为合成 tool_call 对追加到你的消息之后：
@@ -961,7 +964,9 @@ pinned: false
 - **为什么是 tool_call 而不是拼进你的消息**：不改动 system prompt 和你的原文；消息角色严格交替，所有 provider 兼容；TUI 渲染为工具卡片，召回透明可见。
 - **降级**：索引为空 → 不发起 LLM 调用（零成本）；side query 失败/超时 10s → 本轮只剪除不注入，退回"仅索引"，对话完全不受影响。
 - **开关**：`LICODE_MEMORY_RECALL=off` 启动即整体关闭召回，退回仅索引模式。
-- **主 Agent 兜底**：未被 side query 选中的记忆，主 Agent 仍可按 memory-guide 指引用 Read 工具自行查阅 `.licode/memory/` 目录。
+- **统一去重**：`LoadedMemoryRegistry`（会话级 HashMap）跟踪 side-query 与主动召回的记忆 + 来源（sidequery/active），O(1) 查询，session 恢复时从消息 rebuild；两阶段共用同一实例，互不重复注入。
+- **第二阶段：主模型主动召回**：主模型可调 `memory_fetch(slug)` 工具按 slug 主动取回正文（去重、记入用量、按召回格式返回）；`LICODE_MEMORY_RECALL=off` 时该工具不注册。
+- **主 Agent 兜底**：召回关闭时，主 Agent 仍可按 memory-guide 指引用 Read 工具自行查阅 `.licode/memory/` 目录。
 
 #### 做梦整理原理（Phase 3+4）：四阶段 + 零 LLM 门
 
@@ -993,7 +998,9 @@ after:agentLoop hook（fire-and-forget，不阻塞用户）
 | `packages/core/src/memory/store.ts` | **MemoryStore**——存储底座。`save(memory, action)` 实现 create/update/append 三种写入语义；`rebuildIndex()` 重建 MEMORY.md 索引；`hasChangesSince()` 用 mtime 检测主 Agent 的直接写入 |
 | `packages/core/src/memory/extractor.ts` | **MemoryExtractor**——生产路径 2。轻量门槛（冷却 / 问句排除 / 明确指令绕过）+ 携带全部现有记忆正文的提取 prompt + 输出校验落盘 |
 | `packages/core/src/memory/hook.ts` | **提取钩子**——共享状态（互斥锁 / 上次提取时间 / 本轮开始时间），协调"主 Agent 已写则跳过提取"与索引重建 |
-| `packages/core/src/memory/recall.ts` | **MemoryRecall**——召回引擎。side query 选择（永不抛异常，失败返回空）；召回对的构造/剪除纯函数；`createMemoryRecallHandler` 生成每轮回调（刷新索引层 → 剪除 → 选择 → 注入） |
+| `packages/core/src/memory/recall.ts` | **MemoryRecall**--召回引擎。side query 选择输出 `{add, prune}`（反转默认：已加载默认保留，明确无关才剪）；`pruneIrrelevantRecallMessages` 选择性剪除；`createMemoryRecallHandler` 生成每轮回调（刷新索引层 -> registry.getAll -> 选择 -> 选择性剪除+registry 同步 -> 注入） |
+| `packages/core/src/memory/loaded-memory-registry.ts` | **LoadedMemoryRegistry**--会话级已加载记忆注册表（HashMap，O(1) 查询）。跟踪 side-query 与主动召回的记忆 + 来源，session 恢复时从消息 rebuild；双向去重与选择性剪除的统一状态层 |
+| `packages/core/src/tools/builtin/memory-fetch.ts` | **memory_fetch 工具**--主模型主动按 slug 取回记忆正文。工厂闭包注入 store/registry；去重（registry.has 跳过）+ 记账（recordUsage）+ 按召回格式返回 |
 | `packages/core/src/memory/loader.ts` | **MemoryLoader**——会话启动时把 MEMORY.md 索引注入 system prompt（priority 5 层） |
 | `packages/core/src/memory/dream.ts` | **MemoryDream**--做梦整理引擎（Phase 3+4）。四阶段 Orient/Gather/Consolidate/Prune；零 LLM 门 shouldDream；O_EXCL 锁；createMemoryDreamHook fire-and-forget（archive/restore/recordUsage/setPinned 等存储操作实现在 store.ts 的 MemoryStore 上，dream 仅调用） |
 | `packages/core/src/conversation/templates/memory-guide.md` | **主 Agent 指引层**（priority 4）——教主 Agent 何时写 / 如何写 / 不写什么 / 如何用 Read 查记忆 |
@@ -1328,17 +1335,18 @@ MemoryCuration.curate（side-model）
 
 ### 亮点 2：**设计并实现跨会话持久记忆系统**
 
-**简历条目**：采用用户明确指令与后台模型自动提取的双路径生产机制，结合互斥锁与文件修改时间检测确保写入操作的原子性与幂等性，杜绝重复写入。召回层通过独立小模型对候选记忆进行严格相关性筛选，仅将高价值记忆注入当轮对话，并在每轮结束后自动清除注入内容以防止上下文膨胀。系统内置四阶段做梦整理机制，自动归档超过三十天未使用的记忆，最终实现无关问题零成本响应、相关问题精准注入的高效记忆管理。
+**简历条目**：采用用户明确指令与后台模型自动提取的双路径生产机制，结合互斥锁与文件修改时间检测确保写入操作的原子性与幂等性，杜绝重复写入。召回层采用两阶段机制：第一阶段由独立小模型对候选记忆严格相关性筛选并注入当轮对话，第二阶段主模型可主动调用 memory_fetch 工具按 slug 取回记忆正文，补齐 side-query 只看当前消息的上下文盲区；配合会话级统一去重注册表（LoadedMemoryRegistry）实现两阶段双向去重，并以反转默认的选择性剪除策略（已加载记忆默认保留，仅明确无关才剪，漏输出即保留）让相关记忆跨轮驻留。系统内置四阶段做梦整理机制，自动归档超过三十天未使用的记忆，最终实现无关问题零成本响应、相关问题精准注入且不重复的高效记忆管理。
 
 - **Situation**：AI 对话助手普遍存在失忆问题，会话结束即丢失上下文，用户每次都要重述偏好和项目背景。已有方案要么只存不召回而变成只进不出的记事本，要么召回粗糙，依赖关键词匹配、无关记忆干扰对话且 token 持续累积。
 - **Task**：设计一套跨会话记忆系统，能自动生产、按需召回、定期整理，且不干扰主对话、不浪费 token、不出现矛盾。
 - **Action**：
   - 生产层采用双路径，明确指令由主 Agent 当场直写，日常对话由 after:agentLoop hook 后台 LLM 提取，提取带五分钟冷却、问句排除、互斥锁防并发、mtime 检测防重复。
   - 矛盾处理上，提取 prompt 携带现有记忆正文而非仅索引，LLM 发现冲突时输出 update 整体改写旧文件并以最新为准，从结构上避免喜欢与不喜欢矛盾并存。
-  - 召回层在 onTurnStart 挂点由 side-query 小模型用严格过滤 prompt 选不超过五条，把正文作为合成 tool_call 对注入，保证角色严格交替、全 provider 兼容且 TUI 透明可见，每轮剪除上一轮召回对防 token 累积。
+  - 召回层采用两阶段：第一阶段在 onTurnStart 挂点由 side-query 小模型用严格过滤 prompt 选不超过五条，把正文作为合成 tool_call 对注入，保证角色严格交替、全 provider 兼容且 TUI 透明可见；第二阶段主模型可主动调 memory_fetch 按 slug 取回正文，补 side-query 只看当前消息的上下文盲区。
+  - 统一去重与会话级注册表 LoadedMemoryRegistry 跟踪两阶段已加载记忆与来源（sidequery/active），O(1) 查询、session 恢复时从消息 rebuild，实现两阶段双向去重；剪除策略改为反转默认的选择性剪除--已加载 side-query 记忆默认保留，仅 select 明确判无关才剪（仅全 prune 才剪整个合成对），漏输出即保留不误剪，相关记忆跨轮驻留而非每轮全剪重选。
   - 做梦整理分四阶段，Orient 阶段找漂移与重复，Gather 阶段无 LLM grep 证据，Consolidate 阶段出增删改操作并自动归档超过三十天未用且未置顶的记忆，Prune 阶段重建索引，零 LLM 门在二十四小时且不少于五个新会话时才触发，fire-and-forget 不阻塞用户，失败不更新 state 可重试。
   - 日期归一化三处封堵，extractor prompt 注入日期、save 程序化归一化、Write-path hook 在主 Agent 直写时补归一化，消除昨天和上周等相对日期导致的记忆错乱。
-- **Result**：记忆从只进不出的记事本升级为会更新、会召回、不打扰的完整闭环，无关问题零召回零成本，相关问题精准注入正文，矛盾自动消解，旧记忆自动归档不堆积。
+- **Result**：记忆从只进不出的记事本升级为会更新、会两阶段召回、不打扰的完整闭环，无关问题零召回零成本，相关问题精准注入正文且两阶段互不重复，矛盾自动消解，旧记忆自动归档不堆积，相关记忆跨轮驻留不丢失。
 
 ### 亮点 3：**设计并实现长对话上下文管理**
 
