@@ -589,7 +589,6 @@ export function useConversation(
         tools.register(
           createMemoryFetchTool({
             store: memoryStoreRef.current,
-            conversation: manager,
             registry: loadedMemoryRegistryRef.current,
           })
         );

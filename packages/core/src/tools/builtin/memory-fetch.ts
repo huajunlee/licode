@@ -3,7 +3,6 @@ import { z } from "zod";
 import type { Tool } from "../types.js";
 import type { MemoryStore } from "../../memory/store.js";
 import type { LoadedMemoryRegistry } from "../../memory/loaded-memory-registry.js";
-import type { ConversationManager } from "../../conversation/manager.js";
 
 const MemoryFetchParams = z.object({
   slugs: z
@@ -14,7 +13,6 @@ const MemoryFetchParams = z.object({
 
 export interface MemoryFetchToolDeps {
   store: MemoryStore;
-  conversation: ConversationManager;
   registry: LoadedMemoryRegistry;
 }
 

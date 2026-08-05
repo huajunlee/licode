@@ -123,6 +123,26 @@ describe("pruneIrrelevantRecallMessages", () => {
     const pruned = pruneIrrelevantRecallMessages([normalUse, normalResult], new Set(["user/a"]));
     expect(pruned).toEqual([normalUse, normalResult]);
   });
+
+  it("multi-memory pair is NOT pruned when only some slugs are irrelevant", () => {
+    const [tu, tr] = buildRecallPair("q", [makeMemory("user/a"), makeMemory("user/b")]);
+    const messages: Message[] = [userText("问"), tu, tr, userText("再问")];
+    const pruned = pruneIrrelevantRecallMessages(messages, new Set(["user/a"]));
+    // pair kept (user/b still relevant) - both contents survive
+    const keptContents = pruned
+      .filter((m) => m.role === "user" && Array.isArray(m.content))
+      .flatMap((m) => (m.content as ToolResultBlock[]).map((b) => b.content as string));
+    expect(keptContents.some((c) => c.includes("user/a"))).toBe(true);
+    expect(keptContents.some((c) => c.includes("user/b"))).toBe(true);
+  });
+
+  it("multi-memory pair IS pruned when all slugs are irrelevant", () => {
+    const [tu, tr] = buildRecallPair("q", [makeMemory("user/a"), makeMemory("user/b")]);
+    const messages: Message[] = [userText("问"), tu, tr, userText("再问")];
+    const pruned = pruneIrrelevantRecallMessages(messages, new Set(["user/a", "user/b"]));
+    expect(pruned).toHaveLength(2); // only the two user text messages remain
+    expect(pruned.every((m) => typeof m.content === "string")).toBe(true);
+  });
 });
 
 describe("MemoryRecall.select", () => {
@@ -481,5 +501,18 @@ describe("createMemoryRecallHandler", () => {
     expect(registry.get("user/food")).toBe("sidequery"); // still there
     // and the pair is still in messages
     expect(mgr.getMessages().some((m) => Array.isArray(m.content))).toBe(true);
+  });
+
+  it("passes loaded memories (registry.getAll()) as 3rd arg to recall.select", async () => {
+    const mgr = makeManager();
+    const registry = createLoadedMemoryRegistry();
+    registry.add("user/food", "sidequery");
+    const expectedLoaded = registry.getAll();
+    const select = vi.fn(async () => ({ add: [], prune: [] }));
+    const recall = { select } as unknown as MemoryRecall;
+    mgr.addUserMessage("继续食物话题");
+    const handler = createMemoryRecallHandler({ recall, store, registry });
+    await handler(mgr);
+    expect(select).toHaveBeenCalledWith("继续食物话题", store, expectedLoaded);
   });
 });

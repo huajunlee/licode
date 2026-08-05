@@ -1,10 +1,8 @@
 // packages/core/src/tools/builtin/memory-fetch.test.ts
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
-import { z } from "zod";
 import { createMemoryFetchTool } from "./memory-fetch.js";
 import { MemoryStore } from "../../memory/store.js";
 import { createLoadedMemoryRegistry } from "../../memory/loaded-memory-registry.js";
-import { ConversationManager } from "../../conversation/manager.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
@@ -21,7 +19,6 @@ function mem(slug: string, name = slug): Memory {
 describe("memory_fetch tool", () => {
   let dir: string | null = null;
   let store: MemoryStore;
-  let conversation: ConversationManager;
   let registry: ReturnType<typeof createLoadedMemoryRegistry>;
 
   beforeEach(async () => {
@@ -29,7 +26,6 @@ describe("memory_fetch tool", () => {
     store = new MemoryStore(dir);
     await store.save(mem("user/food", "食物偏好"));
     await store.save(mem("user/editor", "编辑器"));
-    conversation = new ConversationManager({ model: "test" });
     registry = createLoadedMemoryRegistry();
   });
   afterEach(() => { if (dir) { rmSync(dir, { recursive: true, force: true }); dir = null; } });
@@ -37,7 +33,7 @@ describe("memory_fetch tool", () => {
   const ctx = { workingDirectory: dir!, sessionId: "s1" };
 
   it("loads memories by slug in buildRecallPair format", async () => {
-    const tool = createMemoryFetchTool({ store, conversation, registry });
+    const tool = createMemoryFetchTool({ store, registry });
     const res = await tool.execute({ slugs: ["user/food"] }, ctx as any);
     expect(res.status).toBe("success");
     const content = (res as { content: string }).content;
@@ -46,14 +42,14 @@ describe("memory_fetch tool", () => {
   });
 
   it("registers loaded slugs as active in registry", async () => {
-    const tool = createMemoryFetchTool({ store, conversation, registry });
+    const tool = createMemoryFetchTool({ store, registry });
     await tool.execute({ slugs: ["user/food"] }, ctx as any);
     expect(registry.get("user/food")).toBe("active");
   });
 
   it("skips already-loaded slugs (dedup) and reports them", async () => {
     registry.add("user/food", "sidequery");
-    const tool = createMemoryFetchTool({ store, conversation, registry });
+    const tool = createMemoryFetchTool({ store, registry });
     const res = await tool.execute({ slugs: ["user/food", "user/editor"] }, ctx as any);
     expect(res.status).toBe("success");
     const content = (res as { content: string }).content;
@@ -64,7 +60,7 @@ describe("memory_fetch tool", () => {
 
   it("records usage for newly loaded memories", async () => {
     const spy = vi.spyOn(store, "recordUsage");
-    const tool = createMemoryFetchTool({ store, conversation, registry });
+    const tool = createMemoryFetchTool({ store, registry });
     await tool.execute({ slugs: ["user/food"] }, ctx as any);
     expect(spy).toHaveBeenCalledWith("user/food");
   });
@@ -72,13 +68,13 @@ describe("memory_fetch tool", () => {
   it("does not record usage for already-loaded (skipped) slugs", async () => {
     registry.add("user/food", "active");
     const spy = vi.spyOn(store, "recordUsage");
-    const tool = createMemoryFetchTool({ store, conversation, registry });
+    const tool = createMemoryFetchTool({ store, registry });
     await tool.execute({ slugs: ["user/food"] }, ctx as any);
     expect(spy).not.toHaveBeenCalled();
   });
 
   it("skips unknown slug and returns partial + note", async () => {
-    const tool = createMemoryFetchTool({ store, conversation, registry });
+    const tool = createMemoryFetchTool({ store, registry });
     const res = await tool.execute({ slugs: ["user/ghost", "user/food"] }, ctx as any);
     expect(res.status).toBe("success");
     const content = (res as { content: string }).content;
@@ -88,7 +84,7 @@ describe("memory_fetch tool", () => {
 
   it("returns error when all slugs unknown/loaded", async () => {
     registry.add("user/food", "active");
-    const tool = createMemoryFetchTool({ store, conversation, registry });
+    const tool = createMemoryFetchTool({ store, registry });
     const res = await tool.execute({ slugs: ["user/food", "user/ghost"] }, ctx as any);
     expect(res.status).toBe("error");
   });

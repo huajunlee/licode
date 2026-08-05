@@ -52,10 +52,13 @@ export function pruneRecallMessages(messages: Message[]): Message[] {
 }
 
 /**
- * Selectively prune: remove only synthetic memory_recall pairs whose slug is in
- * `pruneSlugs`. Keep other memory_recall pairs (still relevant) and all
- * memory_fetch tool_results (active, never pruned). Returns the SAME array
- * reference when pruneSlugs is empty.
+ * Selectively prune: remove only synthetic memory_recall pairs whose slugs are
+ * ALL in `pruneSlugs`. A multi-memory pair (several memories packed into one
+ * synthetic pair) is pruned only when every member slug is irrelevant; a
+ * partially-relevant pair is kept so the relevant member's content survives.
+ * Keep other memory_recall pairs (still relevant) and all memory_fetch
+ * tool_results (active, never pruned). Returns the SAME array reference when
+ * pruneSlugs is empty.
  */
 export function pruneIrrelevantRecallMessages(
   messages: Message[],
@@ -86,7 +89,11 @@ export function pruneIrrelevantRecallMessages(
       for (const b of m.content as ToolUseBlock[]) {
         if (b && b.name === MEMORY_RECALL_TOOL_NAME && b.id) {
           const slugs = slugsByUseId.get(b.id) ?? [];
-          if (slugs.some((s) => pruneSlugs.has(s))) {
+          // Prune a pair only when ALL its slugs are irrelevant. Using every
+          // (not some) prevents a multi-memory pair from being dropped when
+          // only one member is irrelevant - that would lose the still-relevant
+          // member's content and leave a stale registry entry.
+          if (slugs.length > 0 && slugs.every((s) => pruneSlugs.has(s))) {
             recallIdsToPrune.add(b.id);
           }
         }
