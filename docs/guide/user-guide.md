@@ -843,7 +843,8 @@ MCPClientManager
 - **Shell 命令 hook**：hooks.json 配置 `command`，`HookManager.load()` 加载，`spawn` 起子进程、事件 JSON 经 stdin 传入；适合用户自定义外部脚本。
 - **In-process 函数 hook**：程序化 `HookManager.register()` 注册 `fn`（`HookFunction = (event) => Promise<void>`），主进程内直接调用，能访问 `ConversationManager`/`MemoryStore` 等运行时对象；不可存 JSON（函数引用）。内存提取（`memory-extraction`）、做梦整理（`memory-dream`）即此类。
 
-**生命周期节点：**
+**生命周期节点，HOOK是pipeline层级：**
+
 - `before:agentLoop` — Agent 开始处理前
 - `after:agentLoop` — Agent 处理完成后
 
@@ -995,7 +996,7 @@ after:agentLoop hook（fire-and-forget，不阻塞用户）
 
 **Gather 详解**：不调 LLM（零成本）。“近期会话”= `updatedAt > lastConsolidatedAt` 的会话（**上次整理后的增量**，非最近修改）；只看 `timestamp > lastConsolidatedAt` 的新消息；grep suspicion 的 keywords，取匹配消息 ±1 上下文、截断 500 字符，每 suspicion ≤5 条；抽取的是**消息全文片段**，非摘要。
 
-**用户交互**：dream 全自动、fire-and-forget，过程中不问用户（Consolidate 出 ops 直接执行）；完成后通知归档结果（`已归档 X 条，可用 /memory-restore 恢复`）；用户事后可 `/memory-restore <slug>` 恢复、`/memory-pin <slug>` 置顶防归档。安全网：delete 前备份 `.dream-backup/`、archive 软删除可回滚。
+**用户交互**：dream **异步**全自动、不阻塞用户、fire-and-forget，过程中不问用户（Consolidate 出 ops 直接执行）；完成后通知归档结果（`已归档 X 条，可用 /memory-restore 恢复`）；用户事后可 `/memory-restore <slug>` 恢复、`/memory-pin <slug>` 置顶防归档。安全网：delete 前备份 `.dream-backup/`、archive 软删除可回滚。
 
 **安全机制**：① 删除前 `backupAndDelete` 备份文件 + MEMORY.md；② 归档是软删除（移到 `archive/{type}/`），`/memory-restore` 可恢复；③ pinned 记忆硬条件排除，永不归档；④ 失败时不更新 `.dream.state`，下次重试。
 
@@ -1323,6 +1324,43 @@ MemoryCuration.curate（side-model）
 
 ---
 
+### 24. LLM 调用点与 Prompt 设计
+
+LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未用），9 个侧调用各有独立 prompt，全部强制 JSON 输出并配 `parseXxxResponse` 容错（fence 剥离 + JSON.parse + 字段校验 + 失败降级）。
+
+**调用点汇总：**
+
+| 功能 | 文件:行 | model | temp | maxTokens | prompt 函数 | 规范度 |
+|------|---------|-------|------|-----------|------------|--------|
+| Agent 主对话 | agent/react.ts:32 | 会话模型 | 默认 | 4096 | (SystemPrompt 组装) | N/A |
+| 记忆提取 | memory/extractor.ts:162 | deepseek-chat | 0 | 2048 | buildPrompt | 角色弱 |
+| 记忆召回 side-query | memory/recall.ts:222 | deepseek-chat | 0 | 512 | buildPrompt | ★最规范 |
+| 做梦 Orient | memory/dream.ts:145 | deepseek-chat | 0 | 1024 | buildOrientPrompt | ★ |
+| 做梦 Consolidate | memory/dream.ts:275 | deepseek-chat | 0 | 2048 | buildConsolidatePrompt | ★最详尽 |
+| 做梦 Prune 缩短 | memory/dream.ts:501 | deepseek-chat | 0 | 1024 | (内联) | ✗缺角色 |
+| 上下文压缩 | context/summarizer.ts:79 | deepseek-chat | 默认 | 2048 | buildPrompt | temp 未置0 |
+| decide_reflect | tools/builtin/decide-reflect.ts:104 | deepseek-chat | 0 | 1024 | buildReflectPrompt | ★ |
+| 日记结构化抽取 | diary/extractor.ts:47 | deepseek-chat | 默认 | 2048 | buildPrompt | ★极规范 |
+| 日记候选整理 | curation/memory-curation.ts:24 | deepseek-chat | 默认 | 2048 | buildPrompt | ★ |
+| 人物别名归一 | people/curation/profile-curation.ts:24 | deepseek-chat | 默认 | 2048 | buildResolvePrompt | ★ |
+| (legacy) 对话生成器 | events/generator.ts:22 | 会话模型 | - | - | (无) | 未用 |
+
+**Prompt 四要素**：角色设定（`You are...`）+ 清晰指令 + 输出格式（JSON schema）+ 规则约束（边界 / 不做什么）。9 个侧调用中 8 个四要素齐全，仅做梦 Prune 缺角色且规则弱。
+
+**写得规范的 prompt 设计要点：**
+
+1. **记忆召回 side-query**（recall.ts:255）--最规范：显式角色 "You are a STRICT memory-recall filter"；ADD/PRUNE 分列条件；默认不放 + 不确定策略（不确定相关不 add、不确定无关不 prune）；严格 JSON + 3 个 few-shot 示例；slug 必须来自索引（禁编造）。
+2. **做梦 Consolidate**（dream.ts:318）--规则最详尽：四 action 语义（create/update/append/delete）；归档候选自动处理（无需 LLM 输出 archive）；矛盾强制 update/delete；日期转换（精确词转确切、模糊词转范围）；keywords 补全 + "不存什么"清单。
+3. **日记结构化抽取**（diary/extractor.ts:47）--字段规则最细：逐字段规则（title/summary/facts/decisions/emotions/people/futureMemory）；总原则四条（不臆造 / 推断标注 / 宁少勿错 / 跟随用户语言）；相对日期锚定今天转绝对；specific 标记（专有名 vs 泛称）。
+
+**共性观察：**
+
+- **全部侧调用强制 JSON + 容错解析**（fence 剥离 + JSON.parse + 字段校验 + 失败降级 `[]`），工程一致性高。
+- **temperature 不一致**：记忆系统（extractor/recall/dream）与 decide_reflect 显式 `temperature: 0`；但 hooks.ts 注入的 4 个 side-call（压缩 / 日记抽取 / 日记整理 / 人物归一）**未设置 temperature**（走 API 默认约 1.0），这些同样要求稳定 JSON，建议统一置 0。
+- **model 统一 `deepseek-chat`**（主对话可用会话模型）。
+
+**未达标：做梦 Prune 描述缩短**（dream.ts:493）--无显式角色，规则仅"≤150 字符、保留关键信息"，最简略。建议补角色设定与保留优先级规则。
+
 ## 亮点功能与简历项目（STAR 法则）
 
 > **项目名称：融合个人记忆与决策智能的第二大脑 Agent（代号 LICode）**
@@ -1345,7 +1383,7 @@ MemoryCuration.curate（side-model）
 
 ### 亮点 2：**设计并实现跨会话持久记忆系统**
 
-**简历条目**：采用用户明确指令与后台模型自动提取的双路径生产机制，结合互斥锁与文件修改时间检测确保写入操作的原子性与幂等性，杜绝重复写入。召回层采用两阶段机制：第一阶段由独立小模型对候选记忆严格相关性筛选并注入当轮对话，第二阶段主模型可主动调用 memory_fetch 工具按 slug 取回记忆正文，补齐 side-query 只看当前消息的上下文盲区；配合会话级统一去重注册表（LoadedMemoryRegistry）实现两阶段双向去重，并以反转默认的选择性剪除策略（已加载记忆默认保留，仅明确无关才剪，漏输出即保留）让相关记忆跨轮驻留。系统内置四阶段做梦整理机制，自动归档超过三十天未使用的记忆，最终实现无关问题零成本响应、相关问题精准注入且不重复的高效记忆管理。
+**简历条目**：采用用户明确指令与后台模型自动提取的双路径生产机制，结合互斥锁与文件修改时间检测确保写入操作的原子性与幂等性。召回层通过模型主动召回与side-query静默召回，对候选记忆进行严格相关性筛选，仅将高价值记忆注入当轮对话，并在每轮开始时根据模型自动清除无关内容以防止上下文膨胀。系统内置四阶段做梦整理机制，自动整理可能漂移、重复的记忆，归档超过三十天未使用的记忆，最终实现无关问题零成本响应、相关问题精准注入的高效记忆管理。
 
 - **Situation**：AI 对话助手普遍存在失忆问题，会话结束即丢失上下文，用户每次都要重述偏好和项目背景。已有方案要么只存不召回而变成只进不出的记事本，要么召回粗糙，依赖关键词匹配、无关记忆干扰对话且 token 持续累积。
 - **Task**：设计一套跨会话记忆系统，能自动生产、按需召回、定期整理，且不干扰主对话、不浪费 token、不出现矛盾。
@@ -1360,7 +1398,7 @@ MemoryCuration.curate（side-model）
 
 ### 亮点 3：**设计并实现长对话上下文管理**
 
-**简历条目**：以滚动演化摘要为核心轴，配合三层选择性保留策略、三层降级机制与对话轮次边界切分，实现高保真上下文压缩。被压缩的全文通过git底层对象存储建立恢复指针，不产生额外提交记录且天然具备内容去重能力。同时提供token计数功能，按字符类别进行估算，并利用模型真实返回值实现在线校准，确保上下文长度控制的精准性。
+**简历条目**：以滚动演化摘要为轴，配合巨量工具输出不进会话、三层选择性保留策略、三层降级机制与对话轮次边界切分，实现高保真上下文压缩。被压缩的全文通过git底层对象存储建立恢复指针，不产生额外提交记录且天然具备内容去重能力。同时提供token计数功能，按字符类别进行估算，并利用模型真实返回值实现在线校准，确保上下文长度控制的精准性。
 
 - **Situation**：长对话 token 涨上去撞 maxTokens 硬墙直接 TerminationError 终止，无摘要续命也无降级，token 计数是粗略启发式不可信，trimToBudget 按下标切会孤立 tool_result 导致 API 报错，工具大段输出全量灌进上下文。
 - **Task**：让长对话从撞墙即死变为摘要续命，且压缩不丢关键信息、不破坏消息结构、不中断主循环。
