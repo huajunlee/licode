@@ -1583,7 +1583,7 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 **Q9：记忆整理（做梦）的四个阶段是啥？**
 
 - **通俗**：审记忆 -> 找证据 -> 整理 -> 修剪。先让模型审一遍现有记忆找疑点，再 grep 历史会话找证据，基于证据出增删改操作，最后重建索引。
-- **详细**：① **Orient（LLM）**--审现有记忆（索引+全文），输出 suspicions（漂移/重复/失效/相对日期），每条给 2-5 个搜索关键词。② **Gather（无 LLM）**--grep 近期会话（上次整理后的增量）新消息找证据片段，取匹配消息 ±1 上下文、截断 500 字符，每 suspicion ≤5 条。③ **Consolidate（LLM）**--基于证据出 create/update/append/delete ops，之后根据ops对相应记忆文件进行编辑；自动归档 >30d 未用且非 pinned 的记忆（软删除可恢复）；delete 前备份到 .dream-backup/。④ **Prune**--重建索引；索引 >200 行或 >25KB 则 LLM 缩短 description 至 ≤150 字符。
+- **详细**：① **Orient**--审现有记忆（索引+全文），输出 suspicions（漂移/重复/失效/相对日期），每条给 2-5 个搜索关键词。② **Gather**--grep 近期会话（上次整理后的增量）新消息找证据片段，取匹配消息 ±1 上下文、截断 500 字符，每 suspicion ≤5 条。③ **Consolidate**--基于证据出 create/update/append/delete ops，之后根据ops对相应记忆文件进行编辑；自动归档 >30d 未用且非 pinned 的记忆（软删除可恢复）；delete 前备份到 .dream-backup/。④ **Prune**--重建索引；索引 >200 行或 >25KB 则 LLM 缩短 description 至 ≤150 字符。
 
 **Q10：如何判断证据是否充足？有没有硬性条件？**
 
@@ -1718,6 +1718,12 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 
 - **通俗**：自己评自己容易护短，独立小模型像第三方审查，更客观。
 - **详细**：decide_reflect 用独立的 side-call 小模型（`REFLECT_MODEL` 常量 deepseek-chat），与 decide_plan 的主模型隔离。评估维度固定五条（关键维度缺失/选项偏见/步骤不可行/人物缺失/问题不清晰），只报实质遗漏不挑小毛病，覆盖即判 passed。隔离评估避免主模型自评偏差（自己出的计划自己评，倾向判通过）；独立小模型视角不同，更能发现盲点。带十秒超时兜底，挂起降级为 error 不拖死主循环。
+
+**Q3：side-call 的模型是重新开一个旁路会话吗？如何记录双 agent 自身的对话历史？**
+
+- **详细**：**不是旁路会话，是一次性单轮调用**。side-call 用独立的 sideProvider（AnthropicProvider 实例），但每次调用是一次性 `llm.chat`--messages 只有一条 user prompt（如 extractor.ts:163），无会话状态、无历史累积。不是"开一个旁路会话连续对话"，是"每次单轮调用完就结束"。**side-call 不记录自身对话历史**：每次调用独立，需要的信息都塞进当次 prompt（extractor 带现有记忆+新消息、recall 带索引+当前消息、压缩带轮次文本、做梦带记忆全文+证据、decide_reflect 带计划）。主 Agent 的历史在 ConversationManager，side-call 不共享--只通过 prompt 传需要的片段。所以"双 agent"不准确：主 Agent 有会话历史，side-call 是无状态单轮调用（不记录历史，每次靠 prompt 传上下文），不是两个 agent 各自维护对话。
+
+
 
 ---
 
