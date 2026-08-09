@@ -1695,7 +1695,9 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 
 - **详细**：decide_save 的两步 gating：decide 给出分析后**必须询问**"要不要记下来"，用户**明确同意**才调 decide_save 落盘，用户拒绝或不回应则不保存。这是**纯 prompt 强制**（非代码）：decide/decide_plan 的 prompt 里写明"仅在用户明确同意后调用 decide_save"，但 decide_save 的 execute 无条件写日记，无代码级确认校验（没有 confirm token 或授权标志）。所以两步确认靠 prompt 约束 LLM 行为，不靠代码强制。
 
-Q：
+**Q4：判断 B 式和 C 式靠的是模型自身？怎么判断证据是否足够？有没有硬性条件？**
+
+- **详细**：**靠模型自身**。B/C framing 是 prompt 指引（decide.ts:52-53），LLM 自主判断用 B 还是 C，无代码级硬条件（decide 的 execute 调 LLM，LLM 按 prompt 输出，没有代码 `if 证据<阈值 then C` 的判定）。证据是否足够也靠 LLM 判断：prompt 说"若证据不足以支撑明确判断（信息太少/互相矛盾/超出可判断范围），降级 C"--这是软约束，LLM 基于汇聚的上下文（决定/事实/人物/日记）自主判断证据够不够。和做梦 Gather 的证据判断一样，都是 LLM 自主，无硬性条件。
 
 ### 亮点 6 名词解释与深挖问答
 
