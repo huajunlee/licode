@@ -1605,6 +1605,7 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 - **滚动演化摘要**：压缩时不从零重摘，把旧摘要显式传给合并调用，生成更新后的摘要，important 轮在摘要里简短引用，被预算裁掉后仍有退路。
 - **三层选择性保留**：压缩时消息分三类保留，确定性 must-keep 保留错误轮与写文件轮，模型 should-keep 保留 important 轮，预算最终裁剪掉超预算的轮。
 - **三层降级**：压缩用的 LLM 失败时有三层兜底，解析容错、compress 降级 trim、loop try 包裹，maxTokens 从一超即死降为压缩后仍超的最终兜底，永不中断主循环。
+- **file_change 笔记**：含 Write/Edit 的轮压缩后的替代形式。结构化字段：`type`(file_change)/ `operation`(write|edit)/ `path`(文件路径)/ `stats`{added,removed}(增删行)/ `symbols`(LLM 提取的核心符号)/ `summary`{kind}(意图，如 create file)/ `pointer`{path,version,method,spillPath}(git blob 恢复指针)。序列化为 assistant 消息，内容为 `file_change ` + JSON。原文 userText 保留，assistant 的 tool_use + user 的 tool_result 替换为这条笔记。
 
 #### 深挖问答
 
@@ -1624,7 +1625,7 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 - **详细**：
   - **三层选择性保留**（Phase 5，压缩时对中间轮次的三层取舍）：
     1. **must-keep（结构必保）**：含 `is_error` 的 tool_result（工具报错）或含 Write/Edit 调用的轮。**原因**：错误信息对调试关键（模型需知道哪步失败才能修正）；文件写入记录用户工作成果（但全文占空间，压成 file_change 笔记，全文进 git blob 可恢复）。硬规则判定，不依赖 side-call，确定性必保。
-    2. **important（语义选保）**：candidate（普通轮）交 CompressionAssistant 判 important/normal，important 的在剩余预算内逐个贪心保留。**原因**：普通轮的重要性是语义判断，只有 LLM 能判；预算约束下弹性保留（超预算即停，已折进摘要）。
+    2. **important（语义选保）**：candidate（普通轮）交 CompressionAssistant 判 important/normal，important 的**全文保留**（非摘要），在剩余预算内逐个贪心，超预算即 `break`（不再尝试后续）；预算默认 Infinity（全留），有 budget 时才裁。**原因**：普通轮的重要性是语义判断，只有 LLM 能判；预算约束下弹性保留（超预算即停，已折进摘要）。
     3. **recent（时序全保）**：末尾 `keepRecentTurns` 轮（默认 2）不分类直接全保。**原因**：模型推理需近期上下文连贯（用户刚说啥、上一步工具结果），压缩会破坏当前推理能力。
   - 三层原因：结构（确定性必保，硬规则）/ 语义（弹性选保，LLM 判）/ 时序（无条件全保，保连贯），三维互补，压力下优先砍 important（弹性），must-keep/recent 最后保。
   - **三层降级**（Phase 2+3，token 超限的多级削减链）：
@@ -1633,20 +1634,24 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
     3. **trim 兜底**：side-call 失败时降级 trim（丢中间、折 firstUser 进 recent）。**原因**：第三级，最终兜底，compress 失败也不能崩，丢中间保首尾（firstUser 意图 + recent 连贯）。
   - 三层原因：压缩（摘要续命，信息保真）/ 裁系统层（弹性裁可选，保 always）/ trim（兜底防崩，保首尾），逐级兜底，maxTokens 从"一超即死"降为"压缩后仍超才硬停"。
 
-**Q4：被压缩掉的文件全文就丢了？**
+**Q4：有没有对压缩做测试？压缩后上下文占比能降低到多少？**
+
+- **详细**：有测试（context.test.ts），覆盖首次/二次压缩、error+write 保留、important 预算裁剪、trim 降级、轮数不足不压缩。但测试只断言 method 标签、消息存在性、retainedTurns/compactedTurns 计数，**没有压缩前后 token 占比对比或比例断言**--所以没有"压缩后占比降到 X%"的具体数据。设计上压缩把中间旧轮折进摘要（一条 assistant 消息）+ 保留 must-keep/important/recent，占比降低取决于原对话中旧轮占比。
+
+**Q5：被压缩掉的文件全文就丢了？**
 
 - **通俗**：不丢。本项目把被压缩掉的文件内容存进 git 的对象库，只留一个 hash 指针在对话里，需要时用 hash 取回全文。
 - **详细**：getRecoveryPointer 用 git hash-object 把内容写成 git blob 对象，不产生 commit，返回四十位 hash。同内容同 hash 天然去重，复用 git 对象库而非自建存储。非 git 环境用 sha1 落盘 overflow 目录回退。压缩时把 userText 加 assistant 的 tool_use 加 user 的 tool_result 替换为 userText 加 assistant 的 file_change 笔记，笔记含确定性字段 operation、path、stats、pointer 加模型填的描述符 symbols 与 summary kind。幂等，已是 file_change 笔记的轮不重复压缩。
 
-**Q5：压缩用的 LLM 挂了怎么办？**
+**Q6：压缩用的 LLM 挂了怎么办？**
 
-- **详细**：三层降级。第一层 CompressionAssistant.parse 容错，剥 markdown fence、找首尾花括号，解析失败抛错。第二层 ContextCompressor.compress 的 try catch 降级 trim，只留 recentFlat，把首条 user 折进 recent，method 为 trim。第三层整个调用包在 loop 的 try 内。maxTokens 从一超即死降为压缩后仍超的最终兜底，永不中断主循环。
+- **详细**：三层降级。第一层 CompressionAssistant.parse 容错，剥 markdown fence、找首尾花括号，解析失败抛错。第二层 ContextCompressor.compress 的 try catch 降级 trim：丢掉所有中间轮，只留 firstUser + recentFlat（末尾 keepRecentTurns 轮），把 firstUser 的意图折进 recent[0] 的 user 消息，method 标为 trim。第三层整个 compress 调用包在 loop 的 try 内，任何异常都不阻断主循环。maxTokens 从一超即死降为压缩后仍超的最终兜底，永不中断主循环。
 
 ### 亮点 4 名词解释与深挖问答
 
 #### 名词解释
 
-- **结构化提取**：用独立的 side-model LLM 把口述日记拆成五类结构化字段，分别是事实、决定、情绪、人物、候选记忆，每个候选记忆带重要性 importance 与可提升性 promotability 两个维度。提取规则为不臆造、推断必标注、相对日期转绝对。
+- **结构化提取**：用独立的 side-model LLM 把口述日记拆成五类结构化字段，分别是**事实、决定、情绪、人物、候选记忆**，每个候选记忆带重要性 importance 与可提升性 promotability 两个维度。提取规则为不臆造、推断必标注、相对日期转绝对。
 - **importance 与 promotability 双维度提升门**：importance 衡量这事重不重要，promotability 衡量这事适不适合直接写成记忆。自动提升门要求类型属于偏好决定或目标、重要性为高、可提升性不为低，三者同时满足才自动入库，否则走人审。
 - **三层提升**：候选记忆分流到三层。自动提升把高置信度候选写成记忆，自动归档把专有人物写成人物档案，人审整理把低可提升性候选留待 diary-curate 确认。
 - **CuratedIndex 去重**：一个 JSON 索引文件，用 entryId 加候选序号作键记录已处理候选，三层共用，防止同一条候选被重复提升、归档或整理。
@@ -1658,6 +1663,10 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 
 - **通俗**：importance 是这事重不重要，promotability 是这事适不适合直接写成记忆。比如计划拿大厂 Offer 既重要又适合存可自动入库，对某技术有了了解重要但不适合直接存因太泛得人审整理，两个维度分开才能正确分流。
 - **详细**：autoPromoteEntry 的自动门是类型属于偏好决定或目标、重要性为高、可提升性不为低。可提升性为低的候选即使重要也走 curation 人审，因为直接写成记忆质量差需合并。这把高置信度自动入库与低置信度人审分流，避免自动提升产生低质量记忆噪声。
+
+**Q2：去重索引的形式长什么样？如何协调三层避免重复？**
+
+- **详细**：`CuratedIndex`（`.licode/journal/.curated.json`）存 `{processed: [key]}`，键格式 `entryId#候选序号`（`#c0` futureMemory 候选、`#p0` people 候选）。三层处理后都 mark：auto-promote mark `#c`、auto-file mark `#p`、curate apply mark sourceKeys。/diary-curate 收集时 `load()` + `has(key)` 跳过已 mark 的。协调：无论哪个通道处理都 mark 同一个键，下次任何通道遇到 `has` 查到已 mark 就跳过--同一候选不会被两层处理，也不会被人审重复列出。
 
 ### 亮点 5 名词解释与深挖问答
 
@@ -1678,18 +1687,33 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 
 - **详细**：决策是发生在某时的情境事件，不是永久事实。放日记它能被 journal_recall 按话题召回、被未来 decide 汇聚为历史决定，放 memory 会污染永久记忆库因每次决策都成一条记忆很快膨胀。gating 也是两步，decide 给分析后必须问是否记下来，用户明确同意才调 decide_save，绝不主动保存。
 
+**Q3：如何判断证据是否充足？有没有硬性条件？**
+
+- **详细**：做梦 Gather 阶段**无硬性条件，有多少算多少**。每条 suspicion 最多收集 5 条 snippet（关键词命中的消息 ±1 上下文，截断 500 字符），仅扫上次整理后的新消息。无证据时 Consolidate 仍调 LLM（`eviText` 填"(无证据)"），LLM 可基于现有记忆出 ops；归档是规则驱动（>30d 未用且非 pinned），与证据/LLM 无关。prompt 仅软约束"只使用证据中的内容，不要臆测"，非硬 gate。
+
+**Q4：什么是两步确认机制？**
+
+- **详细**：decide_save 的两步 gating：decide 给出分析后**必须询问**"要不要记下来"，用户**明确同意**才调 decide_save 落盘，用户拒绝或不回应则不保存。这是**纯 prompt 强制**（非代码）：decide/decide_plan 的 prompt 里写明"仅在用户明确同意后调用 decide_save"，但 decide_save 的 execute 无条件写日记，无代码级确认校验（没有 confirm token 或授权标志）。所以两步确认靠 prompt 约束 LLM 行为，不靠代码强制。
+
 ### 亮点 6 名词解释与深挖问答
 
 #### 名词解释
 
-- **Git Worktree 隔离**：每个子 Agent 获得一个独立的 git worktree，在隔离的工作区修改文件，多个子 Agent 并行改文件互不干扰，完成后父 Agent 收集结果可 merge 或 discard。
-- **统一 ToolRegistry**：内置六工具、MCP 工具、Skills 工具统一注册到一个 ToolRegistry，注册时把 Zod schema 转 JSON Schema 提供给 LLM 作 function definition，调用时 Zod safeParse 校验参数、PermissionGuard 权限检查、executeParallel 并发执行。
+- **decide_plan**：复杂决策的结构化规划工具。模型自填维度、选项、步骤，产出结构化计划（区别于 decide 的简单二选一/三选一，适用于多维度、高 stakes、需定向召回的复杂决策）。
+- **decide_reflect**：side-call 独立小模型评估 decide_plan 产出的计划完备性，返回 `{passed, gaps, suggestions}`。五个评审维度：关键维度缺失、选项偏见或狭窄、步骤不可行、人物缺失、决策问题不清晰。
+- **两轮收敛**：decide_plan 出计划 -> decide_reflect 评 -> 有 gaps 则再 plan -> 最多两轮收敛（passed 或达上限），避免无限循环。
 
 #### 深挖问答
 
-**Q1：这个项目的分层和可测试性怎么保证？**
+**Q1：decide_plan 和 decide 有什么区别？什么时候用哪个？**
 
-- **详细**：核心逻辑抽成纯函数，如 gatherDecisionContext、buildDecisionEntry、deriveMemory、pruneRecallMessages、buildRecallPair、splitIntoTurns、classifyMiddleTurns，副作用如文件 IO 与 LLM 调用通过依赖注入，generate 回调与 now 函数。这样纯逻辑可单测不依赖文件网络，集成层只做接线。pnpm monorepo 分 core、cli、spec-kit 三包，core 不依赖 cli。用 omh.config.yaml 定义的严格 TDD 工作流构建自身，每个行为变更先写测试看红、最小改动转绿、重构保持全绿、交付前 test 与 build 必过。
+- **通俗**：decide 是简单二选一/三选一加倾向建议，适合低 stakes 当前上下文够用的简单决策；decide_plan 是复杂决策的结构化规划，模型自填维度/选项/步骤，适合多维度高 stakes 需定向召回的复杂决策。
+- **详细**：decide 走 gatherDecisionContext 汇聚五块上下文后直接给 B/C framing 分析；decide_plan 让模型自填决策的维度、可选路径、执行步骤，产出结构化计划，再经 decide_reflect 评审。分流的依据是复杂度：简单决策（二选一、低 stakes）用 decide，复杂决策（多维度、高 stakes、需规划）用 decide_plan + decide_reflect。
+
+**Q2：decide_reflect 为什么用独立小模型？不自己评自己？**
+
+- **通俗**：自己评自己容易护短，独立小模型像第三方审查，更客观。
+- **详细**：decide_reflect 用独立的 side-call 小模型（`REFLECT_MODEL` 常量 deepseek-chat），与 decide_plan 的主模型隔离。评估维度固定五条（关键维度缺失/选项偏见/步骤不可行/人物缺失/问题不清晰），只报实质遗漏不挑小毛病，覆盖即判 passed。隔离评估避免主模型自评偏差（自己出的计划自己评，倾向判通过）；独立小模型视角不同，更能发现盲点。带十秒超时兜底，挂起降级为 error 不拖死主循环。
 
 ---
 
