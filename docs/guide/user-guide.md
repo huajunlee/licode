@@ -1529,9 +1529,11 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 #### 名词解释
 
 - **双路径生产**：记忆写入有两条路径。第一条是明确指令路径，用户说记住什么时主 Agent 当场用 Write 工具直接写入记忆文件。第二条是后台提取路径，每轮对话结束后由 after:agentLoop hook 调用 LLM 自动从对话中提取偏好、纠正、决策等，两条路径共用同一个 MemoryStore 作为真相源。
-- **side-query 严格召回**：每轮对话开始前，用一个独立的小模型读取记忆索引和当前用户消息，判断哪些记忆与当前问题相关。严格过滤 prompt 默认不召回任何记忆，只有满足明确相关性条件才召回，无关问题一条都不选。
+- **两阶段召回**：记忆召回分两阶段。第一阶段 side-query 被动召回--每轮对话开始前（onTurnStart），独立小模型读取记忆索引和当前用户消息，严格过滤选出 ≤5 条相关记忆，把正文作为合成 tool_call 注入。第二阶段 memory_fetch 主动召回--主模型读到索引后可主动调 memory_fetch 工具按 slug 取回记忆正文，补 side-query 只看当前消息的上下文盲区（如"继续上次那个方案"）。
+- **memory_fetch 工具**：第二阶段主动召回工具。主模型按 slug 主动取回记忆正文，去重（LoadedMemoryRegistry.has 跳过已加载）、记入用量（recordUsage）、按召回格式返回；`LICODE_MEMORY_RECALL=off` 时不注册。
 - **合成 tool_call 注入**：把召回的记忆正文包装成一对消息，即 assistant 的 tool_use 调用加 user 的 tool_result 结果，追加到用户消息之后。模型从这对消息后继续回答，不改动 system prompt 也不改动用户原文。
-- **每轮剪除**：每轮注入新的召回对之前，先剪除上一轮注入的召回对，保证历史中任意时刻最多只有一对召回消息，token 不随轮次累积。
+- **选择性剪除**：每轮开始时，仅移除 select 判定与当前问题无关的 side-query 召回对（相关记忆跨轮保留，不再每轮全剪）；主动召回的记忆永不剪除。反转默认--已加载默认保留，明确无关才剪，漏输出即保留不误剪。
+- **LoadedMemoryRegistry 双向去重**：会话级 HashMap 跟踪 side-query 与主动召回已加载的记忆 + 来源（sidequery/active），两阶段共用同一实例，互不重复注入；session 恢复时从消息 rebuild。
 - **失败零干扰降级**：召回的 side-query 失败或超时时不抛异常，本轮只剪除不注入，退回仅有索引的模式，对话完全不受影响。
 - **四阶段做梦整理**：记忆库定期整理的四个阶段。Orient 阶段审现有记忆找漂移与重复，Gather 阶段 grep 近期会话找证据，Consolidate 阶段基于证据出增删改操作，Prune 阶段重建索引。
 - **自动归档**：超过三十天未被召回的记忆由 dream 自动移到 archive 区软删除，可用 memory-restore 恢复，置顶的记忆永不归档。
