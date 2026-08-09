@@ -1103,7 +1103,7 @@ after:agentLoop hook（fire-and-forget，不阻塞用户）
 
 ### 20. 第二大脑日记系统（Second-Brain Diary）
 
-LICode 不只是"会记代码的助手"，还能当你的**第二大脑**--把你口述的日常日记结构化沉淀，并自动提炼出长期记忆和人物档案。受「第二大脑」「卡片盒笔记法」启发，设计成 **捕获 -> 结构化 -> 提升 -> 整理** 四层流水线。
+LICode 能当你的**第二大脑**--把你口述的日常日记结构化沉淀，并自动提炼出长期记忆和人物档案。受「第二大脑」「卡片盒笔记法」启发，设计成 **捕获 -> 结构化 -> 提升 -> 整理** 四层流水线。
 
 #### DiaryEntry 数据结构
 
@@ -1165,7 +1165,7 @@ futureMemory 候选
            例："对 Loop Engineering 有了更深入了解"(preference,low) -> 候选待整理
 ```
 
-`CuratedIndex`（`.licode/journal/.curated.json`）记录已处理的候选键（如 `msaedeuy#c0`、`msaedeuy#p0`），**防止重复提升/重复归档/重复整理**--这是三层之间的去重协调机制。
+`CuratedIndex`（`.licode/journal/.curated.json`）是三层提升的去重协调机制。键格式 `entryId#候选序号`（`#c0` 为 futureMemory 候选、`#p0` 为 people 候选，如 `msaedeuy#c0`），唯一标识某条日记的某个候选。`load()` 返回已处理键集合，`mark(keys)` 追加写回 `{processed: [...].sort()}`。三层处理候选后都 mark：auto-promote（高 promotability）、auto-file（specific 专有名）、curate（人审 apply）。/diary-curate 收集人审候选时 `load()` + `has(key)` 跳过已 mark 的--所以同一候选不会被两层处理，也不会被人审重复列出。
 
 #### 涉及文件
 
@@ -1194,7 +1194,7 @@ interface PersonProfile {
   };
   summary: string;
   traits: string[];                     // 特质（来自 diary 的 note 字段）
-  preferences: string[];
+  preferences: string[];								// 喜好
   interactions: Interaction[];          // {date, entryId, event} ← entryId 反链日记！
   relationshipState: RelationshipState[]; // {date, state} ← 只记变化，不每条重复
 }
@@ -1319,6 +1319,10 @@ MemoryCuration.curate（side-model）
 ```
 
 `ProfileCuration` 同理处理人物候选（合并同人异名、提炼特质）。`CurationSession` 维护一次整理会话的状态（候选 -> 提案 -> 应用），`handleCurationInput` 分发命令。
+
+**人审候选来源**：`/diary-curate` 收集未被自动处理的候选--futureMemory 中 `promotability:low` 或不满足自动提升门（type∈{preference,decision,goal}+importance:high+promotability≠low）的、people 中 `specific=false` 的模糊人物；收集时 `CuratedIndex.load()` + `has(key)` 跳过已 mark 的（自动提升/归档已处理的不再列出）。`MemoryCuration.curate` 把这批候选合并成少数连贯记忆提案，`ProfileCuration.resolveAmbiguous` 把模糊人物判成“并别名”或“新档案”提案。
+
+**CurationSession 三种提案**：① 新建记忆（MemoryCreateProposal）-> `memoryStore.save(create)`；② 并别名（ProfileMergeProposal）-> 现有档案加 aliases/interactions/traits/relationshipState；③ 新档案（ProfileNewProposal）-> `profileStore.save(create)`。`apply(selection)` 时选中的落盘，**所有提案（含未选）的 sourceKeys 都 mark** 到 CuratedIndex--避免下次重复提示（no nag）。
 
 **与 dream 的区别**：curation 是**人审、窄档、即时**（用户主动触发，只整理当前候选）；dream 是**自动、全库、定期**（后台跑，整理整个记忆库）。两者互补。
 
