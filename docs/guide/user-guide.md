@@ -973,6 +973,18 @@ pinned: false
 - **第二阶段：主模型主动召回**：主模型可调 `memory_fetch(slug)` 工具按 slug 主动取回正文（去重、记入用量、按召回格式返回）；`LICODE_MEMORY_RECALL=off` 时该工具不注册。
 - **主 Agent 兜底**：召回关闭时，主 Agent 仍可按 memory-guide 指引用 Read 工具自行查阅 `.licode/memory/` 目录。
 
+#### 去重策略（提取层 + 召回层）
+
+记忆系统在两个层面去重，防的是两种不同的“重复”：
+
+**提取层--防“同一信息被重复写进记忆库”**
+
+生产记忆时三条机制防重复/矛盾：① **mtime 检测**--主 Agent 用 Write 直写后，extractor 检测到本轮文件 mtime 变化就跳过提取，不对同一轮重复提取（见生产原理门槛漏斗）；② **create/update/append 按语义操作**--新主题 create、矛盾 update 改写（保留 createdAt、不让“喜欢/不喜欢”并存）、补充 append（`mergeAppend` 段落级去重，避免同段重复追加）；③ **create 已存在降级 append**--LLM 误判时 store 兜底，宁可追加不覆盖，绝不丢内容。这层保证记忆库本身不冗余、不矛盾。
+
+**召回层--防“同一记忆被重复注入对话”**
+
+每轮召回时，`LoadedMemoryRegistry`（会话级 HashMap）记着已加载哪些记忆：① **注入前 `has(slug)` 查**--side-query 选记忆、memory_fetch 主动取回前都先查，已加载的跳过；② **两阶段共用同一 registry**--side-query（被动）与 memory_fetch（主动）互相知道对方已加载什么，不会把同一条注入两次；③ **剪除时 `remove(slug)`**--选择性剪除移除时从 registry 删，下轮若再次相关可重新选（剪除非永久排除）；④ **session 恢复 `rebuild(messages)`**--扫历史消息里的 memory_recall/memory_fetch 工具结果（提取 `## name (slug)`）重建 registry，跨会话延续去重状态。这层保证对话不出现重复记忆内容，省 token、不干扰。
+
 #### 做梦整理原理（Phase 3+4）：四阶段 + 零 LLM 门
 
 记忆库会定期"做梦"整理（`MemoryDream`，深度解析见 [面试 Q2-Q8](#亮点 2 名词解释与深挖问答)）：
@@ -1172,6 +1184,12 @@ futureMemory 候选
 4. **人审 apply**：用户 `/diary-curate apply` 选择落盘，mark 所有提案 sourceKeys（含未选，防 nag）。
 
 **CuratedIndex 怎么去重**（`.licode/journal/.curated.json`）：
+
+ 具体说，防止这三种重复：
+
+    1. 同一候选被两个通道处理：比如某条 futureMemory 候选，auto-promote 已经提升成记忆并 mark 了 #c 键，/diary-curate 再遇到它时 has(key) 查到已 mark 就跳过，不会又列给人审。
+    2. 人审重复列出：/diary-curate 可以多次运行，每次 gatherPending 都遍历所有日记的所有候选，但已 mark 的（无论被 auto 还是上次 curate 处理过）都 has 跳过，不会重复提示用户。
+    3. 人审 apply 后未选的候选反复提示：CurationSession.apply 时，所有提案（含用户没选中的）sourceKeys 都 mark，所以这次没采纳的候选下次也不会再弹出来（no nag）。
 
 - **键的构造**：每个候选用 `entryId#候选序号` 唯一标识--`entryId` 是日记 id（如 `msaedeuy`，与文件名解耦），`#c序号` 标 futureMemory 候选（`#c0`、`#c1`...）、`#p序号` 标 people 候选（`#p0`、`#p1`...）。即 `msaedeuy#c0` = 日记 msaedeuy 的第 0 个 futureMemory 候选，`msaedeuy#p1` = 该日记的第 1 个人物。键在候选生成时由数组下标确定，不随文件改名/内容变化而变。
 - **写（mark）**：三层处理候选后都把键写入 `.curated.json`--auto-promote 处理 `#c`、auto-file 处理 `#p`、curate apply 处理提案 sourceKeys（`#c`/`#p`）。`mark(keys)` 追加到 `{processed: [...].sort()}`。
