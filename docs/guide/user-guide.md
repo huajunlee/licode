@@ -1532,7 +1532,7 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 - **两阶段召回**：记忆召回分两阶段。第一阶段 side-query 被动召回--每轮对话开始前（onTurnStart），独立小模型读取记忆索引和当前用户消息，严格过滤选出 ≤5 条相关记忆，把正文作为合成 tool_call 注入。第二阶段 memory_fetch 主动召回--主模型读到索引后可主动调 memory_fetch 工具按 slug 取回记忆正文，补 side-query 只看当前消息的上下文盲区（如"继续上次那个方案"）。
 - **memory_fetch 工具**：第二阶段主动召回工具。主模型按 slug 主动取回记忆正文，去重（LoadedMemoryRegistry.has 跳过已加载）、记入用量（recordUsage）、按召回格式返回；`LICODE_MEMORY_RECALL=off` 时不注册。
 - **合成 tool_call 注入**：把召回的记忆正文包装成一对消息，即 assistant 的 tool_use 调用加 user 的 tool_result 结果，追加到用户消息之后。模型从这对消息后继续回答，不改动 system prompt 也不改动用户原文。
-- **选择性剪除**：每轮开始时，仅移除 select 判定与当前问题无关的 side-query 召回对（相关记忆跨轮保留，不再每轮全剪）；主动召回的记忆永不剪除。反转默认--已加载默认保留，明确无关才剪，漏输出即保留不误剪。
+- **选择性剪除**：每轮开始前，仅移除 select 判定与当前问题无关的 side-query 召回对（相关记忆跨轮保留，不再每轮全剪）；主动召回的记忆永不剪除。反转默认--已加载默认保留，明确无关才剪，漏输出即保留不误剪。select进行side-query调用，返回需要注入和需要剪除的记忆列表-> 剪除 prune -> 注入 add。
 - **LoadedMemoryRegistry 双向去重**：会话级 HashMap 跟踪 side-query 与主动召回已加载的记忆 + 来源（sidequery/active），两阶段共用同一实例，互不重复注入；session 恢复时从消息 rebuild。
 - **失败零干扰降级**：召回的 side-query 失败或超时时不抛异常，本轮只剪除不注入，退回仅有索引的模式，对话完全不受影响。
 - **四阶段做梦整理**：记忆库定期整理的四个阶段。Orient 阶段审现有记忆找漂移与重复，Gather 阶段 grep 近期会话找证据，Consolidate 阶段基于证据出增删改操作，Prune 阶段重建索引。
@@ -1560,17 +1560,32 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 - **通俗**：不会。提取时本项目把已有的记忆全文都给 LLM 看，LLM 发现不喜欢了和旧的喜欢冲突，就直接把旧文件整体改写成最新的，不会两条并存。
 - **详细**：这是 Phase 1 生产层的关键设计，提取 prompt 携带现有记忆的正文而非仅索引，LLM 输出 update 时 MemoryStore.save 整体替换正文，保留 createdAt 刷新 updatedAt。如果是补充而非冲突用 append 做段落级去重合并。create 在目标已存在时防御性降级为 append，绝不丢旧内容。
 
-**Q5：为什么要做梦整理记忆，不能实时整理吗？**
+**Q5：生产记忆时是把所有会话都给模型吗？会不会重复生产？**
+
+- **通俗**：不是全部。只把上次提取之后的新消息给模型，不是整个会话历史。也不会重复生产--新信息和已有记忆同主题时，模型会改写或追加，不会新建重复文件。
+- **详细**：extract 用 `selectMessages` 按 `sinceMs`（上次提取时间）过滤，只取 `timestamp > sinceMs` 的新消息（截最近 cap 条）。防重复四道防线：① `sinceMs` 增量过滤（不重复看旧消息）；② 携带全部现有记忆正文（LLM 发现已有就 `update`/`append`，不重复 `create`）；③ store 兜底（`create` 已存在降级 `append`）；④ 冷却 5 分钟 + mtime 检测（减少提取机会）。`lastExtractedAt` 每次提取后推进，保证增量。
+
+**Q6：新增的记忆如何动态进上下文？MEMORY.md 怎么插入 system prompt？**
+
+- **通俗**：每轮对话开始时重读 MEMORY.md，有新内容就更新 system prompt 里的记忆层。MEMORY.md 作为系统提示词的一个层（可裁剪）插入，内容是索引（每条一行），不是正文。
+- **详细**：启动时 `MemoryLoader.loadInto` 把 MEMORY.md 索引作为 `priority: 5`、`always: false` 的 memory 层注入 system prompt。每轮 `onTurnStart`（`createMemoryRecallHandler`）重读 `loadIndex()`，若 `indexContent !== lastIndexContent` 则 `addLayer` 更新。本会话新写的记忆（Write 直写 / extractor 提取后 `rebuildIndex`）下轮自动进索引。关键：插入的是**索引**（让模型知道有哪些记忆），正文通过 side-query / memory_fetch 召回时注入（合成 tool_call），不进 system prompt。
+
+**Q7：onTurnStart 重读 MEMORY.md 怎么读？需要调模型吗？**
+
+- **通俗**：重读就是读文件，不调模型。每轮读一遍 MEMORY.md 和上次比对，有变化才更新，零 token 成本。调模型是下一步（side-query 选记忆）的事。
+- **详细**：`loadIndex` 就是 `fs.readFile(.licode/memory/MEMORY.md)`，纯文件 I/O。和 `lastIndexContent` 比对，无变化不 `addLayer`（零开销），有变化才更新。onTurnStart 整体四步：① 重读+刷新索引层（纯 I/O，不调模型）-> ② `select` side-query（调小模型，花 token）-> ③ 剪除 prune -> ④ 注入 add。只有第 2 步调模型。
+
+**Q8：为什么要做梦整理记忆，不能实时整理吗？**
 
 - **通俗**：实时整理太贵也太干扰，你每说一句它就翻一遍整个记忆库，既慢又可能在你对话时改东西。所以模仿人脑，白天记晚上整理，且只在攒够了新材料时才做。
 - **详细**：shouldDream 是零 LLM 门，距上次整理不少于二十四小时且自上次起不少于五个新会话才触发。整理是 fire-and-forget，hook 立即返回不 await，用户从不被阻塞。四阶段中 Orient 与 Consolidate 用 LLM（Prune 在索引超 200 行或 25KB 时也用 LLM），Gather 是纯 grep 无 LLM 成本。
 
-**Q6：dream 会误删我的记忆吗？怎么保证安全？**
+**Q9：dream 会误删我的记忆吗？怎么保证安全？**
 
 - **通俗**：三重保险。删除前先备份，超过三十天没用过的记忆只是归档不是删除且能恢复，置顶的记忆永远不会被归档。
 - **详细**：第一，backupAndDelete 在 delete 前把文件与 MEMORY.md 拷到 dream-backup 目录。第二，自动归档用 archive 做软删除移到 archive 目录，memory-restore 可恢复，归档候选判定用 lastUsedAt 而非 createdAt，避免召回关闭时误归档所有从未召回的记忆，pinned 是硬条件排除。第三，dream 整体永不 reject，失败时不更新 dream state 下次可重试，O_EXCL 原子锁加三十分钟过期覆盖，崩溃不永久阻塞。
 
-**Q7：dream 整理时和召回提取并发写怎么办？**
+**Q10：dream 整理时和召回提取并发写怎么办？**
 
 - **详细**：让位机制。createMemoryRecallHandler 在 dreamState running 时跳过 recordUsage 以避免与 dream consolidate 的写写竞态，但召回的读路径 select 与 inject 不让位以服务用户当轮。提取 hook 同理检测 dream 状态。recordUsage 写回后用 utimes 恢复原 mtime，这是关键技巧，否则召回计数会 bump mtime 触发主 Agent 已写则跳过提取的误判。
 
