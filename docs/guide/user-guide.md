@@ -1618,12 +1618,27 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 - **通俗**：按下标切会切断工具调用与工具结果这对搭档，只留结果不留调用，API 直接报错。本项目按轮次切，一整轮要么留要么丢，不会切断搭档。
 - **详细**：splitIntoTurns 在每个 UserMessage 前下刀，tool_use 与 tool_result 对和 memory-recall 合成对天然在轮内。旧 trimToBudget 按下标切且只认 user 与 assistant 文本对、忽略 tool 对，激活会孤立 tool_result，所以 Phase 2 直接移除。摘要用 assistant 角色放首条 user 之后，不能用 system 因 extractSystem 会提顶层乱序，不能放第一条因数组 assistant 开头 API 报错，这个位置让角色交替天然成立且语义准确。
 
-**Q3：被压缩掉的文件全文就丢了？**
+**Q3：三层选择性保留和三层降级分别是什么？每一层为什么这么设计？**
+
+- **通俗**：三层保留是压缩时"留哪些轮"--必保的（报错/写文件）、重要的（模型判）、近期的（最后几轮）；三层降级是 token 超限时"怎么削"--先压缩摘要、再裁系统层、最后 trim 兜底。
+- **详细**：
+  - **三层选择性保留**（Phase 5，压缩时对中间轮次的三层取舍）：
+    1. **must-keep（结构必保）**：含 `is_error` 的 tool_result（工具报错）或含 Write/Edit 调用的轮。**原因**：错误信息对调试关键（模型需知道哪步失败才能修正）；文件写入记录用户工作成果（但全文占空间，压成 file_change 笔记，全文进 git blob 可恢复）。硬规则判定，不依赖 side-call，确定性必保。
+    2. **important（语义选保）**：candidate（普通轮）交 CompressionAssistant 判 important/normal，important 的在剩余预算内逐个贪心保留。**原因**：普通轮的重要性是语义判断，只有 LLM 能判；预算约束下弹性保留（超预算即停，已折进摘要）。
+    3. **recent（时序全保）**：末尾 `keepRecentTurns` 轮（默认 2）不分类直接全保。**原因**：模型推理需近期上下文连贯（用户刚说啥、上一步工具结果），压缩会破坏当前推理能力。
+  - 三层原因：结构（确定性必保，硬规则）/ 语义（弹性选保，LLM 判）/ 时序（无条件全保，保连贯），三维互补，压力下优先砍 important（弹性），must-keep/recent 最后保。
+  - **三层降级**（Phase 2+3，token 超限的多级削减链）：
+    1. **压缩（compress）**：超 `compressThreshold`（0.85×200k）触发 ContextCompressor 压缩（摘要+选择性保留）。**原因**：第一级，用摘要替代旧消息，保留信息但省 token。
+    2. **裁系统层（buildMessages systemBudget）**：压力下 `SystemPrompt.assemble(budget)` 裁可选系统层（tool-use/spec/skills）。**原因**：第二级，压缩后仍紧，裁可选系统层（保留 always 层 role/safety/CLAUDE.md）。
+    3. **trim 兜底**：side-call 失败时降级 trim（丢中间、折 firstUser 进 recent）。**原因**：第三级，最终兜底，compress 失败也不能崩，丢中间保首尾（firstUser 意图 + recent 连贯）。
+  - 三层原因：压缩（摘要续命，信息保真）/ 裁系统层（弹性裁可选，保 always）/ trim（兜底防崩，保首尾），逐级兜底，maxTokens 从"一超即死"降为"压缩后仍超才硬停"。
+
+**Q4：被压缩掉的文件全文就丢了？**
 
 - **通俗**：不丢。本项目把被压缩掉的文件内容存进 git 的对象库，只留一个 hash 指针在对话里，需要时用 hash 取回全文。
 - **详细**：getRecoveryPointer 用 git hash-object 把内容写成 git blob 对象，不产生 commit，返回四十位 hash。同内容同 hash 天然去重，复用 git 对象库而非自建存储。非 git 环境用 sha1 落盘 overflow 目录回退。压缩时把 userText 加 assistant 的 tool_use 加 user 的 tool_result 替换为 userText 加 assistant 的 file_change 笔记，笔记含确定性字段 operation、path、stats、pointer 加模型填的描述符 symbols 与 summary kind。幂等，已是 file_change 笔记的轮不重复压缩。
 
-**Q4：压缩用的 LLM 挂了怎么办？**
+**Q5：压缩用的 LLM 挂了怎么办？**
 
 - **详细**：三层降级。第一层 CompressionAssistant.parse 容错，剥 markdown fence、找首尾花括号，解析失败抛错。第二层 ContextCompressor.compress 的 try catch 降级 trim，只留 recentFlat，把首条 user 折进 recent，method 为 trim。第三层整个调用包在 loop 的 try 内。maxTokens 从一超即死降为压缩后仍超的最终兜底，永不中断主循环。
 
