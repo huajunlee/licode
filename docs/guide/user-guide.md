@@ -282,20 +282,6 @@ error     ✗ Bash  执行 npm run deploy
 
 ### 整体架构
 
-**一句话**：LICode = 终端里的 ReAct Agent。
-
-**主线**：用户输入 -> AgentLoop 反复“调大模型 -> 用工具 -> 再调大模型”直到回复 -> 全程实时刷屏。
-
-**记四个关键点**：
-1. **双通道**：Pipeline 管“这轮怎么走完”（编排），EventBus 管“把过程播给屏幕看”（直播）。一条管流程，一条管界面，互不干扰。
-2. **统一工具**：内置工具、MCP、Skill 都转成同一种 Tool 接进一个工具箱，Agent 不关心工具哪来的--加新工具类型只需写个适配器。
-3. **跨会话记忆**：你说“记住”就当场写 / 日常对话后台自动提取；用的时候按需召回；闲了后台“做梦”整理。下次还记得你是谁、你偏好啥。
-4. **上下文不爆**：对话太长就压缩（按完整轮次切，不弄散工具对），工具输出太大就落盘不塞进对话，压缩掉的原文用 git 存指针能恢复。
-
-**一句比喻**：像个后厨--流水线（Pipeline）管出菜流程，厨师（AgentLoop）边做边往出菜屏（EventBus）按，食材柜（工具箱）统一取用，笔记本（记忆）记顾客口味，案板（上下文）满了就压缩。
-
----
-
 LICode 运行时有**两条独立的事件通道**：Pipeline（请求编排）与 EventBus（流式 UI）。`createAgentLoopMiddleware` 是唯一桥梁——把 eventBus 注入 AgentLoop，所以 pipeline 包住 loop、loop 驱动 eventBus，两通道除此之外不交叉。
 
 ```mermaid
@@ -1513,6 +1499,13 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 - **token 计数断链**：原 tokenCountingMiddleware 监听 llm-response-complete 事件，但 agent-loop 路径根本不发该事件，导致状态栏恒显零，修复为改挂 EventBus 的 agent-loop-complete 与 context-compressed 分支。
 
 #### 深挖问答
+
+**Q0：总体架构怎么一句话讲清？**
+
+- **一句话**：LICode = 终端里的 ReAct Agent。
+- **主线**：用户输入 -> AgentLoop 反复“调大模型 -> 用工具 -> 再调大模型”直到回复 -> 全程实时刷屏。
+- **四点**：① 双通道（Pipeline 编排 / EventBus 直播）；② 统一工具（内置+MCP+Skill 都进一个工具箱）；③ 跨会话记忆（当场写+后台提取+按需召回+做梦整理）；④ 上下文不爆（按轮次压缩+大输出落盘+git 指针恢复）。
+- **比喻**：像个后厨--流水线管流程、厨师边做边按出菜屏、食材柜统一取用、笔记本记口味、案板满了就压缩。
 
 **Q1：为什么要分 Pipeline 和 EventBus 两条通道，合成一条不行吗？**
 
