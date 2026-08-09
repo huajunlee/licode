@@ -1500,17 +1500,29 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 
 #### 深挖问答
 
-**Q0：总体架构怎么一句话讲清？**
+**Q1：总体架构怎么一句话讲清？**
 
 - **一句话**：LICode = 终端里的 ReAct Agent。
 - **主线**：用户输入 -> AgentLoop 反复“调大模型 -> 用工具 -> 再调大模型”直到回复 -> 全程实时刷屏。
 - **四点**：① 双通道（Pipeline 编排 / EventBus 直播）；② 统一工具（内置+MCP+Skill 都进一个工具箱）；③ 跨会话记忆（当场写+后台提取+按需召回+做梦整理）；④ 上下文不爆（按轮次压缩+大输出落盘+git 指针恢复）。
 - **比喻**：像个后厨--流水线管流程、厨师边做边按出菜屏、食材柜统一取用、笔记本记口味、案板满了就压缩。
 
-**Q1：为什么要分 Pipeline 和 EventBus 两条通道，合成一条不行吗？**
+**Q2：为什么要分 Pipeline 和 EventBus 两条通道，合成一条不行吗？**
 
 - **通俗**：一条通道会把跑对话和刷界面混在一起，职责不清。本项目把跑这一轮和把这轮的过程播给界面分成两件事，各走各的，互不干扰。
-- **详细**：Pipeline 是请求编排，洋葱模型中间件链只过 user-message 一个事件，中间件之间用 next 串联，负责预处理、跑循环、后处理。EventBus 是流式 UI 更新，循环内每步 emit token、工具调用、完成等事件，switch 分发到 React setState 重渲染。两条通道不交叉，pipeline 上的中间件看不到 eventBus 事件，eventBus 也看不到 pipeline 的 user-message。唯一桥梁是 createAgentLoopMiddleware 把 eventBus 注入 loop，所以 loop 跑在 pipeline 内部却把事件发到 eventBus。
+- **详细**：Pipeline 是请求编排，洋葱模型中间件链收到 user-message 事件后触发，中间件之间用 next 串联，负责预处理、跑循环、后处理。EventBus 是流式 UI 更新，循环内每步 emit token、工具调用、完成等事件，switch 分发到 React setState 重渲染。两条通道不交叉，pipeline 上的中间件看不到 eventBus 事件，eventBus 也看不到 pipeline 的 user-message。唯一桥梁是 createAgentLoopMiddleware 把 eventBus 注入 loop，所以 loop 跑在 pipeline 内部却把事件发到 eventBus。
+
+**Q3：loop 发给 EventBus 的事件有哪些？**
+
+分四类：① 流式（`llm-token`/`llm-thinking`/`llm-thinking-complete`，大模型吐字/推理时）；② 工具（`tool-use-detected`/`tool-execute-start`/`tool-execute-complete`）；③ 生命周期（`agent-loop-start`/`agent-loop-step`/`agent-loop-complete` 带 usage/`agent-loop-terminated`）；④ 上下文与错误（`context-compressed`/`error`）。
+
+**Q4：loop 收到工具调用时，是先让出 Node 给 EventBus 跑完流式再调工具吗？**
+
+不需要。流式输出（token/thinking）在 `collectResponse` 里就**同步 emit 完**了——它遍历整个 stream，边收 chunk 边同步 emit（来一个 token 刷一个）。stream 收完（含最后的 tool-use 和 stop）才返回。loop 拿到 tool-use 时，文本已经输出完，直接 emit 工具事件 + `executeParallel` 执行工具。EventBus 的 emit 是同步的，不存在“让出给它跑”；“让出 Node”是 `for await` 异步收 chunk 用的，不是让出给 EventBus。
+
+**Q5：hook 和 loop 都在 pipeline 上运行，它们继承同一个类吗？本质上都是 middleware？**
+
+都是 `Middleware` 类型（函数 `(event, next) => Promise<void>`），**不继承同一个类**——它们是函数，不是类。本质上都是 pipeline 中间件：`createAgentLoopMiddleware` 和 `hookMiddleware` 都返回 `Middleware`，`pipeline.use` 挂上去。区别：loop 中间件跑 `AgentLoop`（重活：调模型+工具），hook 中间件调 `HookManager.onEvent`（触发 shell/function hook，轻量）。
 
 ### 亮点 2 名词解释与深挖问答
 
@@ -1526,37 +1538,37 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 
 #### 深挖问答
 
-**Q2：为什么不把相关记忆直接拼进 system prompt 或用户消息，而要用合成 tool_call？**
+**Q1：为什么不把相关记忆直接拼进 system prompt 或用户消息，而要用合成 tool_call？**
 
 - **通俗**：就像你问朋友问题，朋友想起某件事，你不能把想起的过程塞进朋友嘴里改他说的话，也不能偷偷改他的世界观。本项目让助手做个查记忆的动作，把查到的内容作为工具结果放在你的问题后面，助手从那里接着回答，既不改你的原话也不动系统设定。
 - **详细**：三个原因。第一，不改 system prompt，system prompt 是分层组装的，每轮往里塞正文会破坏分层裁剪逻辑且 token 累积。第二，不改用户原文，保留用户消息原样便于调试和恢复。第三，消息角色严格交替，Anthropic API 要求 user 与 assistant 严格交替，合成 assistant 的 tool_use 加 user 的 tool_result 对天然合法，所有 provider 兼容。附带好处是 TUI 把它渲染成 memory_recall 工具卡片，召回过程透明可见。
 
-**Q3：每轮都注入记忆，token 不会越积越多吗？**
+**Q2：每轮都注入记忆，token 不会越积越多吗？**
 
 - **通俗**：不会。每轮开始前本项目先把上一轮查记忆的那对消息剪掉，再决定这轮要不要查新的，历史里任意时刻最多只有一对召回消息。
 - **详细**：onTurnStart 回调分四步，第一步刷新索引层，第二步 pruneRecallMessages 剪除上一轮的合成对，按 memory_recall tool 名与 tool_use_id 定位，能处理 restored session 里历史中间的对，第三步 side-query 选不超过五条，第四步注入新对，所以 token 不累积且每轮开销恒定。
 
-**Q4：side-query 召回失败或超时了怎么办？会不会卡住对话？**
+**Q3：side-query 召回失败或超时了怎么办？会不会卡住对话？**
 
 - **通俗**：不会。查记忆是锦上添花，查不到就当没查，对话照常进行，只是这轮不注入记忆。
 - **详细**：三层 best-effort 永不抛异常。第一层 MemoryRecall.select 整体 try catch，LLM 错误或超时十秒用 Promise.race 计时器则返回空数组。第二层索引为空则根本不发起 LLM 调用，零成本。第三层 createMemoryRecallHandler 最外层 try catch，任何异常都不阻断 loop。降级后本轮只剪除不注入，退回仅有索引模式。LICODE_MEMORY_RECALL 设为 off 可整体关闭。
 
-**Q5：用户改口了，记忆会矛盾并存吗？**
+**Q4：用户改口了，记忆会矛盾并存吗？**
 
 - **通俗**：不会。提取时本项目把已有的记忆全文都给 LLM 看，LLM 发现不喜欢了和旧的喜欢冲突，就直接把旧文件整体改写成最新的，不会两条并存。
 - **详细**：这是 Phase 1 生产层的关键设计，提取 prompt 携带现有记忆的正文而非仅索引，LLM 输出 update 时 MemoryStore.save 整体替换正文，保留 createdAt 刷新 updatedAt。如果是补充而非冲突用 append 做段落级去重合并。create 在目标已存在时防御性降级为 append，绝不丢旧内容。
 
-**Q6：为什么要做梦整理记忆，不能实时整理吗？**
+**Q5：为什么要做梦整理记忆，不能实时整理吗？**
 
 - **通俗**：实时整理太贵也太干扰，你每说一句它就翻一遍整个记忆库，既慢又可能在你对话时改东西。所以模仿人脑，白天记晚上整理，且只在攒够了新材料时才做。
 - **详细**：shouldDream 是零 LLM 门，距上次整理不少于二十四小时且自上次起不少于五个新会话才触发。整理是 fire-and-forget，hook 立即返回不 await，用户从不被阻塞。四阶段中 Orient 与 Consolidate 用 LLM（Prune 在索引超 200 行或 25KB 时也用 LLM），Gather 是纯 grep 无 LLM 成本。
 
-**Q7：dream 会误删我的记忆吗？怎么保证安全？**
+**Q6：dream 会误删我的记忆吗？怎么保证安全？**
 
 - **通俗**：三重保险。删除前先备份，超过三十天没用过的记忆只是归档不是删除且能恢复，置顶的记忆永远不会被归档。
 - **详细**：第一，backupAndDelete 在 delete 前把文件与 MEMORY.md 拷到 dream-backup 目录。第二，自动归档用 archive 做软删除移到 archive 目录，memory-restore 可恢复，归档候选判定用 lastUsedAt 而非 createdAt，避免召回关闭时误归档所有从未召回的记忆，pinned 是硬条件排除。第三，dream 整体永不 reject，失败时不更新 dream state 下次可重试，O_EXCL 原子锁加三十分钟过期覆盖，崩溃不永久阻塞。
 
-**Q8：dream 整理时和召回提取并发写怎么办？**
+**Q7：dream 整理时和召回提取并发写怎么办？**
 
 - **详细**：让位机制。createMemoryRecallHandler 在 dreamState running 时跳过 recordUsage 以避免与 dream consolidate 的写写竞态，但召回的读路径 select 与 inject 不让位以服务用户当轮。提取 hook 同理检测 dream 状态。recordUsage 写回后用 utimes 恢复原 mtime，这是关键技巧，否则召回计数会 bump mtime 触发主 Agent 已写则跳过提取的误判。
 
@@ -1573,22 +1585,22 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 
 #### 深挖问答
 
-**Q9：为什么不用 tiktoken 之类的真 tokenizer 算 token？**
+**Q1：为什么不用 tiktoken 之类的真 tokenizer 算 token？**
 
 - **通俗**：tiktoken 是给 OpenAI 模型用的，对 Claude 与 DeepSeek 只是近似，而且引入它就多了一个依赖。本项目先粗估，再用模型真实返回的 token 数不断校准，越用越准且不绑定后端。
 - **详细**：TokenCounter 用 char-class 估算，CJK、字母数字、符号、空白四类字符（空白复用字母数字权重，实为三种权重：CJK=1.5、字母数字/空白=4、符号=2），加内嵌 TokenCalibrator 的 EMA 在线学习 ratio，首次用 real 除 base，后续用零点七乘旧 ratio 加零点三乘新样本，clamp 在零点五到四之间。AgentLoop 每轮把真实 usage input tokens 喂回 observeUsage。Phase 2 把 base 升级为含 system 与 tools，ratio 退化为约一的纯修正系数，把缺 system 与 tools 从靠乘数硬吸收改成显式纳入 base，零新依赖且后端无关。
 
-**Q10：压缩时怎么切消息？按下标切到 maxTokens 的一半不行吗？**
+**Q2：压缩时怎么切消息？按下标切到 maxTokens 的一半不行吗？**
 
 - **通俗**：按下标切会切断工具调用与工具结果这对搭档，只留结果不留调用，API 直接报错。本项目按轮次切，一整轮要么留要么丢，不会切断搭档。
 - **详细**：splitIntoTurns 在每个 UserMessage 前下刀，tool_use 与 tool_result 对和 memory-recall 合成对天然在轮内。旧 trimToBudget 按下标切且只认 user 与 assistant 文本对、忽略 tool 对，激活会孤立 tool_result，所以 Phase 2 直接移除。摘要用 assistant 角色放首条 user 之后，不能用 system 因 extractSystem 会提顶层乱序，不能放第一条因数组 assistant 开头 API 报错，这个位置让角色交替天然成立且语义准确。
 
-**Q11：被压缩掉的文件全文就丢了？**
+**Q3：被压缩掉的文件全文就丢了？**
 
 - **通俗**：不丢。本项目把被压缩掉的文件内容存进 git 的对象库，只留一个 hash 指针在对话里，需要时用 hash 取回全文。
 - **详细**：getRecoveryPointer 用 git hash-object 把内容写成 git blob 对象，不产生 commit，返回四十位 hash。同内容同 hash 天然去重，复用 git 对象库而非自建存储。非 git 环境用 sha1 落盘 overflow 目录回退。压缩时把 userText 加 assistant 的 tool_use 加 user 的 tool_result 替换为 userText 加 assistant 的 file_change 笔记，笔记含确定性字段 operation、path、stats、pointer 加模型填的描述符 symbols 与 summary kind。幂等，已是 file_change 笔记的轮不重复压缩。
 
-**Q12：压缩用的 LLM 挂了怎么办？**
+**Q4：压缩用的 LLM 挂了怎么办？**
 
 - **详细**：三层降级。第一层 CompressionAssistant.parse 容错，剥 markdown fence、找首尾花括号，解析失败抛错。第二层 ContextCompressor.compress 的 try catch 降级 trim，只留 recentFlat，把首条 user 折进 recent，method 为 trim。第三层整个调用包在 loop 的 try 内。maxTokens 从一超即死降为压缩后仍超的最终兜底，永不中断主循环。
 
@@ -1604,7 +1616,7 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 
 #### 深挖问答
 
-**Q13：futureMemory 候选为什么要 importance 和 promotability 两个维度？一个不够吗？**
+**Q1：futureMemory 候选为什么要 importance 和 promotability 两个维度？一个不够吗？**
 
 - **通俗**：importance 是这事重不重要，promotability 是这事适不适合直接写成记忆。比如计划拿大厂 Offer 既重要又适合存可自动入库，对某技术有了了解重要但不适合直接存因太泛得人审整理，两个维度分开才能正确分流。
 - **详细**：autoPromoteEntry 的自动门是类型属于偏好决定或目标、重要性为高、可提升性不为低。可提升性为低的候选即使重要也走 curation 人审，因为直接写成记忆质量差需合并。这把高置信度自动入库与低置信度人审分流，避免自动提升产生低质量记忆噪声。
@@ -1619,12 +1631,12 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 
 #### 深挖问答
 
-**Q14：decide 的 B 与 C framing 是什么？为什么不直接给建议？**
+**Q1：decide 的 B 与 C framing 是什么？为什么不直接给建议？**
 
 - **通俗**：B 式是我给你几个选项加利弊加我倾向哪个，C 式是信息不够我把已知摆出来你自己定，总比不懂装懂瞎建议强。
 - **详细**：B 式默认列两到三条可选路径加各自利弊风险加倾向建议，基于用户历史与处境。C 式触发条件为证据不足、互相矛盾、超出可判断范围，不硬编模糊答案，把事实与各方立场摆清，明说信息不足，交还判断权。这是安全阀，避免 AI 在信息不足时编造貌似有理的建议。截断时只截上下文 bulk，framing 始终保留在末尾以保证 B 与 C 指引不丢。
 
-**Q15：decide_save 为什么直写 journal 而不进 memory？**
+**Q2：decide_save 为什么直写 journal 而不进 memory？**
 
 - **详细**：决策是发生在某时的情境事件，不是永久事实。放日记它能被 journal_recall 按话题召回、被未来 decide 汇聚为历史决定，放 memory 会污染永久记忆库因每次决策都成一条记忆很快膨胀。gating 也是两步，decide 给分析后必须问是否记下来，用户明确同意才调 decide_save，绝不主动保存。
 
@@ -1637,7 +1649,7 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 
 #### 深挖问答
 
-**Q16：这个项目的分层和可测试性怎么保证？**
+**Q1：这个项目的分层和可测试性怎么保证？**
 
 - **详细**：核心逻辑抽成纯函数，如 gatherDecisionContext、buildDecisionEntry、deriveMemory、pruneRecallMessages、buildRecallPair、splitIntoTurns、classifyMiddleTurns，副作用如文件 IO 与 LLM 调用通过依赖注入，generate 回调与 now 函数。这样纯逻辑可单测不依赖文件网络，集成层只做接线。pnpm monorepo 分 core、cli、spec-kit 三包，core 不依赖 cli。用 omh.config.yaml 定义的严格 TDD 工作流构建自身，每个行为变更先写测试看红、最小改动转绿、重构保持全绿、交付前 test 与 build 必过。
 
