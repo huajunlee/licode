@@ -1585,12 +1585,16 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 - **通俗**：审记忆 -> 找证据 -> 整理 -> 修剪。先让模型审一遍现有记忆找疑点，再 grep 历史会话找证据，基于证据出增删改操作，最后重建索引。
 - **详细**：① **Orient（LLM）**--审现有记忆（索引+全文），输出 suspicions（漂移/重复/失效/相对日期），每条给 2-5 个搜索关键词。② **Gather（无 LLM）**--grep 近期会话（上次整理后的增量）新消息找证据片段，取匹配消息 ±1 上下文、截断 500 字符，每 suspicion ≤5 条。③ **Consolidate（LLM）**--基于证据出 create/update/append/delete ops，之后根据ops对相应记忆文件进行编辑；自动归档 >30d 未用且非 pinned 的记忆（软删除可恢复）；delete 前备份到 .dream-backup/。④ **Prune**--重建索引；索引 >200 行或 >25KB 则 LLM 缩短 description 至 ≤150 字符。
 
-**Q10：dream 会误删我的记忆吗？怎么保证安全？**
+**Q10：如何判断证据是否充足？有没有硬性条件？**
+
+- **详细**：做梦 Gather 阶段**无硬性条件，有多少算多少**。每条 suspicion 最多收集 5 条 snippet（关键词命中的消息 ±1 上下文，截断 500 字符），仅扫上次整理后的新消息。无证据时 Consolidate 仍调 LLM（`eviText` 填"(无证据)"），LLM 可基于现有记忆出 ops；归档是规则驱动（>30d 未用且非 pinned），与证据/LLM 无关。prompt 仅软约束"只使用证据中的内容，不要臆测"，非硬 gate。
+
+**Q11：dream 会误删我的记忆吗？怎么保证安全？**
 
 - **通俗**：三重保险。删除前先备份，超过三十天没用过的记忆只是归档不是删除且能恢复，置顶的记忆永远不会被归档。
 - **详细**：第一，backupAndDelete 在 delete 前把文件与 MEMORY.md 拷到 dream-backup 目录。第二，自动归档用 archive 做软删除移到 archive 目录，memory-restore 可恢复，归档候选判定用 lastUsedAt 而非 createdAt，避免召回关闭时误归档所有从未召回的记忆，pinned 是硬条件排除。第三，dream 整体永不 reject，失败时不更新 dream state 下次可重试，O_EXCL 原子锁加三十分钟过期覆盖，崩溃不永久阻塞。
 
-**Q11：dream 整理时和召回提取并发写怎么办？**
+**Q12：dream 整理时和召回提取并发写怎么办？**
 
 - **详细**：召回注入时会调 recordUsage 写记忆文件的 usageCount/lastUsedAt（用量追踪，这是召回唯一的写，其余 select/inject 都是读）。让位机制：createMemoryRecallHandler 在 dreamState running 时跳过 recordUsage 以避免与 dream consolidate 的写写竞态，但召回的读路径 select 与 inject 不让位以服务用户当轮。提取 hook 同理检测 dream 状态。recordUsage 写回后用 utimes 恢复原 mtime，这是关键技巧，否则召回计数会 bump mtime 触发主 Agent 已写则跳过提取的误判。
 
@@ -1687,13 +1691,11 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 
 - **详细**：决策是发生在某时的情境事件，不是永久事实。放日记它能被 journal_recall 按话题召回、被未来 decide 汇聚为历史决定，放 memory 会污染永久记忆库因每次决策都成一条记忆很快膨胀。gating 也是两步，decide 给分析后必须问是否记下来，用户明确同意才调 decide_save，绝不主动保存。
 
-**Q3：如何判断证据是否充足？有没有硬性条件？**
-
-- **详细**：做梦 Gather 阶段**无硬性条件，有多少算多少**。每条 suspicion 最多收集 5 条 snippet（关键词命中的消息 ±1 上下文，截断 500 字符），仅扫上次整理后的新消息。无证据时 Consolidate 仍调 LLM（`eviText` 填"(无证据)"），LLM 可基于现有记忆出 ops；归档是规则驱动（>30d 未用且非 pinned），与证据/LLM 无关。prompt 仅软约束"只使用证据中的内容，不要臆测"，非硬 gate。
-
-**Q4：什么是两步确认机制？**
+**Q3：什么是两步确认机制？**
 
 - **详细**：decide_save 的两步 gating：decide 给出分析后**必须询问**"要不要记下来"，用户**明确同意**才调 decide_save 落盘，用户拒绝或不回应则不保存。这是**纯 prompt 强制**（非代码）：decide/decide_plan 的 prompt 里写明"仅在用户明确同意后调用 decide_save"，但 decide_save 的 execute 无条件写日记，无代码级确认校验（没有 confirm token 或授权标志）。所以两步确认靠 prompt 约束 LLM 行为，不靠代码强制。
+
+Q：
 
 ### 亮点 6 名词解释与深挖问答
 
