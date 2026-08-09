@@ -1641,7 +1641,7 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 **Q5：被压缩掉的文件全文就丢了？**
 
 - **通俗**：不丢。本项目把被压缩掉的文件内容存进 git 的对象库，只留一个 hash 指针在对话里，需要时用 hash 取回全文。
-- **详细**：getRecoveryPointer 用 git hash-object 把内容写成 git blob 对象，不产生 commit，返回四十位 hash。同内容同 hash 天然去重，复用 git 对象库而非自建存储。非 git 环境用 sha1 落盘 overflow 目录回退。压缩时把 userText 加 assistant 的 tool_use 加 user 的 tool_result 替换为 userText 加 assistant 的 file_change 笔记，笔记含确定性字段 operation、path、stats、pointer 加模型填的描述符 symbols 与 summary kind。幂等，已是 file_change 笔记的轮不重复压缩。
+- **详细**：**注意：git blob 指针只针对 must-keep-write（含 Write/Edit）的轮**，不是所有被压缩的轮。must-keep-write 的文件全文（Write 的 content / Edit 前磁盘内容）用 getRecoveryPointer 写成 git blob 对象，不产生 commit，返回四十位 hash 作指针，需要时用 hash 取回全文。同内容同 hash 天然去重，复用 git 对象库而非自建存储。非 git 环境用 sha1 落盘 overflow 目录回退。压缩时把 userText + assistant(tool_use) + user(tool_result) 替换为 userText + assistant(file_change 笔记)，笔记含确定性字段 operation/path/stats/pointer + 模型填的 symbols/summary kind。**普通轮（normal/fold）折进摘要，不保留全文，不用 git blob**。幂等，已是 file_change 笔记的轮不重复压缩。
 
 **Q6：压缩用的 LLM 挂了怎么办？**
 
