@@ -1567,7 +1567,7 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 
 **Q6：新增的记忆如何动态进上下文？MEMORY.md 怎么插入 system prompt？**
 
-- **通俗**：每轮对话开始时重读 MEMORY.md，有新内容就更新 system prompt 里的记忆层。MEMORY.md 作为系统提示词的一个层（可裁剪）插入，内容是索引（每条一行），不是正文。
+- **通俗**：每轮对话开始时以IO方式重读 MEMORY.md，有新内容就更新 system prompt 里的记忆层。MEMORY.md 作为系统提示词的一个层（可裁剪）插入，内容是索引（每条一行），不是正文。
 - **详细**：启动时 `MemoryLoader.loadInto` 把 MEMORY.md 索引作为 `priority: 5`、`always: false` 的 memory 层注入 system prompt。每轮 `onTurnStart`（`createMemoryRecallHandler`）重读 `loadIndex()`，若 `indexContent !== lastIndexContent` 则 `addLayer` 更新。本会话新写的记忆（Write 直写 / extractor 提取后 `rebuildIndex`）下轮自动进索引。关键：插入的是**索引**（让模型知道有哪些记忆），正文通过 side-query / memory_fetch 召回时注入（合成 tool_call），不进 system prompt。
 
 **Q7：onTurnStart 重读 MEMORY.md 怎么读？需要调模型吗？**
@@ -1578,14 +1578,19 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 **Q8：为什么要做梦整理记忆，不能实时整理吗？**
 
 - **通俗**：实时整理太贵也太干扰，你每说一句它就翻一遍整个记忆库，既慢又可能在你对话时改东西。所以模仿人脑，白天记晚上整理，且只在攒够了新材料时才做。
-- **详细**：shouldDream 是零 LLM 门，距上次整理不少于二十四小时且自上次起不少于五个新会话才触发。整理是 fire-and-forget，hook 立即返回不 await，用户从不被阻塞。四阶段中 Orient 与 Consolidate 用 LLM（Prune 在索引超 200 行或 25KB 时也用 LLM），Gather 是纯 grep 无 LLM 成本。
+- **详细**：shouldDream 是零 LLM 门，距上次整理不少于二十四小时且自上次起不少于五个新会话才触发。整理是 fire-and-forget，它是一个非阻塞的hook 立即返回不 await，用户从不被阻塞。四阶段中 Orient 与 Consolidate 用 LLM（Prune 在索引超 200 行或 25KB 时也用 LLM），Gather 是纯 grep 无 LLM 成本。
 
-**Q9：dream 会误删我的记忆吗？怎么保证安全？**
+**Q9：记忆整理（做梦）的四个阶段是啥？**
+
+- **通俗**：审记忆 -> 找证据 -> 整理 -> 修剪。先让模型审一遍现有记忆找疑点，再 grep 历史会话找证据，基于证据出增删改操作，最后重建索引。
+- **详细**：① **Orient（LLM）**--审现有记忆（索引+全文），输出 suspicions（漂移/重复/失效/相对日期），每条给 2-5 个搜索关键词。② **Gather（无 LLM）**--grep 近期会话（上次整理后的增量）新消息找证据片段，取匹配消息 ±1 上下文、截断 500 字符，每 suspicion ≤5 条。③ **Consolidate（LLM）**--基于证据出 create/update/append/delete ops；自动归档 >30d 未用且非 pinned 的记忆（软删除可恢复）；delete 前备份到 .dream-backup/。④ **Prune**--重建索引；索引 >200 行或 >25KB 则 LLM 缩短 description 至 ≤150 字符。
+
+**Q10：dream 会误删我的记忆吗？怎么保证安全？**
 
 - **通俗**：三重保险。删除前先备份，超过三十天没用过的记忆只是归档不是删除且能恢复，置顶的记忆永远不会被归档。
 - **详细**：第一，backupAndDelete 在 delete 前把文件与 MEMORY.md 拷到 dream-backup 目录。第二，自动归档用 archive 做软删除移到 archive 目录，memory-restore 可恢复，归档候选判定用 lastUsedAt 而非 createdAt，避免召回关闭时误归档所有从未召回的记忆，pinned 是硬条件排除。第三，dream 整体永不 reject，失败时不更新 dream state 下次可重试，O_EXCL 原子锁加三十分钟过期覆盖，崩溃不永久阻塞。
 
-**Q10：dream 整理时和召回提取并发写怎么办？**
+**Q11：dream 整理时和召回提取并发写怎么办？**
 
 - **详细**：让位机制。createMemoryRecallHandler 在 dreamState running 时跳过 recordUsage 以避免与 dream consolidate 的写写竞态，但召回的读路径 select 与 inject 不让位以服务用户当轮。提取 hook 同理检测 dream 状态。recordUsage 写回后用 utimes 恢复原 mtime，这是关键技巧，否则召回计数会 bump mtime 触发主 Agent 已写则跳过提取的误判。
 
