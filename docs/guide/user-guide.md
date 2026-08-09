@@ -1583,7 +1583,7 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 **Q9：记忆整理（做梦）的四个阶段是啥？**
 
 - **通俗**：审记忆 -> 找证据 -> 整理 -> 修剪。先让模型审一遍现有记忆找疑点，再 grep 历史会话找证据，基于证据出增删改操作，最后重建索引。
-- **详细**：① **Orient（LLM）**--审现有记忆（索引+全文），输出 suspicions（漂移/重复/失效/相对日期），每条给 2-5 个搜索关键词。② **Gather（无 LLM）**--grep 近期会话（上次整理后的增量）新消息找证据片段，取匹配消息 ±1 上下文、截断 500 字符，每 suspicion ≤5 条。③ **Consolidate（LLM）**--基于证据出 create/update/append/delete ops；自动归档 >30d 未用且非 pinned 的记忆（软删除可恢复）；delete 前备份到 .dream-backup/。④ **Prune**--重建索引；索引 >200 行或 >25KB 则 LLM 缩短 description 至 ≤150 字符。
+- **详细**：① **Orient（LLM）**--审现有记忆（索引+全文），输出 suspicions（漂移/重复/失效/相对日期），每条给 2-5 个搜索关键词。② **Gather（无 LLM）**--grep 近期会话（上次整理后的增量）新消息找证据片段，取匹配消息 ±1 上下文、截断 500 字符，每 suspicion ≤5 条。③ **Consolidate（LLM）**--基于证据出 create/update/append/delete ops，之后根据ops对相应记忆文件进行编辑；自动归档 >30d 未用且非 pinned 的记忆（软删除可恢复）；delete 前备份到 .dream-backup/。④ **Prune**--重建索引；索引 >200 行或 >25KB 则 LLM 缩短 description 至 ≤150 字符。
 
 **Q10：dream 会误删我的记忆吗？怎么保证安全？**
 
@@ -1592,13 +1592,14 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 
 **Q11：dream 整理时和召回提取并发写怎么办？**
 
-- **详细**：让位机制。createMemoryRecallHandler 在 dreamState running 时跳过 recordUsage 以避免与 dream consolidate 的写写竞态，但召回的读路径 select 与 inject 不让位以服务用户当轮。提取 hook 同理检测 dream 状态。recordUsage 写回后用 utimes 恢复原 mtime，这是关键技巧，否则召回计数会 bump mtime 触发主 Agent 已写则跳过提取的误判。
+- **详细**：召回注入时会调 recordUsage 写记忆文件的 usageCount/lastUsedAt（用量追踪，这是召回唯一的写，其余 select/inject 都是读）。让位机制：createMemoryRecallHandler 在 dreamState running 时跳过 recordUsage 以避免与 dream consolidate 的写写竞态，但召回的读路径 select 与 inject 不让位以服务用户当轮。提取 hook 同理检测 dream 状态。recordUsage 写回后用 utimes 恢复原 mtime，这是关键技巧，否则召回计数会 bump mtime 触发主 Agent 已写则跳过提取的误判。
 
 ### 亮点 3 名词解释与深挖问答
 
 #### 名词解释
 
 - **校准式 token 计数**：不引入 tiktoken，用 char-class 启发式按字符类别估算 token，再内嵌 TokenCalibrator 用 EMA 在线学习一个校正比例，每轮用模型真实返回的 input tokens 校准，越用越准且后端无关。
+- **巨量工具输出不进会话**：工具执行后输出 >64KB 时不把全文塞进对话（会爆上下文），而是落盘到 `.licode/overflow/` + 返回指针 + 前 50 行预览（4KB）+ 行/字节计数 + Read 分页提示。模型需要全文时用 Read offset/limit 翻阅。这是 Phase 4 的输入侧预防，独立于压缩链（三层降级/选择性保留），事前拦截大输出而非事后压缩。
 - **按轮次边界切分压缩**：压缩时按 UserMessage 边界把消息切成一轮一轮，tool_use 与 tool_result 对天然在轮内不被切断，从结构上规避孤立 tool_result 导致的 API 报错。
 - **git blob 恢复指针**：被压缩掉的 write 全文用 git hash-object 写成 git 的 blob 对象，不产生 commit，返回四十位 hash 作指针，需要时用 hash 取回全文，同内容同 hash 天然去重。
 - **滚动演化摘要**：压缩时不从零重摘，把旧摘要显式传给合并调用，生成更新后的摘要，important 轮在摘要里简短引用，被预算裁掉后仍有退路。
