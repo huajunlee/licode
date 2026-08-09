@@ -1165,7 +1165,18 @@ futureMemory 候选
            例："对 Loop Engineering 有了更深入了解"(preference,low) -> 候选待整理
 ```
 
-`CuratedIndex`（`.licode/journal/.curated.json`）是三层提升的去重协调机制。键格式 `entryId#候选序号`（`#c0` 为 futureMemory 候选、`#p0` 为 people 候选，如 `msaedeuy#c0`），唯一标识某条日记的某个候选。`load()` 返回已处理键集合，`mark(keys)` 追加写回 `{processed: [...].sort()}`。三层处理候选后都 mark：auto-promote（高 promotability）、auto-file（specific 专有名）、curate（人审 apply）。/diary-curate 收集人审候选时 `load()` + `has(key)` 跳过已 mark 的--所以同一候选不会被两层处理，也不会被人审重复列出。
+**人审条目如何来**（完整流程）：
+1. **日记保存后自动分流**（hooks.ts:670/675）：`autoPromoteEntry` 遍历 futureMemory，对满足门（type∈{preference,decision,goal}+importance:high+promotability≠low）的候选直接写记忆 + mark `#c` 键，其余跳过不 mark；`autoFileEntry` 遍历 people，对 `specific=true` 的专有名写人物档案 + mark `#p` 键，模糊人物（specific=false）跳过不 mark。
+2. **/diary-curate 收集人审候选**（gatherPending/gatherPendingPeople）：遍历所有日记的所有候选，对每个构造键 `entryId#c序号`/`entryId#p序号`，`CuratedIndex.load()` + `has(key)` 查--已 mark（被 auto 处理过）的跳过；未 mark 的进入人审：futureMemory 需 importance:high + type∈{preference,decision,goal,other}（即 auto-promote 跳过的 promotability:low 或 other 类型），people 为 specific=false 的模糊人物。
+3. **生成提案**：`MemoryCuration.curate` 把候选合并成记忆提案，`ProfileCuration.resolveAmbiguous` 把模糊人物判成“并别名”或“新档案”提案，组成 CurationSession。
+4. **人审 apply**：用户 `/diary-curate apply` 选择落盘，mark 所有提案 sourceKeys（含未选，防 nag）。
+
+**CuratedIndex 怎么去重**（`.licode/journal/.curated.json`）：
+
+- **键的构造**：每个候选用 `entryId#候选序号` 唯一标识--`entryId` 是日记 id（如 `msaedeuy`，与文件名解耦），`#c序号` 标 futureMemory 候选（`#c0`、`#c1`...）、`#p序号` 标 people 候选（`#p0`、`#p1`...）。即 `msaedeuy#c0` = 日记 msaedeuy 的第 0 个 futureMemory 候选，`msaedeuy#p1` = 该日记的第 1 个人物。键在候选生成时由数组下标确定，不随文件改名/内容变化而变。
+- **写（mark）**：三层处理候选后都把键写入 `.curated.json`--auto-promote 处理 `#c`、auto-file 处理 `#p`、curate apply 处理提案 sourceKeys（`#c`/`#p`）。`mark(keys)` 追加到 `{processed: [...].sort()}`。
+- **查（has）**：/diary-curate 收集人审候选时，`load()` 读回已 mark 集合，对每个候选 `has(key)` 查--已 mark（被任一通道处理过）的跳过，未 mark 的进人审。
+- **跨三层协调**：无论哪个通道处理了候选，都 mark 同一个键；下次任何通道遇到同候选，`has` 查到已 mark 就跳过。所以同一候选不会被两层处理，也不会被人审重复列出。
 
 #### 涉及文件
 
@@ -1320,7 +1331,7 @@ MemoryCuration.curate（side-model）
 
 `ProfileCuration` 同理处理人物候选（合并同人异名、提炼特质）。`CurationSession` 维护一次整理会话的状态（候选 -> 提案 -> 应用），`handleCurationInput` 分发命令。
 
-**人审候选来源**：`/diary-curate` 收集未被自动处理的候选--futureMemory 中 `promotability:low` 或不满足自动提升门（type∈{preference,decision,goal}+importance:high+promotability≠low）的、people 中 `specific=false` 的模糊人物；收集时 `CuratedIndex.load()` + `has(key)` 跳过已 mark 的（自动提升/归档已处理的不再列出）。`MemoryCuration.curate` 把这批候选合并成少数连贯记忆提案，`ProfileCuration.resolveAmbiguous` 把模糊人物判成“并别名”或“新档案”提案。
+**人审候选来源**：详见 §20“人审条目如何来”--auto-promote/auto-file 跳过的低 promotability 候选与 specific=false 模糊人物，经 `CuratedIndex.has(key)` 去重后进入 `/diary-curate`，由 `MemoryCuration.curate` 合并成记忆提案、`ProfileCuration.resolveAmbiguous` 判成人物提案。
 
 **CurationSession 三种提案**：① 新建记忆（MemoryCreateProposal）-> `memoryStore.save(create)`；② 并别名（ProfileMergeProposal）-> 现有档案加 aliases/interactions/traits/relationshipState；③ 新档案（ProfileNewProposal）-> `profileStore.save(create)`。`apply(selection)` 时选中的落盘，**所有提案（含未选）的 sourceKeys 都 mark** 到 CuratedIndex--避免下次重复提示（no nag）。
 
