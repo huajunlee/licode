@@ -1394,6 +1394,22 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 
 **未达标：做梦 Prune 描述缩短**（dream.ts:493）--无显式角色，规则仅"≤150 字符、保留关键信息"，最简略。建议补角色设定与保留优先级规则。
 
+**各 side-call 的片段选择**（按任务需要选，不统一；完整历史在 ConversationManager，side-call 不共享）：
+
+| side-call | 选的片段 | 来源 |
+|-----------|---------|------|
+| extractor（记忆提取） | sinceMs 后增量新消息 + 现有记忆全文 | selectMessages(extractor.ts:220) + listAll(:154) |
+| recall（召回） | 索引 + 当前用户消息 + 已加载记忆 | loadIndex + last user + loaded registry |
+| 压缩 | 待压缩中间轮次文本 + 现有摘要 | summarizer.ts:79 |
+| 做梦 Orient | 索引 + 全部记忆全文 | loadIndex + listAll(dream.ts:157) |
+| 做梦 Consolidate | 索引 + 记忆全文 + suspicions + 证据 + 归档候选 | dream.ts:318 |
+| decide_reflect | 计划（plan） | decide-reflect.ts:20 |
+| 日记抽取 | 日记原文（transcript） | diary/extractor.ts:47 |
+| 日记整理 | futureMemory 候选 | curation/memory-curation.ts:24 |
+| 人物归一 | 模糊人 + 现有档案 | people/curation/profile-curation.ts:24 |
+
+每个 side-call 的 `buildPrompt` 只选任务相关片段塞进 prompt，不传完整历史--省 token、聚焦、无状态。
+
 ## 亮点功能与简历项目（STAR 法则）
 
 > **项目名称：融合个人记忆与决策智能的第二大脑 Agent（代号 LICode）**
