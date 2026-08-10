@@ -1612,6 +1612,7 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 
 **Q12：dream 整理时和召回提取并发写怎么办？**
 
+- **通俗**：dream 整理在改记忆文件，召回也在写用量（recordUsage），两边同时写同一文件会打架。所以 dream 跑时，召回的“写用量”让一让（跳过），但“读记忆”不让（用户当轮要用）。写完用量后偷偷把文件修改时间改回原样，免得提取 hook 误以为主 Agent 改过文件而跳过提取。
 - **详细**：召回注入时会调 recordUsage 写记忆文件的 usageCount/lastUsedAt（用量追踪，这是召回唯一的写，其余 select/inject 都是读）。让位机制：createMemoryRecallHandler 在 dreamState running 时跳过 recordUsage 以避免与 dream consolidate 的写写竞态，但召回的读路径 select 与 inject 不让位以服务用户当轮。提取 hook 同理检测 dream 状态。recordUsage 写回后用 utimes 恢复原 mtime，这是关键技巧，否则召回计数会 bump mtime 触发主 Agent 已写则跳过提取的误判。
 
 ### 亮点 3 名词解释与深挖问答
