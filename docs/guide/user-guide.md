@@ -2299,6 +2299,21 @@ git stash                   # 暂存所有改动
 3. 复杂任务拆分成多个短会话
 4. 使用 `CLAUDE.md` 将项目约定写清楚，避免 LICode 反复询问
 
+**Q: 为什么 DeepSeek 控制台的缓存命中率只有 50% 左右？**
+
+先说结论：这不是异常，而是当前架构的必然结果。DeepSeek 的上下文缓存是**纯前缀匹配**——从请求的第一个 token 开始和历史请求比对，遇到第一处差异，差异点之后的 token 全部算 miss。所以缓存友好度取决于「重复内容是否都在开头」，而 LICode 恰好把高频变动的内容放在了前缀最要害的位置，并且每回合都伴随天然无法命中的 side-call。
+
+具体有四个叠加因素（按影响排序）：
+
+1. **记忆索引层搅动 system prompt 前缀**。记忆索引作为 system prompt 的一层（priority 5，位于中段），recall handler 每回合检查、内容一变就整体替换（`packages/core/src/memory/recall.ts:342-351`）。而提取钩子在每个 agent loop 结束后都可能写入记忆并重建索引（`packages/core/src/memory/hook.ts:71-85`），索引一变，前缀匹配在 system 内部就断了——后面整段对话历史当轮全部 miss。记忆系统越勤快，主循环命中率越低，这是结构性矛盾。
+2. **side-call 稀释**。每个用户回合固定伴随 1 次记忆召回 select 调用（`recall.ts:222`，prompt 含全量记忆索引 + 当前用户消息），提取调用则发送会话文本 + 全量已有记忆正文（`packages/core/src/memory/extractor.ts:162`），dream 一次跑 3 个 LLM 调用（`packages/core/src/memory/dream.ts:145/275/501`）。这些 side-call 的输入 token 量与主循环请求同一量级，但内容每次全新、彼此几乎不共享前缀，命中率趋近于 0。它们占了约一半流量，整体命中率就被稀释到 50% 上下。
+3. **recall 的 prune 删历史中间的消息**。剪除不相关前置召回记忆时直接 `replaceMessages` 修改对话历史中段（`recall.ts:372-375`），一旦触发，后续所有请求的前缀在该位置永久断裂。
+4. **次要因素**：`current-date` 层每天变一次（`packages/core/src/conversation/system-prompt.ts:65`），每天首次请求全量 miss；DeepSeek 缓存条目有空闲过期时间，跨天/低频使用也会降低命中；控制台「命中率」的统计口径（按请求数还是按 token 数）也会影响读数。
+
+另外，LICode 没有设置任何显式缓存断点（`cache_control` 仅为透传通道，`packages/core/src/llm/anthropic.ts:175`），完全依赖 DeepSeek 服务端的自动前缀缓存。
+
+需要担心吗？缓存 miss 只影响**价格**（命中 token 有折扣）和首 token 延迟，不影响正确性。如果想提升命中率，方向包括：把记忆索引层移到 system prompt 末尾或改为追加式消息、side-call 的 prompt 做前缀对齐（固定内容全部前置）、prune 改为只增不删等。
+
 ---
 
 > 📖 想了解某个特定场景？查看 [场景 Recipes](#场景-recipes)
