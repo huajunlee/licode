@@ -75,18 +75,33 @@ system prompt 的 memory-guide 层（priority 4，静态）重写为两部分：
 
 分工：tool description 讲「这是什么、怎么用」；system prompt 讲「什么时候该想到它」。
 
-### 4.3 删除清单
+### 4.3 旧机制清理清单
+
+**整体删除**：
 
 | 删除对象 | 位置 | 说明 |
 |---|---|---|
 | `createMemoryRecallHandler` | `packages/core/src/memory/recall.ts` | onTurnStart 前置召回整个移除 |
+| `MemoryRecall` 类（select/buildPrompt/parseResponse/withTimeout） | `recall.ts` | 一次性 select 由子 agent 循环取代；富索引构建逻辑抽到新模块复用 |
+| `buildRecallPair` / `pruneRecallMessages`（两个变体）/ `MEMORY_RECALL_TOOL_NAME` | `recall.ts:15-124` | 合成 pair 构造与剪除，含 `index.ts:140` 导出清理 |
 | onTurnStart 接线 | `packages/cli/src/hooks.ts:736,802` | 含 memoryRecallHandlerRef |
-| prune 逻辑 | `pruneIrrelevantRecallMessages` 及 `replaceMessages` 剪除调用 | 无前缀中段删除 |
+| `AgentConfig.onTurnStart` 钩子机制 | `agent/loop.ts:62,72,103,109-115` | 唯一消费者就是前置召回，YAGNI 删除（公开 API 变更，在此显式声明） |
 | system prompt `memory` 索引层注入 | `recall.ts:344` 附近 | 索引不再进上下文 |
-| `memory_fetch` 工具 | `packages/core/src/tools/builtin/memory-fetch.ts` | 按 slug 精确取的逻辑由新工具内部继承 |
+| `memory_fetch` 工具 | `tools/builtin/memory-fetch.ts` | 按 slug 精确取的逻辑由新工具内部继承 |
 | 两阶段召回相关测试 | 对应 .test.ts | 同步删除/改写 |
 
-**保留**：`LoadedMemoryRegistry`（跨多次工具调用去重，source 只剩 "active"）；`store.rebuildIndex()` 与 MEMORY.md 索引文件（作为工具内部富索引的数据源，继续由提取/dream 维护）；extractor、dream、diary、decide 均不动。
+**瘦身保留**：
+
+- `LoadedMemoryRegistry`：职责只剩「跨多次 `memory_recall` 调用去重」。保留 `has`/`add`/`rebuild`；删除 `remove()`、`getAll()`、`get()`、`source` 分类（`"sidequery" | "active"`）——全部为 prune/select 服务，新方案下死代码。实现上退化为 Set 语义
+- **命名沿用**：旧合成 pair 的工具名本就叫 `memory_recall`，registry 的 `rebuild()` 按此名解析 `## 名称 (slug)` 行——新工具同名同格式，会话恢复重建逻辑天然兼容，零改动
+- `store.rebuildIndex()` 与 MEMORY.md 索引文件：作为工具内部富索引的数据源，继续由提取/dream 维护
+- extractor、dream、diary、decide 均不动
+
+**需要审计而非盲删**：
+
+- `compressor.ts:58` 有针对 memory-recall 合成 pair 的特殊处理（保证 pair 不跨轮次拆分）——新方案下真实工具调用的 pair 本就在轮次内，需确认这段逻辑是随旧机制删除还是自然兼容
+- `recordUsage` 的 dream 让位守卫（现位于 `recall.ts:386`，dream 运行期间跳过记账避免写写竞态）——**必须随记账逻辑一起移植到新工具**，不能丢
+- 磁盘上的旧会话文件含合成 pair：原样保留为普通历史（不修改 = 缓存友好），压缩器和 registry 重建都需能正常消化它们
 
 ## 5. 召回率评测脚本（验收关卡）
 
