@@ -149,3 +149,7 @@ system prompt 的 memory-guide 层（priority 4，静态）重写为两部分：
 - extractor / dream / diary / decide 的任何改动
 - RAG / embedding 基础设施（side-LLM 复用现有链路，YAGNI）
 - Anthropic 官方 API 的显式 `cache_control` 断点（DeepSeek 场景无意义）
+
+## 9. 后续增强（本次不实现，方向已确认）
+
+- **LoCoMo 端到端评测**（[snap-research/LoCoMo](https://github.com/snap-research/LoCoMo)，ACL 2024）：10 段超长多会话对话 + 带类别与证据标注的 QA。定位为大版本前的**里程碑验证**（与 §5 开发循环评测互补，不替代）。价值：证据对话 ID 可换算召回精确率/召回率；时间推理类测日期锚点；对抗类（不可答问题）测「不召回、不乱编」；端到端覆盖生产→整理→召回全管线；可与论文 baseline 横向对比。实施时子采样（2~3 段对话 + 每类 QA 抽样）控制成本；注意公开基准可能被 deepseek 训练数据见过，绝对分数仅供参考，版本间相对对比有效
