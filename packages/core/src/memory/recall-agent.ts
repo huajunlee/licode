@@ -46,13 +46,14 @@ function createReadMemoryTool(store: MemoryStore): Tool<typeof ReadMemoryParams>
 
 const SELECTED_RE = /^SELECTED:\s*(.+)$/m;
 
-/** 从最终文本解析 `SELECTED: slug1, slug2` / `SELECTED: none`，过滤已知 slug、去重。 */
+/** 从最终文本解析 `SELECTED: slug1, slug2` / `SELECTED: none`，过滤已知 slug、去重。
+ *  容错：索引里 slug 以 `slug.md` 形式展示，模型常照抄 `.md` 后缀，这里剥掉再匹配。 */
 export function parseSelected(text: string, knownSlugs: Set<string>): string[] {
   const match = text.match(SELECTED_RE);
   if (!match) return [];
   const out: string[] = [];
   for (const raw of match[1].split(",")) {
-    const slug = raw.trim();
+    const slug = raw.trim().replace(/\.md$/, "");
     if (slug && slug !== "none" && knownSlugs.has(slug) && !out.includes(slug)) out.push(slug);
   }
   return out;
@@ -69,7 +70,7 @@ function buildAgentPrompt(richIndex: string, maxResults: number): string {
     `1. 先用索引初筛候选；拿不准时用 read_memory 工具阅读正文再判断（建议对每个候选读一次）。`,
     `2. 默认不选；不确定相关的不选。最多选 ${maxResults} 条。`,
     "3. 判断完成后，最后一行严格输出：SELECTED: slug1, slug2（无相关则 SELECTED: none）。",
-    "4. slug 必须来自上面的索引，禁止编造。",
+    "4. slug 必须来自上面的索引，禁止编造；写路径部分即可，不要带 .md 后缀（如 user/food-preferences）。",
   ].join("\n");
 }
 

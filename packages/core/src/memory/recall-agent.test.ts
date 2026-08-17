@@ -53,6 +53,12 @@ describe("createRecallAgent", () => {
     expect(await agent.run("宵夜吃什么", ["宵夜"])).toEqual(["user/food-preferences"]);
   });
 
+  it("tolerates .md suffix copied from the rich index display", async () => {
+    const llm = scriptedLlm([{ text: "SELECTED: user/food-preferences.md" }]);
+    const agent = createRecallAgent({ llm, store: fakeStore([FOOD]) });
+    expect(await agent.run("宵夜吃什么", ["宵夜"])).toEqual(["user/food-preferences"]);
+  });
+
   it("drives read_memory tool loop before final selection", async () => {
     const llm = scriptedLlm([
       { toolSlug: "user/food-preferences" },
