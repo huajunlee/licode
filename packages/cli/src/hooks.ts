@@ -22,7 +22,9 @@ import {
   MemoryRecall,
   createMemoryRecallHandler,
   createLoadedMemoryRegistry,
-  createMemoryFetchTool,
+  createMemoryRecallTool,
+  createRecallAgent,
+  memoryPresenceLayer,
   createMemoryExtractionHook,
   createMemoryExtractionState,
   MemoryDream,
@@ -514,9 +516,11 @@ export function useConversation(
       });
       extensionsRef.current = extensions;
 
-      // Load persisted memories into system prompt
-      const memoryLoader = new MemoryLoader(memoryStoreRef.current);
-      await memoryLoader.loadInto(systemPrompt);
+      // Memory presence hint (quantized at session start; static within session).
+      if (process.env.LICODE_MEMORY_RECALL !== "off") {
+        const memories = await memoryStoreRef.current.listAll();
+        systemPrompt.addLayer(memoryPresenceLayer(memories.length));
+      }
 
       // Register in-process memory extraction hook (Step 2)
       // Fires after each agent loop, fire-and-forget (non-blocking)
@@ -582,14 +586,21 @@ export function useConversation(
         });
       }
 
-      // Two-stage recall: rebuild registry from restored session, then
-      // register memory_fetch (only when recall is enabled).
+      // Rebuild loaded-memory registry from restored session, then register
+      // memory_recall (only when recall is enabled).
       loadedMemoryRegistryRef.current.rebuild(manager.getMessages());
       if (process.env.LICODE_MEMORY_RECALL !== "off") {
+        const recallAgent = createRecallAgent({
+          llm: new AnthropicProvider({ apiKey, baseUrl }),
+          model,
+          store: memoryStoreRef.current,
+        });
         tools.register(
-          createMemoryFetchTool({
+          createMemoryRecallTool({
+            runRecall: (q, kw) => recallAgent.run(q, kw),
             store: memoryStoreRef.current,
             registry: loadedMemoryRegistryRef.current,
+            dreamState: memoryDreamStateRef.current,
           })
         );
       }

@@ -149,6 +149,7 @@ export { createMemoryRecallTool } from "./tools/builtin/memory-recall.js";
 export type { MemoryRecallToolDeps } from "./tools/builtin/memory-recall.js";
 export { createRecallAgent, parseSelected } from "./memory/recall-agent.js";
 export type { RecallAgent, RecallAgentConfig } from "./memory/recall-agent.js";
+export { memoryPresenceLayer } from "./memory/presence-layer.js";
 export { buildRichIndex } from "./memory/rich-index.js";
 export { SessionManager } from "./session/manager.js";
 export type { SessionSummary } from "./session/manager.js";

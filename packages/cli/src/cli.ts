@@ -19,6 +19,10 @@ import {
   currentDateLayer,
   MemoryStore,
   MemoryLoader,
+  createMemoryRecallTool,
+  createRecallAgent,
+  memoryPresenceLayer,
+  LoadedMemoryRegistry,
   SystemPrompt,
   ToolRegistry,
 } from "@licode/core";
@@ -187,10 +191,24 @@ export async function initializeConversationRuntime(
     commandRouter: commands,
   });
 
-  // Load persisted memories into system prompt
+  // Memory presence hint + memory_recall tool (unless recall is disabled).
   const memoryStore = new MemoryStore(`${options.cwd}/.licode/memory`);
-  const memoryLoader = new MemoryLoader(memoryStore);
-  await memoryLoader.loadInto(systemPrompt);
+  if (process.env.LICODE_MEMORY_RECALL !== "off") {
+    const memories = await memoryStore.listAll();
+    systemPrompt.addLayer(memoryPresenceLayer(memories.length));
+    const recallAgent = createRecallAgent({
+      llm: provider,
+      model,
+      store: memoryStore,
+    });
+    tools.register(
+      createMemoryRecallTool({
+        runRecall: (q, kw) => recallAgent.run(q, kw),
+        store: memoryStore,
+        registry: new LoadedMemoryRegistry(),
+      })
+    );
+  }
 
   return { provider, manager, tools, commands, extensions };
 }
