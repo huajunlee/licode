@@ -1,8 +1,8 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { MemoryExtractor } from "./extractor.js";
-import { buildRecallPair } from "./recall.js";
 import { MemoryStore } from "./store.js";
 import type { Message } from "../llm/provider.js";
+import type { Memory } from "./types.js";
 import { AnthropicProvider } from "../llm/anthropic.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -27,6 +27,18 @@ function makeUserMsg(content: string): Message {
 
 function makeAsstMsg(content: string): Message {
   return { role: "assistant", content, timestamp: new Date().toISOString() };
+}
+
+/** Local stand-in for the deleted recall.ts buildRecallPair: a synthetic
+ *  memory_recall tool_use/tool_result pair as found in old restored sessions. */
+function makeRecallPair(query: string, memories: Memory[]): [Message, Message] {
+  const id = "mrec_test";
+  const body = memories.map((m) => `## ${m.name} (${m.slug})\n${m.content}`).join("\n\n");
+  const now = new Date().toISOString();
+  return [
+    { role: "assistant", content: [{ id, name: "memory_recall", input: { query } }], timestamp: now },
+    { role: "user", content: [{ tool_use_id: id, content: `# Recalled Memories\n\n${body}` }], timestamp: now },
+  ];
 }
 
 describe("MemoryExtractor (LLM-based)", () => {
@@ -164,7 +176,7 @@ describe("MemoryExtractor (LLM-based)", () => {
       dir = mkdtempSync(path.join(tmpdir(), "extract-filter-"));
       const store = new MemoryStore(dir);
 
-      const [tu, tr] = buildRecallPair("今晚吃什么", [
+      const [tu, tr] = makeRecallPair("今晚吃什么", [
         {
           slug: "user/food", type: "user", name: "食物偏好",
           description: "d", content: "c",

@@ -55,7 +55,7 @@ function isUserTextMessage(m: Message): m is UserMessage {
 /**
  * Split a message history into turns. A new turn begins at each UserMessage
  * (role "user" with string content). ToolUseMessage/ToolResultMessage pairs
- * and memory-recall synthetic pairs always stay within the turn they belong
+ * always stay within the turn they belong
  * to - turns are never split mid-pair, so no tool_result is ever orphaned.
  */
 export function splitIntoTurns(messages: Message[]): Message[][] {

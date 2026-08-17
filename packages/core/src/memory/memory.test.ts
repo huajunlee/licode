@@ -2,8 +2,6 @@ import { mkdtempSync, rmSync, existsSync, utimesSync, writeFileSync, mkdirSync, 
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SystemPrompt } from "../conversation/system-prompt.js";
-import { MemoryLoader } from "./loader.js";
 import { MemoryStore, validateMemory } from "./store.js";
 import type { Memory } from "./types.js";
 
@@ -368,60 +366,6 @@ describe("MemoryStore actions", () => {
     dir = mkdtempSync(path.join(tmpdir(), "licode-memory-"));
     const store = new MemoryStore(path.join(dir, "nonexistent"));
     expect(await store.hasChangesSince(Date.now())).toBe(false);
-  });
-});
-
-describe("MemoryLoader (new behaviour)", () => {
-  let dir: string | null = null;
-
-  afterEach(() => {
-    if (dir) {
-      rmSync(dir, { recursive: true, force: true });
-      dir = null;
-    }
-  });
-
-  it("injects MEMORY.md index content into system prompt, not full memory bodies", async () => {
-    dir = mkdtempSync(path.join(tmpdir(), "licode-memory-"));
-    const store = new MemoryStore(dir);
-
-    await store.save(makeMemory({
-      slug: "user/identity",
-      name: "身份信息",
-      description: "用户名和角色",
-      content: "The user's name is huajun and they are a full-stack developer.",
-    }));
-
-    const systemPrompt = new SystemPrompt();
-    const loader = new MemoryLoader(store);
-    await loader.loadInto(systemPrompt);
-
-    const memoryLayer = systemPrompt
-      .getLayers()
-      .find((layer) => layer.name === "memory");
-
-    expect(memoryLayer).toBeDefined();
-    expect(memoryLayer?.priority).toBe(5);
-    // Should contain index line (description), not the full memory body
-    expect(memoryLayer?.content).toContain("[身份信息](");
-    expect(memoryLayer?.content).toContain("](user/identity.md)");
-    expect(memoryLayer?.content).toContain("用户名和角色");
-    // Should NOT contain the full content body
-    expect(memoryLayer?.content).not.toContain("full-stack developer");
-  });
-
-  it("does not add a memory layer when there are no memories", async () => {
-    dir = mkdtempSync(path.join(tmpdir(), "licode-memory-"));
-    const store = new MemoryStore(dir);
-
-    const systemPrompt = new SystemPrompt();
-    const loader = new MemoryLoader(store);
-    await loader.loadInto(systemPrompt);
-
-    const memoryLayer = systemPrompt
-      .getLayers()
-      .find((layer) => layer.name === "memory");
-    expect(memoryLayer).toBeUndefined();
   });
 });
 

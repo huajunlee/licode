@@ -1,9 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { AnthropicProvider } from "../llm/anthropic.js";
-import { pruneRecallMessages } from "./recall.js";
 import { formatLocalDate } from "../util/date.js";
-import type { LLMProvider, Message } from "../llm/provider.js";
+import type { LLMProvider, Message, ToolResultBlock, ToolUseBlock } from "../llm/provider.js";
 import type { MemoryStore } from "./store.js";
 import type { Memory, MemoryType } from "./types.js";
 import type { MemoryAction } from "./store.js";
@@ -23,6 +22,36 @@ const QUESTION_PATTERNS = [
 
 const MEMORY_TYPES: readonly string[] = ["user", "feedback", "project", "reference"];
 const MEMORY_ACTIONS: readonly string[] = ["create", "update", "append"];
+
+/**
+ * Strip synthetic memory_recall pairs (assistant tool_use named memory_recall
+ * + the user tool_result referencing its id) before building the extraction
+ * prompt. Old restored sessions can still contain such pairs; they carry no
+ * user content worth extracting. (Inlined from the deleted recall.ts.)
+ */
+function stripRecallPairs(messages: Message[]): Message[] {
+  const recallIds = new Set<string>();
+  for (const m of messages) {
+    if (m.role === "assistant" && Array.isArray(m.content)) {
+      for (const b of m.content as ToolUseBlock[]) {
+        if (b && b.name === "memory_recall") recallIds.add(b.id);
+      }
+    }
+  }
+  if (recallIds.size === 0) return messages;
+
+  return messages.filter((m) => {
+    if (m.role === "assistant" && Array.isArray(m.content)) {
+      const blocks = m.content as ToolUseBlock[];
+      return !blocks.every((b) => recallIds.has(b.id));
+    }
+    if (m.role === "user" && Array.isArray(m.content)) {
+      const blocks = m.content as ToolResultBlock[];
+      return !blocks.every((b) => recallIds.has(b.tool_use_id));
+    }
+    return true;
+  });
+}
 
 const DEFAULT_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
 const MAX_MESSAGES = 50;
@@ -155,7 +184,7 @@ export class MemoryExtractor {
       const indexContent = await store.loadIndex();
 
       const recent = this.selectMessages(messages, options);
-      const conversationText = this.formatMessages(pruneRecallMessages([...recent]));
+      const conversationText = this.formatMessages(stripRecallPairs([...recent]));
 
       const prompt = this.buildPrompt(indexContent, existingMemories, conversationText, new Date());
 

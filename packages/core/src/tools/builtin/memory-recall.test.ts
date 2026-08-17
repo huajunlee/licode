@@ -52,7 +52,7 @@ describe("memory_recall tool", () => {
 
   it("skips already-loaded memories and says so", async () => {
     const { deps: d, registry, usage } = deps();
-    registry.add("user/food-preferences", "active");
+    registry.add("user/food-preferences");
     const tool = createMemoryRecallTool(d);
     const res = await tool.execute({ query: "q", keywords: [] }, { workingDirectory: "/tmp", sessionId: "s" });
     expect(res.status).toBe("success");

@@ -47,8 +47,6 @@ export {
   decideTool,
   decideSaveTool,
 } from "./tools/builtin/index.js";
-export { createMemoryFetchTool } from "./tools/builtin/memory-fetch.js";
-export type { MemoryFetchToolDeps } from "./tools/builtin/memory-fetch.js";
 
 // Phase 2: agent/
 export { AgentLoop, createAgentLoopMiddleware } from "./agent/loop.js";
@@ -131,16 +129,12 @@ export type { FileChangeNote, FileChangeStats, FileChangeOperation } from "./con
 export { classifyMiddleTurns, extractExistingSummary, isSummaryMessage } from "./context/compressor.js";
 export { MemoryStore } from "./memory/store.js";
 export type { MemoryAction } from "./memory/store.js";
-export { MemoryLoader } from "./memory/loader.js";
 export { MemoryExtractor } from "./memory/extractor.js";               // Step 2: LLM-based
 export { RegexMemoryExtractor } from "./memory/extractor-regex.js";    // @deprecated
 export { memoryMiddleware } from "./memory/middleware.js";             // @deprecated
 export { createMemoryExtractionHook, createMemoryExtractionState } from "./memory/hook.js"; // in-process hook
 export type { MemoryExtractionHookFn, MemoryExtractionState } from "./memory/hook.js";
-export { MemoryRecall, MEMORY_RECALL_TOOL_NAME, pruneRecallMessages, buildRecallPair, createMemoryRecallHandler } from "./memory/recall.js"; // Phase 2: side-query recall
-export type { MemoryRecallConfig } from "./memory/recall.js";
 export { LoadedMemoryRegistry, createLoadedMemoryRegistry } from "./memory/loaded-memory-registry.js";
-export type { LoadedMemoryEntry, LoadedMemorySource } from "./memory/loaded-memory-registry.js";
 export { MemoryDream, createMemoryDreamHook, createMemoryDreamState, acquireLock, releaseLock, readState, writeState } from "./memory/dream.js"; // Phase 3: dream consolidation
 export type { DreamConfig, DreamState, Suspicion } from "./memory/dream.js";
 export type { Memory, MemoryType, MemoryEntry } from "./memory/types.js";

@@ -17,10 +17,7 @@ import {
   initializeExtensions,
   registerExtensionMiddleware,
   MemoryStore,
-  MemoryLoader,
   MemoryExtractor,
-  MemoryRecall,
-  createMemoryRecallHandler,
   createLoadedMemoryRegistry,
   createMemoryRecallTool,
   createRecallAgent,
@@ -409,21 +406,10 @@ export function useConversation(
     createMemoryExtractionState()
   );
   // Phase 3: dream consolidation (after:agentLoop, fire-and-forget).
-  // Shared with the extraction hook AND the recall handler (yield-while-dreaming).
+  // Shared with the extraction hook AND the memory_recall tool (yield-while-dreaming).
   const memoryDreamStateRef = useRef<DreamState>(createMemoryDreamState());
-  // Two-stage recall: session-level loaded-memory registry (shared by
-  // side-query handler + memory_fetch tool for dedup + selective prune).
+  // Session-level loaded-memory registry (used by the memory_recall tool for dedup).
   const loadedMemoryRegistryRef = useRef(createLoadedMemoryRegistry());
-  // Phase 2: per-turn memory recall (side query -> synthetic tool_call pair).
-  // Phase 4: dreamState passed in so recordUsage yields while dreaming.
-  const memoryRecallHandlerRef = useRef(
-    createMemoryRecallHandler({
-      recall: new MemoryRecall({ apiKey, baseUrl, model }),
-      store: memoryStoreRef.current,
-      dreamState: memoryDreamStateRef.current,
-      registry: loadedMemoryRegistryRef.current,
-    })
-  );
   const dreamMemoryDir = path.join(process.cwd(), ".licode", "memory");
   const dreamSessionsDir = path.join(process.cwd(), ".licode", "sessions");
   const memoryDreamHookRef = useRef(
@@ -742,9 +728,6 @@ export function useConversation(
                   tools,
                   eventBus,
                   compressor: compressor ?? undefined,
-                  ...(process.env.LICODE_MEMORY_RECALL === "off"
-                    ? {}
-                    : { onTurnStart: memoryRecallHandlerRef.current }),
                 })
               )
               // after:agentLoop fires shell hooks + in-process function hooks (e.g. memory extraction)
@@ -808,9 +791,6 @@ export function useConversation(
               tools,
               eventBus,
               compressor: compressor ?? undefined,
-              ...(process.env.LICODE_MEMORY_RECALL === "off"
-                ? {}
-                : { onTurnStart: memoryRecallHandlerRef.current }),
             })
           )
           // after:agentLoop fires shell hooks + in-process function hooks (e.g. memory extraction)

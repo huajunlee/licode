@@ -1,47 +1,28 @@
 // packages/core/src/memory/loaded-memory-registry.ts
 import type { Message, ToolUseBlock, ToolResultBlock } from "../llm/provider.js";
 
-export type LoadedMemorySource = "sidequery" | "active";
-
-export interface LoadedMemoryEntry {
-  slug: string;
-  source: LoadedMemorySource;
-}
-
-/** Matches `## name (slug)` lines produced by buildRecallPair / memory_fetch. */
+/** Matches `## name (slug)` lines in memory_recall / legacy memory_fetch tool results. */
 const SLUG_RE = /^## .* \(([^)]+)\)$/;
 
 /**
- * Session-level registry of memories already loaded into the conversation,
- * tagged by source. O(1) lookup; rebuilt from messages on session restore.
+ * Session-level set of memory slugs already loaded into the conversation,
+ * used to dedupe repeated memory_recall calls. Rebuilt from messages on
+ * session restore; parses both memory_recall and legacy memory_fetch tool
+ * results so pre-refactor sessions still dedupe correctly.
  */
 export class LoadedMemoryRegistry {
-  private map = new Map<string, LoadedMemorySource>();
+  private slugs = new Set<string>();
 
   has(slug: string): boolean {
-    return this.map.has(slug);
+    return this.slugs.has(slug);
   }
 
-  get(slug: string): LoadedMemorySource | undefined {
-    return this.map.get(slug);
+  add(slug: string): void {
+    this.slugs.add(slug);
   }
 
-  add(slug: string, source: LoadedMemorySource): void {
-    this.map.set(slug, source);
-  }
-
-  remove(slug: string): void {
-    this.map.delete(slug);
-  }
-
-  getAll(): LoadedMemoryEntry[] {
-    return Array.from(this.map, ([slug, source]) => ({ slug, source }));
-  }
-
-  /** Rebuild from a message list (session restore). Pairs tool_use id -> name,
-   *  then extracts `## name (slug)` from memory_recall/memory_fetch tool_results. */
   rebuild(messages: readonly Message[]): void {
-    this.map.clear();
+    this.slugs.clear();
     const useNameById = new Map<string, string>();
     for (const m of messages) {
       if (m.role === "assistant" && Array.isArray(m.content)) {
@@ -55,11 +36,10 @@ export class LoadedMemoryRegistry {
       for (const b of m.content as ToolResultBlock[]) {
         const name = b.tool_use_id ? useNameById.get(b.tool_use_id) : undefined;
         if (name !== "memory_recall" && name !== "memory_fetch") continue;
-        const source: LoadedMemorySource = name === "memory_fetch" ? "active" : "sidequery";
         const content = typeof b.content === "string" ? b.content : "";
         for (const line of content.split("\n")) {
           const match = line.match(SLUG_RE);
-          if (match) this.map.set(match[1], source);
+          if (match) this.slugs.add(match[1]);
         }
       }
     }

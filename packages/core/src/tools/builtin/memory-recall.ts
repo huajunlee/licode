@@ -74,7 +74,7 @@ export function createMemoryRecallTool(deps: MemoryRecallToolDeps): Tool<typeof 
             content = content.slice(0, EXCERPT_CHAR_LIMIT) + "\n…（摘录）";
           }
           parts.push(`## ${m.name} (${m.slug})\n${content}`);
-          registry.add(slug, "active");
+          registry.add(slug);
           // dream 整理期间让位，避免 recordUsage 与 consolidate 写写竞态（移植自旧 recall handler）
           if (!deps.dreamState?.running) {
             try { await store.recordUsage(slug); } catch { /* best-effort */ }
