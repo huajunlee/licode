@@ -64,6 +64,10 @@ export interface AssistantMessage {
 export interface TokenUsage {
   input: number;
   output: number;
+  /** 前缀缓存命中 token（Anthropic 格式 cache_read_input_tokens）。 */
+  cacheRead?: number;
+  /** 前缀缓存创建 token（Anthropic 格式 cache_creation_input_tokens）。 */
+  cacheCreation?: number;
 }
 
 export type StreamChunk =

@@ -42,6 +42,8 @@ export class AnthropicProvider implements LLMProvider {
       usage: {
         input: res.usage.input_tokens,
         output: res.usage.output_tokens,
+        cacheRead: res.usage.cache_read_input_tokens ?? 0,
+        cacheCreation: res.usage.cache_creation_input_tokens ?? 0,
       },
       stopReason: res.stop_reason ?? "end_turn",
     };
@@ -127,6 +129,8 @@ export class AnthropicProvider implements LLMProvider {
           usage: {
             input: finalMessage.usage.input_tokens,
             output: finalMessage.usage.output_tokens,
+            cacheRead: finalMessage.usage.cache_read_input_tokens ?? 0,
+            cacheCreation: finalMessage.usage.cache_creation_input_tokens ?? 0,
           },
         };
       }

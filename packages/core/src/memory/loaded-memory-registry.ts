@@ -21,6 +21,11 @@ export class LoadedMemoryRegistry {
     this.slugs.add(slug);
   }
 
+  /** 当前会话已加载的全部 slug（评测/观察用）。 */
+  getAll(): string[] {
+    return [...this.slugs];
+  }
+
   rebuild(messages: readonly Message[]): void {
     this.slugs.clear();
     const useNameById = new Map<string, string>();
