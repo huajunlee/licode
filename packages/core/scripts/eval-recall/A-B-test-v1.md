@@ -213,3 +213,29 @@ EVAL_MODEL=deepseek-chat pnpm tsx packages/core/scripts/eval-recall-baseline.ts
 - **遗留 1**：新版 B 组误触发高，指向两个提示词优化点——主模型工具调用判据 + 子代理相关性过滤。本测试只做测量，未改动提示词。
 - **遗留 2**：`precision` 用全局 expected 并集做分母，仍偏乐观（对单条用例的准确率参考意义有限）。
 - **遗留 3**：gitee 推送需交互凭证，本次仅 commit（分支 `worktree-recall-ab-test`，commit `6e1cda9`）。
+
+---
+
+## 8. 第二轮回测（用户指定双 key，2026-08-18）
+
+按用户要求，用两个独立 API key 各跑一轮（端点、模型、temperature、数据均不变）：
+
+| 版本 | 使用的 key | 结果文件 |
+|---|---|---|
+| 新版（master·工具召回） | `sk-9108…fff3` | `results-tool-newkey.json` |
+| 旧版（main-0817·side-query） | `sk-62b2…eef5a` | `results-baseline-oldkey.json` |
+
+### 8.1 两轮回测汇总
+
+| 指标 | 新版 round1（共享 key） | 新版 round2（key1） | 旧版 round1（共享 key） | 旧版 round2（key2） |
+|---|---|---|---|---|
+| **recallA** | 100% | **100%** | 91% | **91%** |
+| **falsePositiveB** | 50% | **63%** | 13% | **13%** |
+| **precision** | 85–87% | **86%** | 83% | **83%** |
+| **fabricateD** | 0% | **0%** | 0% | **0%** |
+
+### 8.2 第二轮回测要点
+
+1. **旧版跨 key 完全稳定**：round2（key2）与 round1（共享 key）的逐条结果一致——同一处 a4 漏召回、同一处 b7 误触发。旧架构的 side-query 选摘是确定性的，与所用 key 无关。
+2. **新版跨 key 有波动**：round2 的 B 误召回率升到 63%（5/8），新增 **b8（docker compose 问题）** 这次也误触发，并注入了 5 条无关记忆（含 docker-cheatsheet、memory-redesign、q3-launch 等）。A 组 100%、D 组 0% 两轮保持一致。
+3. **结论不变**：新旧差异来自**架构本身**（新版模型驱动的"是否调工具"决策更激进且非确定，旧版保守确定），不是 key 差异造成的。新版"召回更全、误触发更高"的结论在双 key 下均成立。

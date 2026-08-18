@@ -1,0 +1,278 @@
+{
+  "model": "deepseek-chat",
+  "temperature": 0,
+  "perCase": [
+    {
+      "id": "a1",
+      "group": "A",
+      "triggered": true,
+      "selectedSlugs": [
+        "user/food-preferences",
+        "user/food-sugar-restriction"
+      ],
+      "hit": true
+    },
+    {
+      "id": "a2",
+      "group": "A",
+      "triggered": true,
+      "selectedSlugs": [
+        "feedback/chinese-reply",
+        "feedback/concise-answers",
+        "feedback/conclusion-first",
+        "feedback/no-emoji"
+      ],
+      "hit": true
+    },
+    {
+      "id": "a3",
+      "group": "A",
+      "triggered": true,
+      "selectedSlugs": [
+        "project/q3-launch"
+      ],
+      "hit": true
+    },
+    {
+      "id": "a4",
+      "group": "A",
+      "triggered": true,
+      "selectedSlugs": [
+        "user/fitness-schedule",
+        "user/fitness-schedule-new"
+      ],
+      "hit": true
+    },
+    {
+      "id": "a5",
+      "group": "A",
+      "triggered": true,
+      "selectedSlugs": [
+        "project/deepseek-default"
+      ],
+      "hit": true
+    },
+    {
+      "id": "a6",
+      "group": "A",
+      "triggered": true,
+      "selectedSlugs": [
+        "user/fitness-schedule",
+        "user/fitness-schedule-new"
+      ],
+      "hit": true
+    },
+    {
+      "id": "a7",
+      "group": "A",
+      "triggered": true,
+      "selectedSlugs": [
+        "user/food-preferences",
+        "user/food-sugar-restriction"
+      ],
+      "hit": true
+    },
+    {
+      "id": "a8",
+      "group": "A",
+      "triggered": true,
+      "selectedSlugs": [
+        "project/q3-launch",
+        "user/vacation-plan"
+      ],
+      "hit": true
+    },
+    {
+      "id": "a9",
+      "group": "A",
+      "triggered": true,
+      "selectedSlugs": [
+        "project/memory-redesign"
+      ],
+      "hit": true
+    },
+    {
+      "id": "a10",
+      "group": "A",
+      "triggered": true,
+      "selectedSlugs": [
+        "user/contact-info"
+      ],
+      "hit": true
+    },
+    {
+      "id": "a11",
+      "group": "A",
+      "triggered": true,
+      "selectedSlugs": [
+        "user/team-relationships"
+      ],
+      "hit": true
+    },
+    {
+      "id": "b1",
+      "group": "B",
+      "triggered": false,
+      "selectedSlugs": [],
+      "hit": false
+    },
+    {
+      "id": "b2",
+      "group": "B",
+      "triggered": true,
+      "selectedSlugs": [],
+      "hit": false
+    },
+    {
+      "id": "b3",
+      "group": "B",
+      "triggered": false,
+      "selectedSlugs": [],
+      "hit": false
+    },
+    {
+      "id": "b4",
+      "group": "B",
+      "triggered": false,
+      "selectedSlugs": [],
+      "hit": false
+    },
+    {
+      "id": "b5",
+      "group": "B",
+      "triggered": true,
+      "selectedSlugs": [
+        "user/team-relationships",
+        "user/neovim-workflow",
+        "user/reading-list"
+      ],
+      "hit": false
+    },
+    {
+      "id": "b6",
+      "group": "B",
+      "triggered": true,
+      "selectedSlugs": [],
+      "hit": false
+    },
+    {
+      "id": "b7",
+      "group": "B",
+      "triggered": true,
+      "selectedSlugs": [
+        "user/neovim-workflow",
+        "user/reading-list",
+        "user/team-relationships"
+      ],
+      "hit": false
+    },
+    {
+      "id": "b8",
+      "group": "B",
+      "triggered": true,
+      "selectedSlugs": [
+        "reference/docker-cheatsheet",
+        "project/memory-redesign",
+        "project/q3-launch",
+        "project/deepseek-default",
+        "user/team-relationships"
+      ],
+      "hit": false
+    },
+    {
+      "id": "d1",
+      "group": "D",
+      "triggered": true,
+      "selectedSlugs": [],
+      "hit": false
+    },
+    {
+      "id": "d2",
+      "group": "D",
+      "triggered": true,
+      "selectedSlugs": [],
+      "hit": false
+    },
+    {
+      "id": "d3",
+      "group": "D",
+      "triggered": true,
+      "selectedSlugs": [],
+      "hit": false
+    },
+    {
+      "id": "d4",
+      "group": "D",
+      "triggered": true,
+      "selectedSlugs": [],
+      "hit": false
+    },
+    {
+      "id": "c1",
+      "group": "C",
+      "triggered": true,
+      "selectedSlugs": [
+        "reference/locomo-paper",
+        "reference/zhihu-memory-article",
+        "project/memory-redesign"
+      ],
+      "hit": true
+    },
+    {
+      "id": "c2",
+      "group": "C",
+      "triggered": true,
+      "selectedSlugs": [
+        "project/memory-redesign",
+        "project/q3-launch",
+        "user/team-relationships"
+      ],
+      "hit": true
+    },
+    {
+      "id": "c3",
+      "group": "C",
+      "triggered": true,
+      "selectedSlugs": [
+        "reference/zhihu-memory-article"
+      ],
+      "hit": true
+    },
+    {
+      "id": "c4",
+      "group": "C",
+      "triggered": true,
+      "selectedSlugs": [
+        "user/fitness-schedule",
+        "user/fitness-schedule-new",
+        "user/vacation-plan"
+      ],
+      "hit": true
+    },
+    {
+      "id": "c5",
+      "group": "C",
+      "triggered": true,
+      "selectedSlugs": [
+        "user/food-preferences",
+        "user/food-sugar-restriction"
+      ],
+      "hit": true
+    },
+    {
+      "id": "c6",
+      "group": "C",
+      "triggered": true,
+      "selectedSlugs": [
+        "user/reading-list"
+      ],
+      "hit": true
+    }
+  ],
+  "summary": {
+    "recallA": 1,
+    "falsePositiveB": 0.625,
+    "precision": 0.8604651162790697,
+    "fabricateD": 0
+  }
+}
