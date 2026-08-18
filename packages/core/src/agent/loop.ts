@@ -53,13 +53,6 @@ export interface AgentConfig {
    */
   compressor?: ContextCompressor;
   eventBus?: EventBus;
-  /**
-   * Optional per-turn hook: fires once in run() after the user message is
-   * appended and before the first LLM call. Errors are swallowed - the
-   * loop must never break because of it. (Phase 2 memory recall injects
-   * here.)
-   */
-  onTurnStart?: (conversation: ConversationManager) => Promise<void>;
 }
 
 export class AgentLoop {
@@ -69,7 +62,6 @@ export class AgentLoop {
   private executor: ToolExecutor;
   private termination: TerminationPolicy;
   private eventBus?: EventBus;
-  private onTurnStart?: (conversation: ConversationManager) => Promise<void>;
   private tokenCounter = new TokenCounter();
   // `importantTurnsBudget` is intentionally kept out of `Required` so it can
   // stay optional (read lazily from config where needed); everything else is
@@ -100,19 +92,11 @@ export class AgentLoop {
     });
     this.termination = new TerminationPolicy(config.termination ?? {});
     this.eventBus = config.eventBus;
-    this.onTurnStart = config.onTurnStart;
     this.compressor = config.compressor;
   }
 
   async run(userInput: string): Promise<PipelineEvent> {
     this.conversation.addUserMessage(userInput);
-    if (this.onTurnStart) {
-      try {
-        await this.onTurnStart(this.conversation);
-      } catch {
-        // best-effort hook - never break the loop
-      }
-    }
     this.eventBus?.emit({ type: "agent-loop-start" });
 
     // Phase 2: feed tool-definition tokens into the conversation base so the

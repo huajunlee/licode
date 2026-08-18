@@ -1,0 +1,14 @@
+[
+  { "id": "a1", "group": "A", "query": "宵夜吃什么好？", "expectRecall": true, "expectedSlugs": ["user/food-preferences"] },
+  { "id": "a2", "group": "A", "query": "你回复我的时候风格上有什么要注意的吗？", "expectRecall": true, "expectedSlugs": ["feedback/conclusion-first"] },
+  { "id": "a3", "group": "A", "query": "我这个项目打算什么时候上线来着？", "expectRecall": true, "expectedSlugs": ["project/q3-launch"] },
+  { "id": "a4", "group": "A", "query": "帮我看看我这周哪几天晚上有空锻炼？", "expectRecall": true, "expectedSlugs": ["user/fitness-schedule"] },
+  { "id": "a5", "group": "A", "query": "LICode 默认用的是哪个模型？", "expectRecall": true, "expectedSlugs": ["project/deepseek-default"] },
+  { "id": "b1", "group": "B", "query": "TypeScript 里 Readonly 和 as const 有什么区别？", "expectRecall": false, "expectedSlugs": [] },
+  { "id": "b2", "group": "B", "query": "帮我写一个防抖函数", "expectRecall": false, "expectedSlugs": [] },
+  { "id": "b3", "group": "B", "query": "git rebase 和 merge 的区别是什么？", "expectRecall": false, "expectedSlugs": [] },
+  { "id": "b4", "group": "B", "query": "正则表达式怎么匹配邮箱地址？", "expectRecall": false, "expectedSlugs": [] },
+  { "id": "c1", "group": "C", "query": "最近有什么值得关注的记忆系统研究吗？", "expectRecall": null, "expectedSlugs": ["reference/locomo-paper"] },
+  { "id": "c2", "group": "C", "query": "我这个项目最近的重点是什么？", "expectRecall": null, "expectedSlugs": ["project/memory-redesign"] },
+  { "id": "c3", "group": "C", "query": "我想找篇之前看过的记忆系统对比文章", "expectRecall": null, "expectedSlugs": ["reference/zhihu-memory-article"] }
+]

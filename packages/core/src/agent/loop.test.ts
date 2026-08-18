@@ -29,50 +29,6 @@ function makeManager(): ConversationManager {
   return mgr;
 }
 
-describe("AgentLoop onTurnStart", () => {
-  it("fires after addUserMessage and before the first LLM call", async () => {
-    const events: string[] = [];
-    const conversation = makeManager();
-    const loop = new AgentLoop({
-      llm: mockLLM(events),
-      conversation,
-      tools: new ToolRegistry(),
-      onTurnStart: async (conv) => {
-        events.push("onTurnStart");
-        const msgs = conv.getMessages();
-        expect(msgs[msgs.length - 1].content).toBe("你好");
-      },
-    });
-    await loop.run("你好");
-    expect(events).toEqual(["onTurnStart", "stream"]);
-  });
-
-  it("keeps the loop alive when onTurnStart throws", async () => {
-    const events: string[] = [];
-    const conversation = makeManager();
-    const loop = new AgentLoop({
-      llm: mockLLM(events),
-      conversation,
-      tools: new ToolRegistry(),
-      onTurnStart: async () => { throw new Error("boom"); },
-    });
-    const result = await loop.run("你好");
-    expect(result.type).toBe("stream-complete");
-    expect(events).toEqual(["stream"]);
-  });
-
-  it("works without onTurnStart (regression)", async () => {
-    const conversation = makeManager();
-    const loop = new AgentLoop({
-      llm: mockLLM([]),
-      conversation,
-      tools: new ToolRegistry(),
-    });
-    const result = await loop.run("你好");
-    expect(result.type).toBe("stream-complete");
-  });
-});
-
 describe("AgentLoop calibration", () => {
   it("feeds real usage.input into the conversation calibrator each turn", async () => {
     const conversation = makeManager();

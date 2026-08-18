@@ -17,12 +17,11 @@ import {
   initializeExtensions,
   registerExtensionMiddleware,
   MemoryStore,
-  MemoryLoader,
   MemoryExtractor,
-  MemoryRecall,
-  createMemoryRecallHandler,
   createLoadedMemoryRegistry,
-  createMemoryFetchTool,
+  createMemoryRecallTool,
+  createRecallAgent,
+  memoryPresenceLayer,
   createMemoryExtractionHook,
   createMemoryExtractionState,
   MemoryDream,
@@ -407,21 +406,10 @@ export function useConversation(
     createMemoryExtractionState()
   );
   // Phase 3: dream consolidation (after:agentLoop, fire-and-forget).
-  // Shared with the extraction hook AND the recall handler (yield-while-dreaming).
+  // Shared with the extraction hook AND the memory_recall tool (yield-while-dreaming).
   const memoryDreamStateRef = useRef<DreamState>(createMemoryDreamState());
-  // Two-stage recall: session-level loaded-memory registry (shared by
-  // side-query handler + memory_fetch tool for dedup + selective prune).
+  // Session-level loaded-memory registry (used by the memory_recall tool for dedup).
   const loadedMemoryRegistryRef = useRef(createLoadedMemoryRegistry());
-  // Phase 2: per-turn memory recall (side query -> synthetic tool_call pair).
-  // Phase 4: dreamState passed in so recordUsage yields while dreaming.
-  const memoryRecallHandlerRef = useRef(
-    createMemoryRecallHandler({
-      recall: new MemoryRecall({ apiKey, baseUrl, model }),
-      store: memoryStoreRef.current,
-      dreamState: memoryDreamStateRef.current,
-      registry: loadedMemoryRegistryRef.current,
-    })
-  );
   const dreamMemoryDir = path.join(process.cwd(), ".licode", "memory");
   const dreamSessionsDir = path.join(process.cwd(), ".licode", "sessions");
   const memoryDreamHookRef = useRef(
@@ -514,9 +502,11 @@ export function useConversation(
       });
       extensionsRef.current = extensions;
 
-      // Load persisted memories into system prompt
-      const memoryLoader = new MemoryLoader(memoryStoreRef.current);
-      await memoryLoader.loadInto(systemPrompt);
+      // Memory presence hint (quantized at session start; static within session).
+      if (process.env.LICODE_MEMORY_RECALL !== "off") {
+        const memories = await memoryStoreRef.current.listAll();
+        systemPrompt.addLayer(memoryPresenceLayer(memories.length));
+      }
 
       // Register in-process memory extraction hook (Step 2)
       // Fires after each agent loop, fire-and-forget (non-blocking)
@@ -582,14 +572,21 @@ export function useConversation(
         });
       }
 
-      // Two-stage recall: rebuild registry from restored session, then
-      // register memory_fetch (only when recall is enabled).
+      // Rebuild loaded-memory registry from restored session, then register
+      // memory_recall (only when recall is enabled).
       loadedMemoryRegistryRef.current.rebuild(manager.getMessages());
       if (process.env.LICODE_MEMORY_RECALL !== "off") {
+        const recallAgent = createRecallAgent({
+          llm: new AnthropicProvider({ apiKey, baseUrl }),
+          model,
+          store: memoryStoreRef.current,
+        });
         tools.register(
-          createMemoryFetchTool({
+          createMemoryRecallTool({
+            runRecall: (q, kw) => recallAgent.run(q, kw),
             store: memoryStoreRef.current,
             registry: loadedMemoryRegistryRef.current,
+            dreamState: memoryDreamStateRef.current,
           })
         );
       }
@@ -731,9 +728,6 @@ export function useConversation(
                   tools,
                   eventBus,
                   compressor: compressor ?? undefined,
-                  ...(process.env.LICODE_MEMORY_RECALL === "off"
-                    ? {}
-                    : { onTurnStart: memoryRecallHandlerRef.current }),
                 })
               )
               // after:agentLoop fires shell hooks + in-process function hooks (e.g. memory extraction)
@@ -797,9 +791,6 @@ export function useConversation(
               tools,
               eventBus,
               compressor: compressor ?? undefined,
-              ...(process.env.LICODE_MEMORY_RECALL === "off"
-                ? {}
-                : { onTurnStart: memoryRecallHandlerRef.current }),
             })
           )
           // after:agentLoop fires shell hooks + in-process function hooks (e.g. memory extraction)

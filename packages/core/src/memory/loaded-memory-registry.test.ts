@@ -1,74 +1,50 @@
 // packages/core/src/memory/loaded-memory-registry.test.ts
 import { describe, expect, it } from "vitest";
 import { LoadedMemoryRegistry } from "./loaded-memory-registry.js";
-import { buildRecallPair } from "./recall.js";
 import type { Message } from "../llm/provider.js";
-import type { Memory } from "./types.js";
 
-function mem(slug: string): Memory {
-  return {
-    slug, type: slug.split("/")[0] as Memory["type"],
-    name: slug, description: "d", content: `${slug} 正文`,
-    createdAt: "", updatedAt: "",
-  };
-}
-function fetchPair(slugs: string[]): [Message, Message] {
-  const id = "mf_1";
+function toolPair(toolName: string, slugs: string[]): [Message, Message] {
+  const id = `${toolName}_1`;
   const content = slugs.map((s) => `## ${s} (${s})\n${s} 正文`).join("\n\n");
   return [
-    { role: "assistant", content: [{ id, name: "memory_fetch", input: {} }], timestamp: "" },
+    { role: "assistant", content: [{ id, name: toolName, input: {} }], timestamp: "" },
     { role: "user", content: [{ tool_use_id: id, content }], timestamp: "" },
   ];
 }
 
 describe("LoadedMemoryRegistry", () => {
-  it("add/has/get/remove round-trip", () => {
+  it("add/has round-trip", () => {
     const r = new LoadedMemoryRegistry();
     expect(r.has("user/a")).toBe(false);
-    r.add("user/a", "active");
+    r.add("user/a");
     expect(r.has("user/a")).toBe(true);
-    expect(r.get("user/a")).toBe("active");
-    r.remove("user/a");
-    expect(r.has("user/a")).toBe(false);
   });
 
-  it("add overwrites source", () => {
+  it("add is idempotent (Set semantics)", () => {
     const r = new LoadedMemoryRegistry();
-    r.add("user/a", "sidequery");
-    r.add("user/a", "active");
-    expect(r.get("user/a")).toBe("active");
+    r.add("user/a");
+    r.add("user/a");
+    expect(r.has("user/a")).toBe(true);
   });
 
-  it("getAll returns entries", () => {
+  it("rebuild extracts slugs from memory_recall pairs", () => {
     const r = new LoadedMemoryRegistry();
-    r.add("user/a", "active");
-    r.add("user/b", "sidequery");
-    expect(r.getAll()).toEqual([
-      { slug: "user/a", source: "active" },
-      { slug: "user/b", source: "sidequery" },
-    ]);
+    r.rebuild(toolPair("memory_recall", ["user/food"]));
+    expect(r.has("user/food")).toBe(true);
   });
 
-  it("rebuild extracts sidequery slugs from memory_recall pairs", () => {
+  it("rebuild extracts slugs from legacy memory_fetch pairs", () => {
     const r = new LoadedMemoryRegistry();
-    const [tu, tr] = buildRecallPair("q", [mem("user/food")]);
-    r.rebuild([tu, tr]);
-    expect(r.get("user/food")).toBe("sidequery");
-  });
-
-  it("rebuild extracts active slugs from memory_fetch pairs", () => {
-    const r = new LoadedMemoryRegistry();
-    const [u, res] = fetchPair(["user/a", "user/b"]);
-    r.rebuild([u, res]);
-    expect(r.get("user/a")).toBe("active");
-    expect(r.get("user/b")).toBe("active");
+    r.rebuild(toolPair("memory_fetch", ["user/a", "user/b"]));
+    expect(r.has("user/a")).toBe(true);
+    expect(r.has("user/b")).toBe(true);
   });
 
   it("rebuild clears previous state", () => {
     const r = new LoadedMemoryRegistry();
-    r.add("user/old", "active");
+    r.add("user/old");
     r.rebuild([]);
-    expect(r.getAll()).toEqual([]);
+    expect(r.has("user/old")).toBe(false);
   });
 
   it("rebuild ignores unrelated tool pairs (Read)", () => {
@@ -76,6 +52,6 @@ describe("LoadedMemoryRegistry", () => {
     const use: Message = { role: "assistant", content: [{ id: "r1", name: "Read", input: {} }], timestamp: "" };
     const res: Message = { role: "user", content: [{ tool_use_id: "r1", content: "## x (user/y)\n..." }], timestamp: "" };
     r.rebuild([use, res]);
-    expect(r.getAll()).toEqual([]);
+    expect(r.has("user/y")).toBe(false);
   });
 });

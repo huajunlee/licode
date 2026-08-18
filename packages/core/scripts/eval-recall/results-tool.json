@@ -1,0 +1,117 @@
+{
+  "model": "kimi-k3",
+  "temperature": 0,
+  "perCase": [
+    {
+      "id": "a1",
+      "group": "A",
+      "triggered": true,
+      "selectedSlugs": [
+        "user/food-preferences"
+      ],
+      "hit": true
+    },
+    {
+      "id": "a2",
+      "group": "A",
+      "triggered": true,
+      "selectedSlugs": [
+        "feedback/chinese-reply",
+        "feedback/conclusion-first",
+        "feedback/no-emoji"
+      ],
+      "hit": true
+    },
+    {
+      "id": "a3",
+      "group": "A",
+      "triggered": true,
+      "selectedSlugs": [
+        "project/q3-launch"
+      ],
+      "hit": true
+    },
+    {
+      "id": "a4",
+      "group": "A",
+      "triggered": true,
+      "selectedSlugs": [
+        "user/fitness-schedule"
+      ],
+      "hit": true
+    },
+    {
+      "id": "a5",
+      "group": "A",
+      "triggered": true,
+      "selectedSlugs": [
+        "project/deepseek-default"
+      ],
+      "hit": true
+    },
+    {
+      "id": "b1",
+      "group": "B",
+      "triggered": false,
+      "selectedSlugs": [],
+      "hit": false
+    },
+    {
+      "id": "b2",
+      "group": "B",
+      "triggered": false,
+      "selectedSlugs": [],
+      "hit": false
+    },
+    {
+      "id": "b3",
+      "group": "B",
+      "triggered": false,
+      "selectedSlugs": [],
+      "hit": false
+    },
+    {
+      "id": "b4",
+      "group": "B",
+      "triggered": false,
+      "selectedSlugs": [],
+      "hit": false
+    },
+    {
+      "id": "c1",
+      "group": "C",
+      "triggered": true,
+      "selectedSlugs": [
+        "project/memory-redesign",
+        "reference/locomo-paper",
+        "reference/zhihu-memory-article"
+      ],
+      "hit": true
+    },
+    {
+      "id": "c2",
+      "group": "C",
+      "triggered": true,
+      "selectedSlugs": [
+        "project/deepseek-default",
+        "project/memory-redesign",
+        "project/q3-launch"
+      ],
+      "hit": true
+    },
+    {
+      "id": "c3",
+      "group": "C",
+      "triggered": true,
+      "selectedSlugs": [
+        "reference/zhihu-memory-article"
+      ],
+      "hit": true
+    }
+  ],
+  "summary": {
+    "recallA": 1,
+    "falsePositiveB": 0,
+    "precision": 0.8571428571428571
+  }
+}

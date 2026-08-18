@@ -1,0 +1,14 @@
+[
+  { "slug": "user/food-preferences", "name": "食物偏好", "description": "喜欢蛋挞和甜食，不吃辣", "type": "user", "keywords": ["蛋挞", "甜食", "不吃辣"], "content": "用户喜欢吃蛋挞，宵夜尤其爱吃。\n完全不吃辣，点菜要避免。\n对甜食普遍没有抵抗力。" },
+  { "slug": "user/neovim-workflow", "name": "编辑器习惯", "description": "主力编辑器是 Neovim，自维护配置", "type": "user", "keywords": ["neovim", "编辑器"], "content": "用户主力编辑器是 Neovim，自己维护 lua 配置。\n不喜欢别人推荐换编辑器。" },
+  { "slug": "user/fitness-schedule", "name": "健身时间", "description": "每周三、周五晚上健身", "type": "user", "keywords": ["健身", "周三", "周五"], "content": "用户每周三和周五晚上 7 点去健身房。\n其他时间一般没空锻炼。" },
+  { "slug": "feedback/no-emoji", "name": "回复不用表情", "description": "用户要求回复中不使用 emoji", "type": "feedback", "keywords": ["emoji", "回复风格"], "content": "用户明确要求回复中不要使用 emoji。\n\n**Why:** 用户觉得正式场合不专业。\n\n**How to apply:** 所有面向用户的回复文本。" },
+  { "slug": "feedback/conclusion-first", "name": "结论先行", "description": "回答先给结论再展开", "type": "feedback", "keywords": ["结论先行", "回答风格"], "content": "用户要求回答先给结论，再给论证。\n\n**Why:** 节省阅读时间。\n\n**How to apply:** 所有解释类回答。" },
+  { "slug": "feedback/chinese-reply", "name": "中文回复", "description": "始终用中文回复", "type": "feedback", "keywords": ["中文", "语言"], "content": "用户要求始终用中文回复。\n\n**Why:** 母语沟通效率高。\n\n**How to apply:** 所有回复，即使用户用英文提问。" },
+  { "slug": "project/q3-launch", "name": "Q3 上线目标", "description": "项目计划 2026 年 Q3 上线", "type": "project", "keywords": ["上线", "Q3", "2026"], "content": "项目计划在 2026 年 Q3（9 月底前）上线第一个公开版本。\n当前重点是稳定性。" },
+  { "slug": "project/deepseek-default", "name": "默认模型", "description": "项目默认模型为 deepseek-chat", "type": "project", "keywords": ["deepseek-chat", "默认模型"], "content": "LICode 的默认模型是 deepseek-chat，通过 Anthropic 兼容端点接入。\n切模型用启动参数。" },
+  { "slug": "project/memory-redesign", "name": "记忆系统重构", "description": "正在把记忆召回改为工具化方案", "type": "project", "keywords": ["记忆", "召回", "重构"], "content": "当前正在进行记忆召回系统重构：删除前置召回 hook，改为 memory_recall 工具。\n动机是提高缓存命中率。" },
+  { "slug": "reference/zhihu-memory-article", "name": "记忆系统对比文章", "description": "知乎上 Claude Code 与 Codex 记忆设计对比文", "type": "reference", "keywords": ["知乎", "记忆系统", "Claude Code"], "content": "一篇知乎文章，对比 Claude Code 与 Codex 的记忆系统设计（生产/召回/整理）。\n本地副本在桌面。是 LICode 记忆系统的重要参考。" },
+  { "slug": "reference/deepseek-docs", "name": "DeepSeek API 文档", "description": "DeepSeek 官方 API 文档地址", "type": "reference", "keywords": ["DeepSeek", "API", "文档"], "content": "DeepSeek 官方 API 文档：https://api-docs.deepseek.com/\n含上下文缓存说明。" },
+  { "slug": "reference/locomo-paper", "name": "LoCoMo 基准", "description": "长期对话记忆评测基准(ACL 2024)", "type": "reference", "keywords": ["LoCoMo", "记忆评测", "基准"], "content": "LoCoMo 是 Snap Research 的长期对话记忆评测基准。\n仓库：https://github.com/snap-research/LoCoMo\n适合作为记忆系统的端到端评测。" }
+]
