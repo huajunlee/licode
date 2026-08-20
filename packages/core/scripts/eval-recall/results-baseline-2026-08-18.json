@@ -7,8 +7,7 @@
       "group": "A",
       "triggered": true,
       "selectedSlugs": [
-        "user/food-preferences",
-        "user/food-sugar-restriction"
+        "user/food-preferences"
       ],
       "hit": true
     },
@@ -38,10 +37,9 @@
       "group": "A",
       "triggered": true,
       "selectedSlugs": [
-        "user/fitness-schedule",
         "user/fitness-schedule-new"
       ],
-      "hit": true
+      "hit": false
     },
     {
       "id": "a5",
@@ -57,7 +55,6 @@
       "group": "A",
       "triggered": true,
       "selectedSlugs": [
-        "user/fitness-schedule",
         "user/fitness-schedule-new"
       ],
       "hit": true
@@ -67,7 +64,6 @@
       "group": "A",
       "triggered": true,
       "selectedSlugs": [
-        "user/food-preferences",
         "user/food-sugar-restriction"
       ],
       "hit": true
@@ -119,7 +115,7 @@
     {
       "id": "b2",
       "group": "B",
-      "triggered": true,
+      "triggered": false,
       "selectedSlugs": [],
       "hit": false
     },
@@ -140,18 +136,14 @@
     {
       "id": "b5",
       "group": "B",
-      "triggered": true,
-      "selectedSlugs": [
-        "user/neovim-workflow",
-        "user/team-relationships",
-        "user/reading-list"
-      ],
+      "triggered": false,
+      "selectedSlugs": [],
       "hit": false
     },
     {
       "id": "b6",
       "group": "B",
-      "triggered": true,
+      "triggered": false,
       "selectedSlugs": [],
       "hit": false
     },
@@ -160,8 +152,7 @@
       "group": "B",
       "triggered": true,
       "selectedSlugs": [
-        "user/neovim-workflow",
-        "user/reading-list"
+        "user/neovim-workflow"
       ],
       "hit": false
     },
@@ -175,51 +166,45 @@
     {
       "id": "d1",
       "group": "D",
-      "triggered": true,
+      "triggered": false,
       "selectedSlugs": [],
       "hit": false
     },
     {
       "id": "d2",
       "group": "D",
-      "triggered": true,
+      "triggered": false,
       "selectedSlugs": [],
       "hit": false
     },
     {
       "id": "d3",
       "group": "D",
-      "triggered": true,
+      "triggered": false,
       "selectedSlugs": [],
       "hit": false
     },
     {
       "id": "d4",
       "group": "D",
-      "triggered": true,
+      "triggered": false,
       "selectedSlugs": [],
       "hit": false
     },
     {
       "id": "c1",
       "group": "C",
-      "triggered": true,
-      "selectedSlugs": [
-        "reference/locomo-paper",
-        "reference/zhihu-memory-article",
-        "project/memory-redesign"
-      ],
-      "hit": true
+      "triggered": false,
+      "selectedSlugs": [],
+      "hit": false
     },
     {
       "id": "c2",
       "group": "C",
       "triggered": true,
       "selectedSlugs": [
-        "project/memory-redesign",
         "project/q3-launch",
-        "project/deepseek-default",
-        "user/team-relationships"
+        "project/memory-redesign"
       ],
       "hit": true
     },
@@ -237,7 +222,6 @@
       "group": "C",
       "triggered": true,
       "selectedSlugs": [
-        "user/fitness-schedule",
         "user/fitness-schedule-new",
         "user/vacation-plan"
       ],
@@ -264,9 +248,9 @@
     }
   ],
   "summary": {
-    "recallA": 1,
-    "falsePositiveB": 0.5,
-    "precision": 0.868421052631579,
+    "recallA": 0.9090909090909091,
+    "falsePositiveB": 0.125,
+    "precision": 0.8333333333333334,
     "fabricateD": 0
   }
 }

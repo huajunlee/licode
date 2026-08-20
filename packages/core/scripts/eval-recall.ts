@@ -40,7 +40,7 @@ const DATA = path.join(DIR, "eval-recall");
 const MODEL = process.env.EVAL_MODEL ?? "kimi-k3";
 
 interface Seed { slug: string; name: string; description: string; type: string; keywords: string[]; content: string; }
-interface Case { id: string; group: "A" | "B" | "C"; query: string; expectRecall: boolean | null; expectedSlugs: string[]; }
+interface Case { id: string; group: "A" | "B" | "C" | "D"; query: string; expectRecall: boolean | null; expectedSlugs: string[]; }
 
 function writeSeedMemory(dir: string, seed: Seed): void {
   const file = path.join(dir, `${seed.slug}.md`);
@@ -147,6 +147,7 @@ async function main(): Promise<void> {
 
   const groupA = perCase.filter((p) => p.group === "A");
   const groupB = perCase.filter((p) => p.group === "B");
+  const groupD = perCase.filter((p) => p.group === "D");
   const totalSelected = perCase.reduce((n, p) => n + p.selectedSlugs.length, 0);
   const totalExpected = cases.flatMap((c) => c.expectedSlugs);
   const totalCorrect = perCase.reduce(
@@ -156,8 +157,11 @@ async function main(): Promise<void> {
     recallA: groupA.filter((p) => p.hit).length / groupA.length,
     falsePositiveB: groupB.filter((p) => p.triggered).length / groupB.length,
     precision: totalSelected === 0 ? 1 : totalCorrect / totalSelected,
+    // D 组（对抗/防幻觉）：问「看似有答案但记忆里不存在」的个人问题，
+    // 正确行为是弃权（不召回任何记忆）；召回任意一条即视为幻觉联想。
+    fabricateD: groupD.filter((p) => p.selectedSlugs.length > 0).length / groupD.length,
   };
-  console.log(`\nA组召回率=${(summary.recallA * 100).toFixed(0)}%  B组误召回率=${(summary.falsePositiveB * 100).toFixed(0)}%  选中准确率=${(summary.precision * 100).toFixed(0)}%`);
+  console.log(`\nA组召回率=${(summary.recallA * 100).toFixed(0)}%  B组误召回率=${(summary.falsePositiveB * 100).toFixed(0)}%  选中准确率=${(summary.precision * 100).toFixed(0)}%  D组幻觉联想=${(summary.fabricateD * 100).toFixed(0)}%`);
 
   const out = path.join(DATA, `results-${mode}.json`);
   fs.writeFileSync(out, JSON.stringify({ model: MODEL, temperature: 0, perCase, summary }, null, 2));

@@ -1,0 +1,36 @@
+[
+  {
+    "id": "project-session",
+    "name": "项目会话",
+    "turns": [
+      { "text": "LICode 默认用的是哪个模型来着？", "reply": "默认是 deepseek-chat。", "expectRecall": true, "expectedSlugs": ["project/deepseek-default"], "note": "单跳·项目" },
+      { "text": "帮我写一个防抖函数", "reply": "可以，给你一个带 immediate 参数的版本，后续要 cancel 我再补。", "expectRecall": false, "expectedSlugs": [], "note": "纯技术" },
+      { "text": "Q3 上线之前我们得把稳定性弄好，你觉得先做什么？", "reply": "先补错误监控和回归测试吧。", "expectRecall": true, "expectedSlugs": ["project/q3-launch"], "note": "单跳·项目计划" },
+      { "text": "记忆召回重构现在进展到哪了？", "reply": "已经删掉两阶段召回，改成 memory_recall 工具了。", "expectRecall": true, "expectedSlugs": ["project/memory-redesign"], "note": "单跳·项目" },
+      { "text": "那重构之后缓存命中率有提升吗？", "reply": "理论上稳定前缀能提升，需要实测验证。", "expectRecall": true, "expectedSlugs": ["project/memory-redesign"], "note": "隐指·跨轮" },
+      { "text": "git rebase 和 merge 到底啥区别？", "reply": "rebase 重写历史，merge 保留分叉点，团队协作一般用 merge。", "expectRecall": false, "expectedSlugs": [], "note": "纯技术" },
+      { "text": "对了，你回复我的时候风格上要注意什么？", "reply": "结论先行，别啰嗦。", "expectRecall": true, "expectedSlugs": ["feedback/conclusion-first"], "note": "反馈·风格" },
+      { "text": "DeepSeek 这个月股价走势怎么样？", "reply": "我这边不掌握实时行情，抱歉。", "expectRecall": false, "expectedSlugs": [], "note": "语义陷阱" },
+      { "text": "Neovim 的 lua 配置入门难吗？", "reply": "有基础的话还好，先从 init.lua 开始慢慢来。", "expectRecall": false, "expectedSlugs": [], "note": "语义陷阱" },
+      { "text": "上次说的那个重构，还有什么遗留问题？", "reply": "子 agent 的定时器还没清，文档也要核对。", "expectRecall": true, "expectedSlugs": ["project/memory-redesign"], "note": "隐指·跨轮" },
+      { "text": "docker compose 里 depends_on 和 volumes 怎么配合？", "reply": "depends_on 控制启动顺序，volumes 挂载数据，配合用要先建卷再声明。", "expectRecall": false, "expectedSlugs": [], "note": "语义陷阱" },
+      { "text": "那 Q3 上线具体定在几月？", "reply": "计划 9 月底前。", "expectRecall": true, "expectedSlugs": ["project/q3-launch"], "note": "单跳·项目" }
+    ]
+  },
+  {
+    "id": "personal-session",
+    "name": "个人会话",
+    "turns": [
+      { "text": "宵夜吃什么好？", "reply": "你之前爱吃蛋挞和甜食，可以看看附近的烘焙店。", "expectRecall": true, "expectedSlugs": ["user/food-preferences"], "note": "单跳·偏好" },
+      { "text": "我现在健身是晚上还是早上？", "reply": "你改到早上 6:30 了，周一和周四。", "expectRecall": true, "expectedSlugs": ["user/fitness-schedule-new"], "note": "知识更新" },
+      { "text": "帮我写个防抖函数", "reply": "好，给你一个防抖实现，适合搜索输入场景。", "expectRecall": false, "expectedSlugs": [], "note": "纯技术" },
+      { "text": "我 8 月底的云南安排是几号到几号？", "reply": "8 月底去大理和丽江，玩 5 天，9 月初返程。", "expectRecall": true, "expectedSlugs": ["user/vacation-plan"], "note": "计划·出行" },
+      { "text": "我手机号多少？帮我填一下报名表", "reply": "138-0013-8000。", "expectRecall": true, "expectedSlugs": ["user/contact-info"], "note": "个人细节" },
+      { "text": "给一个健身 App 设计数据库表结构", "reply": "可以从 users、workouts 两张表起步。", "expectRecall": false, "expectedSlugs": [], "note": "语义陷阱" },
+      { "text": "现在后端代码谁在负责？", "reply": "小王负责后端。", "expectRecall": true, "expectedSlugs": ["user/team-relationships"], "note": "关系·人员" },
+      { "text": "正则表达式怎么匹配邮箱？", "reply": "用这个模式就行，注意转义和边界。", "expectRecall": false, "expectedSlugs": [], "note": "纯技术" },
+      { "text": "我最近在读什么书？", "reply": "《禅与摩托车维修艺术》，还有 Rust 教程。", "expectRecall": true, "expectedSlugs": ["user/reading-list"], "note": "单跳·个人" },
+      { "text": "我还能随便吃甜的吗？", "reply": "你在戒糖，蛋挞奶茶都先别碰。", "expectRecall": true, "expectedSlugs": ["user/food-sugar-restriction"], "note": "知识更新" }
+    ]
+  }
+]

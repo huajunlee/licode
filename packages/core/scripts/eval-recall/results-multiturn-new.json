@@ -1,0 +1,1047 @@
+{
+  "arch": "new",
+  "model": "deepseek-chat",
+  "temperature": 0,
+  "scenarios": [
+    {
+      "id": "project-session",
+      "name": "项目会话",
+      "perTurn": [
+        {
+          "turn": 0,
+          "text": "LICode 默认用的是哪个模型来着？",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "project/deepseek-default"
+          ],
+          "triggered": true,
+          "selectedSlugs": [
+            "project/deepseek-default"
+          ],
+          "freshHit": true,
+          "hit": true,
+          "inContext": [
+            "project/deepseek-default"
+          ],
+          "note": "单跳·项目"
+        },
+        {
+          "turn": 1,
+          "text": "帮我写一个防抖函数",
+          "expectRecall": false,
+          "expectedSlugs": [],
+          "triggered": true,
+          "selectedSlugs": [],
+          "freshHit": false,
+          "hit": false,
+          "inContext": [
+            "project/deepseek-default"
+          ],
+          "note": "纯技术"
+        },
+        {
+          "turn": 2,
+          "text": "Q3 上线之前我们得把稳定性弄好，你觉得先做什么？",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "project/q3-launch"
+          ],
+          "triggered": true,
+          "selectedSlugs": [
+            "project/q3-launch"
+          ],
+          "freshHit": true,
+          "hit": true,
+          "inContext": [
+            "project/deepseek-default",
+            "project/q3-launch"
+          ],
+          "note": "单跳·项目计划"
+        },
+        {
+          "turn": 3,
+          "text": "记忆召回重构现在进展到哪了？",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "project/memory-redesign"
+          ],
+          "triggered": true,
+          "selectedSlugs": [
+            "project/memory-redesign"
+          ],
+          "freshHit": true,
+          "hit": true,
+          "inContext": [
+            "project/deepseek-default",
+            "project/q3-launch",
+            "project/memory-redesign"
+          ],
+          "note": "单跳·项目"
+        },
+        {
+          "turn": 4,
+          "text": "那重构之后缓存命中率有提升吗？",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "project/memory-redesign"
+          ],
+          "triggered": true,
+          "selectedSlugs": [],
+          "freshHit": false,
+          "hit": true,
+          "inContext": [
+            "project/deepseek-default",
+            "project/q3-launch",
+            "project/memory-redesign"
+          ],
+          "note": "隐指·跨轮"
+        },
+        {
+          "turn": 5,
+          "text": "git rebase 和 merge 到底啥区别？",
+          "expectRecall": false,
+          "expectedSlugs": [],
+          "triggered": true,
+          "selectedSlugs": [],
+          "freshHit": false,
+          "hit": false,
+          "inContext": [
+            "project/deepseek-default",
+            "project/q3-launch",
+            "project/memory-redesign"
+          ],
+          "note": "纯技术"
+        },
+        {
+          "turn": 6,
+          "text": "对了，你回复我的时候风格上要注意什么？",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "feedback/conclusion-first"
+          ],
+          "triggered": true,
+          "selectedSlugs": [
+            "feedback/chinese-reply",
+            "feedback/concise-answers",
+            "feedback/conclusion-first",
+            "feedback/no-emoji"
+          ],
+          "freshHit": true,
+          "hit": true,
+          "inContext": [
+            "project/deepseek-default",
+            "project/q3-launch",
+            "project/memory-redesign",
+            "feedback/chinese-reply",
+            "feedback/concise-answers",
+            "feedback/conclusion-first",
+            "feedback/no-emoji"
+          ],
+          "note": "反馈·风格"
+        },
+        {
+          "turn": 7,
+          "text": "DeepSeek 这个月股价走势怎么样？",
+          "expectRecall": false,
+          "expectedSlugs": [],
+          "triggered": true,
+          "selectedSlugs": [],
+          "freshHit": false,
+          "hit": false,
+          "inContext": [
+            "project/deepseek-default",
+            "project/q3-launch",
+            "project/memory-redesign",
+            "feedback/chinese-reply",
+            "feedback/concise-answers",
+            "feedback/conclusion-first",
+            "feedback/no-emoji"
+          ],
+          "note": "语义陷阱"
+        },
+        {
+          "turn": 8,
+          "text": "Neovim 的 lua 配置入门难吗？",
+          "expectRecall": false,
+          "expectedSlugs": [],
+          "triggered": true,
+          "selectedSlugs": [
+            "user/neovim-workflow"
+          ],
+          "freshHit": false,
+          "hit": false,
+          "inContext": [
+            "project/deepseek-default",
+            "project/q3-launch",
+            "project/memory-redesign",
+            "feedback/chinese-reply",
+            "feedback/concise-answers",
+            "feedback/conclusion-first",
+            "feedback/no-emoji",
+            "user/neovim-workflow"
+          ],
+          "note": "语义陷阱"
+        },
+        {
+          "turn": 9,
+          "text": "上次说的那个重构，还有什么遗留问题？",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "project/memory-redesign"
+          ],
+          "triggered": true,
+          "selectedSlugs": [],
+          "freshHit": false,
+          "hit": true,
+          "inContext": [
+            "project/deepseek-default",
+            "project/q3-launch",
+            "project/memory-redesign",
+            "feedback/chinese-reply",
+            "feedback/concise-answers",
+            "feedback/conclusion-first",
+            "feedback/no-emoji",
+            "user/neovim-workflow"
+          ],
+          "note": "隐指·跨轮"
+        },
+        {
+          "turn": 10,
+          "text": "docker compose 里 depends_on 和 volumes 怎么配合？",
+          "expectRecall": false,
+          "expectedSlugs": [],
+          "triggered": true,
+          "selectedSlugs": [
+            "reference/docker-cheatsheet"
+          ],
+          "freshHit": false,
+          "hit": false,
+          "inContext": [
+            "project/deepseek-default",
+            "project/q3-launch",
+            "project/memory-redesign",
+            "feedback/chinese-reply",
+            "feedback/concise-answers",
+            "feedback/conclusion-first",
+            "feedback/no-emoji",
+            "user/neovim-workflow",
+            "reference/docker-cheatsheet"
+          ],
+          "note": "语义陷阱"
+        },
+        {
+          "turn": 11,
+          "text": "那 Q3 上线具体定在几月？",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "project/q3-launch"
+          ],
+          "triggered": true,
+          "selectedSlugs": [],
+          "freshHit": false,
+          "hit": true,
+          "inContext": [
+            "project/deepseek-default",
+            "project/q3-launch",
+            "project/memory-redesign",
+            "feedback/chinese-reply",
+            "feedback/concise-answers",
+            "feedback/conclusion-first",
+            "feedback/no-emoji",
+            "user/neovim-workflow",
+            "reference/docker-cheatsheet"
+          ],
+          "note": "单跳·项目"
+        }
+      ],
+      "metrics": {
+        "recallHit": 1,
+        "falsePositiveTrigger": 1,
+        "falsePositiveInject": 0.4,
+        "main": {
+          "requests": 12,
+          "input": 1476,
+          "output": 977,
+          "cacheRead": 43008,
+          "cacheCreation": 0,
+          "cacheHitRate": 0.9668195306177502
+        },
+        "all": {
+          "requests": 36,
+          "input": 4070,
+          "output": 2765,
+          "cacheRead": 81280,
+          "cacheCreation": 0,
+          "cacheHitRate": 0.9523140011716462
+        }
+      },
+      "calls": [
+        {
+          "label": "main",
+          "turn": 0,
+          "input": 43,
+          "output": 78,
+          "cacheRead": 2816,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 0,
+          "input": 84,
+          "output": 66,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 0,
+          "input": 74,
+          "output": 8,
+          "cacheRead": 1664,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 1,
+          "input": 58,
+          "output": 81,
+          "cacheRead": 2944,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 1,
+          "input": 86,
+          "output": 50,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 1,
+          "input": 53,
+          "output": 188,
+          "cacheRead": 1664,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 2,
+          "input": 64,
+          "output": 86,
+          "cacheRead": 3072,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 2,
+          "input": 92,
+          "output": 118,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 2,
+          "input": 220,
+          "output": 88,
+          "cacheRead": 1664,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 3,
+          "input": 93,
+          "output": 76,
+          "cacheRead": 3200,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 3,
+          "input": 82,
+          "output": 48,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 3,
+          "input": 51,
+          "output": 8,
+          "cacheRead": 1664,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 4,
+          "input": 119,
+          "output": 81,
+          "cacheRead": 3328,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 4,
+          "input": 87,
+          "output": 48,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 4,
+          "input": 56,
+          "output": 184,
+          "cacheRead": 1664,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 5,
+          "input": 123,
+          "output": 85,
+          "cacheRead": 3456,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 5,
+          "input": 89,
+          "output": 85,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 5,
+          "input": 136,
+          "output": 84,
+          "cacheRead": 1664,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 6,
+          "input": 131,
+          "output": 81,
+          "cacheRead": 3584,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 6,
+          "input": 87,
+          "output": 230,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 6,
+          "input": 534,
+          "output": 44,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 7,
+          "input": 297,
+          "output": 81,
+          "cacheRead": 3712,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 7,
+          "input": 87,
+          "output": 155,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 7,
+          "input": 211,
+          "output": 40,
+          "cacheRead": 1664,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 8,
+          "input": 164,
+          "output": 86,
+          "cacheRead": 3968,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 8,
+          "input": 91,
+          "output": 50,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 8,
+          "input": 58,
+          "output": 10,
+          "cacheRead": 1664,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 9,
+          "input": 194,
+          "output": 80,
+          "cacheRead": 4096,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 9,
+          "input": 86,
+          "output": 48,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 9,
+          "input": 55,
+          "output": 122,
+          "cacheRead": 1664,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 10,
+          "input": 74,
+          "output": 83,
+          "cacheRead": 4352,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 10,
+          "input": 83,
+          "output": 49,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 10,
+          "input": 53,
+          "output": 9,
+          "cacheRead": 1664,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 11,
+          "input": 116,
+          "output": 79,
+          "cacheRead": 4480,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 11,
+          "input": 85,
+          "output": 48,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 11,
+          "input": 54,
+          "output": 8,
+          "cacheRead": 1664,
+          "cacheCreation": 0
+        }
+      ]
+    },
+    {
+      "id": "personal-session",
+      "name": "个人会话",
+      "perTurn": [
+        {
+          "turn": 0,
+          "text": "宵夜吃什么好？",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "user/food-preferences"
+          ],
+          "triggered": true,
+          "selectedSlugs": [
+            "user/food-preferences",
+            "user/food-sugar-restriction"
+          ],
+          "freshHit": true,
+          "hit": true,
+          "inContext": [
+            "user/food-preferences",
+            "user/food-sugar-restriction"
+          ],
+          "note": "单跳·偏好"
+        },
+        {
+          "turn": 1,
+          "text": "我现在健身是晚上还是早上？",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "user/fitness-schedule-new"
+          ],
+          "triggered": true,
+          "selectedSlugs": [
+            "user/fitness-schedule",
+            "user/fitness-schedule-new"
+          ],
+          "freshHit": true,
+          "hit": true,
+          "inContext": [
+            "user/food-preferences",
+            "user/food-sugar-restriction",
+            "user/fitness-schedule",
+            "user/fitness-schedule-new"
+          ],
+          "note": "知识更新"
+        },
+        {
+          "turn": 2,
+          "text": "帮我写个防抖函数",
+          "expectRecall": false,
+          "expectedSlugs": [],
+          "triggered": true,
+          "selectedSlugs": [],
+          "freshHit": false,
+          "hit": false,
+          "inContext": [
+            "user/food-preferences",
+            "user/food-sugar-restriction",
+            "user/fitness-schedule",
+            "user/fitness-schedule-new"
+          ],
+          "note": "纯技术"
+        },
+        {
+          "turn": 3,
+          "text": "我 8 月底的云南安排是几号到几号？",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "user/vacation-plan"
+          ],
+          "triggered": true,
+          "selectedSlugs": [
+            "user/vacation-plan"
+          ],
+          "freshHit": true,
+          "hit": true,
+          "inContext": [
+            "user/food-preferences",
+            "user/food-sugar-restriction",
+            "user/fitness-schedule",
+            "user/fitness-schedule-new",
+            "user/vacation-plan"
+          ],
+          "note": "计划·出行"
+        },
+        {
+          "turn": 4,
+          "text": "我手机号多少？帮我填一下报名表",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "user/contact-info"
+          ],
+          "triggered": true,
+          "selectedSlugs": [
+            "user/contact-info"
+          ],
+          "freshHit": true,
+          "hit": true,
+          "inContext": [
+            "user/food-preferences",
+            "user/food-sugar-restriction",
+            "user/fitness-schedule",
+            "user/fitness-schedule-new",
+            "user/vacation-plan",
+            "user/contact-info"
+          ],
+          "note": "个人细节"
+        },
+        {
+          "turn": 5,
+          "text": "给一个健身 App 设计数据库表结构",
+          "expectRecall": false,
+          "expectedSlugs": [],
+          "triggered": true,
+          "selectedSlugs": [
+            "user/neovim-workflow",
+            "user/reading-list",
+            "user/team-relationships"
+          ],
+          "freshHit": false,
+          "hit": false,
+          "inContext": [
+            "user/food-preferences",
+            "user/food-sugar-restriction",
+            "user/fitness-schedule",
+            "user/fitness-schedule-new",
+            "user/vacation-plan",
+            "user/contact-info",
+            "user/neovim-workflow",
+            "user/reading-list",
+            "user/team-relationships"
+          ],
+          "note": "语义陷阱"
+        },
+        {
+          "turn": 6,
+          "text": "现在后端代码谁在负责？",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "user/team-relationships"
+          ],
+          "triggered": true,
+          "selectedSlugs": [],
+          "freshHit": false,
+          "hit": true,
+          "inContext": [
+            "user/food-preferences",
+            "user/food-sugar-restriction",
+            "user/fitness-schedule",
+            "user/fitness-schedule-new",
+            "user/vacation-plan",
+            "user/contact-info",
+            "user/neovim-workflow",
+            "user/reading-list",
+            "user/team-relationships"
+          ],
+          "note": "关系·人员"
+        },
+        {
+          "turn": 7,
+          "text": "正则表达式怎么匹配邮箱？",
+          "expectRecall": false,
+          "expectedSlugs": [],
+          "triggered": true,
+          "selectedSlugs": [],
+          "freshHit": false,
+          "hit": false,
+          "inContext": [
+            "user/food-preferences",
+            "user/food-sugar-restriction",
+            "user/fitness-schedule",
+            "user/fitness-schedule-new",
+            "user/vacation-plan",
+            "user/contact-info",
+            "user/neovim-workflow",
+            "user/reading-list",
+            "user/team-relationships"
+          ],
+          "note": "纯技术"
+        },
+        {
+          "turn": 8,
+          "text": "我最近在读什么书？",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "user/reading-list"
+          ],
+          "triggered": true,
+          "selectedSlugs": [],
+          "freshHit": false,
+          "hit": true,
+          "inContext": [
+            "user/food-preferences",
+            "user/food-sugar-restriction",
+            "user/fitness-schedule",
+            "user/fitness-schedule-new",
+            "user/vacation-plan",
+            "user/contact-info",
+            "user/neovim-workflow",
+            "user/reading-list",
+            "user/team-relationships"
+          ],
+          "note": "单跳·个人"
+        },
+        {
+          "turn": 9,
+          "text": "我还能随便吃甜的吗？",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "user/food-sugar-restriction"
+          ],
+          "triggered": true,
+          "selectedSlugs": [],
+          "freshHit": false,
+          "hit": true,
+          "inContext": [
+            "user/food-preferences",
+            "user/food-sugar-restriction",
+            "user/fitness-schedule",
+            "user/fitness-schedule-new",
+            "user/vacation-plan",
+            "user/contact-info",
+            "user/neovim-workflow",
+            "user/reading-list",
+            "user/team-relationships"
+          ],
+          "note": "知识更新"
+        }
+      ],
+      "metrics": {
+        "recallHit": 1,
+        "falsePositiveTrigger": 1,
+        "falsePositiveInject": 0.3333333333333333,
+        "main": {
+          "requests": 10,
+          "input": 1139,
+          "output": 763,
+          "cacheRead": 35328,
+          "cacheCreation": 0,
+          "cacheHitRate": 0.9687662818438588
+        },
+        "all": {
+          "requests": 28,
+          "input": 3039,
+          "output": 1933,
+          "cacheRead": 64000,
+          "cacheCreation": 0,
+          "cacheHitRate": 0.9546681782246155
+        }
+      },
+      "calls": [
+        {
+          "label": "main",
+          "turn": 0,
+          "input": 39,
+          "output": 80,
+          "cacheRead": 2816,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 0,
+          "input": 86,
+          "output": 85,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 0,
+          "input": 40,
+          "output": 71,
+          "cacheRead": 1792,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 1,
+          "input": 8,
+          "output": 77,
+          "cacheRead": 3072,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 1,
+          "input": 83,
+          "output": 94,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 1,
+          "input": 297,
+          "output": 31,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 2,
+          "input": 218,
+          "output": 77,
+          "cacheRead": 3072,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 2,
+          "input": 83,
+          "output": 119,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 2,
+          "input": 202,
+          "output": 175,
+          "cacheRead": 1664,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 3,
+          "input": 87,
+          "output": 80,
+          "cacheRead": 3328,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 3,
+          "input": 86,
+          "output": 48,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 3,
+          "input": 64,
+          "output": 8,
+          "cacheRead": 1664,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 4,
+          "input": 131,
+          "output": 71,
+          "cacheRead": 3456,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 4,
+          "input": 77,
+          "output": 7,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 5,
+          "input": 154,
+          "output": 78,
+          "cacheRead": 3584,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 5,
+          "input": 83,
+          "output": 119,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 5,
+          "input": 202,
+          "output": 170,
+          "cacheRead": 1664,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 6,
+          "input": 239,
+          "output": 78,
+          "cacheRead": 3712,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 6,
+          "input": 83,
+          "output": 48,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 6,
+          "input": 52,
+          "output": 8,
+          "cacheRead": 1664,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 7,
+          "input": 101,
+          "output": 75,
+          "cacheRead": 3968,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 7,
+          "input": 81,
+          "output": 47,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 7,
+          "input": 59,
+          "output": 32,
+          "cacheRead": 1664,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 8,
+          "input": 85,
+          "output": 72,
+          "cacheRead": 4096,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 8,
+          "input": 78,
+          "output": 7,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 9,
+          "input": 77,
+          "output": 75,
+          "cacheRead": 4224,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 9,
+          "input": 81,
+          "output": 85,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 9,
+          "input": 163,
+          "output": 16,
+          "cacheRead": 1664,
+          "cacheCreation": 0
+        }
+      ]
+    }
+  ]
+}

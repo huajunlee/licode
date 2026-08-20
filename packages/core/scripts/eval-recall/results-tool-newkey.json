@@ -77,8 +77,8 @@
       "group": "A",
       "triggered": true,
       "selectedSlugs": [
-        "user/vacation-plan",
-        "project/q3-launch"
+        "project/q3-launch",
+        "user/vacation-plan"
       ],
       "hit": true
     },
@@ -142,8 +142,8 @@
       "group": "B",
       "triggered": true,
       "selectedSlugs": [
-        "user/neovim-workflow",
         "user/team-relationships",
+        "user/neovim-workflow",
         "user/reading-list"
       ],
       "hit": false
@@ -161,15 +161,22 @@
       "triggered": true,
       "selectedSlugs": [
         "user/neovim-workflow",
-        "user/reading-list"
+        "user/reading-list",
+        "user/team-relationships"
       ],
       "hit": false
     },
     {
       "id": "b8",
       "group": "B",
-      "triggered": false,
-      "selectedSlugs": [],
+      "triggered": true,
+      "selectedSlugs": [
+        "reference/docker-cheatsheet",
+        "project/memory-redesign",
+        "project/q3-launch",
+        "project/deepseek-default",
+        "user/team-relationships"
+      ],
       "hit": false
     },
     {
@@ -218,7 +225,6 @@
       "selectedSlugs": [
         "project/memory-redesign",
         "project/q3-launch",
-        "project/deepseek-default",
         "user/team-relationships"
       ],
       "hit": true
@@ -265,8 +271,8 @@
   ],
   "summary": {
     "recallA": 1,
-    "falsePositiveB": 0.5,
-    "precision": 0.868421052631579,
+    "falsePositiveB": 0.625,
+    "precision": 0.8604651162790697,
     "fabricateD": 0
   }
 }

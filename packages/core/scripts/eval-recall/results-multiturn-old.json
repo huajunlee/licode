@@ -1,0 +1,847 @@
+{
+  "arch": "old",
+  "model": "deepseek-chat",
+  "temperature": 0,
+  "scenarios": [
+    {
+      "id": "project-session",
+      "name": "项目会话",
+      "perTurn": [
+        {
+          "turn": 0,
+          "text": "LICode 默认用的是哪个模型来着？",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "project/deepseek-default"
+          ],
+          "triggered": true,
+          "selectedSlugs": [
+            "project/deepseek-default"
+          ],
+          "freshHit": true,
+          "hit": true,
+          "inContext": [
+            "project/deepseek-default"
+          ],
+          "note": "单跳·项目"
+        },
+        {
+          "turn": 1,
+          "text": "帮我写一个防抖函数",
+          "expectRecall": false,
+          "expectedSlugs": [],
+          "triggered": false,
+          "selectedSlugs": [],
+          "freshHit": false,
+          "hit": false,
+          "inContext": [
+            "project/deepseek-default"
+          ],
+          "note": "纯技术"
+        },
+        {
+          "turn": 2,
+          "text": "Q3 上线之前我们得把稳定性弄好，你觉得先做什么？",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "project/q3-launch"
+          ],
+          "triggered": false,
+          "selectedSlugs": [],
+          "freshHit": false,
+          "hit": false,
+          "inContext": [
+            "project/deepseek-default"
+          ],
+          "note": "单跳·项目计划"
+        },
+        {
+          "turn": 3,
+          "text": "记忆召回重构现在进展到哪了？",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "project/memory-redesign"
+          ],
+          "triggered": true,
+          "selectedSlugs": [
+            "project/memory-redesign"
+          ],
+          "freshHit": true,
+          "hit": true,
+          "inContext": [
+            "project/deepseek-default",
+            "project/memory-redesign"
+          ],
+          "note": "单跳·项目"
+        },
+        {
+          "turn": 4,
+          "text": "那重构之后缓存命中率有提升吗？",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "project/memory-redesign"
+          ],
+          "triggered": false,
+          "selectedSlugs": [],
+          "freshHit": false,
+          "hit": true,
+          "inContext": [
+            "project/deepseek-default",
+            "project/memory-redesign"
+          ],
+          "note": "隐指·跨轮"
+        },
+        {
+          "turn": 5,
+          "text": "git rebase 和 merge 到底啥区别？",
+          "expectRecall": false,
+          "expectedSlugs": [],
+          "triggered": false,
+          "selectedSlugs": [],
+          "freshHit": false,
+          "hit": false,
+          "inContext": [
+            "project/deepseek-default",
+            "project/memory-redesign"
+          ],
+          "note": "纯技术"
+        },
+        {
+          "turn": 6,
+          "text": "对了，你回复我的时候风格上要注意什么？",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "feedback/conclusion-first"
+          ],
+          "triggered": true,
+          "selectedSlugs": [
+            "feedback/chinese-reply",
+            "feedback/concise-answers",
+            "feedback/conclusion-first",
+            "feedback/no-emoji"
+          ],
+          "freshHit": true,
+          "hit": true,
+          "inContext": [
+            "project/deepseek-default",
+            "project/memory-redesign",
+            "feedback/chinese-reply",
+            "feedback/concise-answers",
+            "feedback/conclusion-first",
+            "feedback/no-emoji"
+          ],
+          "note": "反馈·风格"
+        },
+        {
+          "turn": 7,
+          "text": "DeepSeek 这个月股价走势怎么样？",
+          "expectRecall": false,
+          "expectedSlugs": [],
+          "triggered": false,
+          "selectedSlugs": [],
+          "freshHit": false,
+          "hit": false,
+          "inContext": [
+            "project/deepseek-default",
+            "project/memory-redesign",
+            "feedback/chinese-reply",
+            "feedback/concise-answers",
+            "feedback/conclusion-first",
+            "feedback/no-emoji"
+          ],
+          "note": "语义陷阱"
+        },
+        {
+          "turn": 8,
+          "text": "Neovim 的 lua 配置入门难吗？",
+          "expectRecall": false,
+          "expectedSlugs": [],
+          "triggered": true,
+          "selectedSlugs": [
+            "user/neovim-workflow"
+          ],
+          "freshHit": false,
+          "hit": false,
+          "inContext": [
+            "project/deepseek-default",
+            "project/memory-redesign",
+            "feedback/chinese-reply",
+            "feedback/concise-answers",
+            "feedback/conclusion-first",
+            "feedback/no-emoji",
+            "user/neovim-workflow"
+          ],
+          "note": "语义陷阱"
+        },
+        {
+          "turn": 9,
+          "text": "上次说的那个重构，还有什么遗留问题？",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "project/memory-redesign"
+          ],
+          "triggered": false,
+          "selectedSlugs": [],
+          "freshHit": false,
+          "hit": true,
+          "inContext": [
+            "project/deepseek-default",
+            "project/memory-redesign",
+            "feedback/chinese-reply",
+            "feedback/concise-answers",
+            "feedback/conclusion-first",
+            "feedback/no-emoji",
+            "user/neovim-workflow"
+          ],
+          "note": "隐指·跨轮"
+        },
+        {
+          "turn": 10,
+          "text": "docker compose 里 depends_on 和 volumes 怎么配合？",
+          "expectRecall": false,
+          "expectedSlugs": [],
+          "triggered": false,
+          "selectedSlugs": [],
+          "freshHit": false,
+          "hit": false,
+          "inContext": [
+            "project/deepseek-default",
+            "project/memory-redesign",
+            "feedback/chinese-reply",
+            "feedback/concise-answers",
+            "feedback/conclusion-first",
+            "feedback/no-emoji",
+            "user/neovim-workflow"
+          ],
+          "note": "语义陷阱"
+        },
+        {
+          "turn": 11,
+          "text": "那 Q3 上线具体定在几月？",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "project/q3-launch"
+          ],
+          "triggered": true,
+          "selectedSlugs": [
+            "project/q3-launch"
+          ],
+          "freshHit": true,
+          "hit": true,
+          "inContext": [
+            "project/deepseek-default",
+            "project/memory-redesign",
+            "feedback/chinese-reply",
+            "feedback/concise-answers",
+            "feedback/conclusion-first",
+            "feedback/no-emoji",
+            "user/neovim-workflow",
+            "project/q3-launch"
+          ],
+          "note": "单跳·项目"
+        }
+      ],
+      "metrics": {
+        "recallHit": 0.8571428571428571,
+        "falsePositiveTrigger": 0.2,
+        "falsePositiveInject": 0.2,
+        "main": {
+          "requests": 12,
+          "input": 4608,
+          "output": 309,
+          "cacheRead": 35584,
+          "cacheCreation": 0,
+          "cacheHitRate": 0.8853503184713376
+        },
+        "all": {
+          "requests": 24,
+          "input": 9861,
+          "output": 488,
+          "cacheRead": 49792,
+          "cacheCreation": 0,
+          "cacheHitRate": 0.8346939801854056
+        }
+      },
+      "calls": [
+        {
+          "label": "sidequery",
+          "turn": 0,
+          "input": 438,
+          "output": 16,
+          "cacheRead": 1152,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 0,
+          "input": 2930,
+          "output": 24,
+          "cacheRead": 0,
+          "cacheCreation": 0
+        },
+        {
+          "label": "sidequery",
+          "turn": 1,
+          "input": 440,
+          "output": 10,
+          "cacheRead": 1152,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 1,
+          "input": 131,
+          "output": 32,
+          "cacheRead": 2816,
+          "cacheCreation": 0
+        },
+        {
+          "label": "sidequery",
+          "turn": 2,
+          "input": 449,
+          "output": 10,
+          "cacheRead": 1152,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 2,
+          "input": 40,
+          "output": 32,
+          "cacheRead": 2944,
+          "cacheCreation": 0
+        },
+        {
+          "label": "sidequery",
+          "turn": 3,
+          "input": 442,
+          "output": 16,
+          "cacheRead": 1152,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 3,
+          "input": 182,
+          "output": 25,
+          "cacheRead": 2944,
+          "cacheCreation": 0
+        },
+        {
+          "label": "sidequery",
+          "turn": 4,
+          "input": 453,
+          "output": 10,
+          "cacheRead": 1152,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 4,
+          "input": 83,
+          "output": 32,
+          "cacheRead": 3072,
+          "cacheCreation": 0
+        },
+        {
+          "label": "sidequery",
+          "turn": 5,
+          "input": 454,
+          "output": 10,
+          "cacheRead": 1152,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 5,
+          "input": 108,
+          "output": 32,
+          "cacheRead": 3072,
+          "cacheCreation": 0
+        },
+        {
+          "label": "sidequery",
+          "turn": 6,
+          "input": 454,
+          "output": 37,
+          "cacheRead": 1152,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 6,
+          "input": 408,
+          "output": 16,
+          "cacheRead": 3072,
+          "cacheCreation": 0
+        },
+        {
+          "label": "sidequery",
+          "turn": 7,
+          "input": 493,
+          "output": 10,
+          "cacheRead": 1152,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 7,
+          "input": 45,
+          "output": 32,
+          "cacheRead": 3456,
+          "cacheCreation": 0
+        },
+        {
+          "label": "sidequery",
+          "turn": 8,
+          "input": 496,
+          "output": 18,
+          "cacheRead": 1152,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 8,
+          "input": 191,
+          "output": 15,
+          "cacheRead": 3456,
+          "cacheCreation": 0
+        },
+        {
+          "label": "sidequery",
+          "turn": 9,
+          "input": 376,
+          "output": 16,
+          "cacheRead": 1280,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 9,
+          "input": 90,
+          "output": 32,
+          "cacheRead": 3584,
+          "cacheCreation": 0
+        },
+        {
+          "label": "sidequery",
+          "turn": 10,
+          "input": 380,
+          "output": 10,
+          "cacheRead": 1280,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 10,
+          "input": 120,
+          "output": 32,
+          "cacheRead": 3584,
+          "cacheCreation": 0
+        },
+        {
+          "label": "sidequery",
+          "turn": 11,
+          "input": 378,
+          "output": 16,
+          "cacheRead": 1280,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 11,
+          "input": 280,
+          "output": 5,
+          "cacheRead": 3584,
+          "cacheCreation": 0
+        }
+      ]
+    },
+    {
+      "id": "personal-session",
+      "name": "个人会话",
+      "perTurn": [
+        {
+          "turn": 0,
+          "text": "宵夜吃什么好？",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "user/food-preferences"
+          ],
+          "triggered": true,
+          "selectedSlugs": [
+            "user/food-preferences"
+          ],
+          "freshHit": true,
+          "hit": true,
+          "inContext": [
+            "user/food-preferences"
+          ],
+          "note": "单跳·偏好"
+        },
+        {
+          "turn": 1,
+          "text": "我现在健身是晚上还是早上？",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "user/fitness-schedule-new"
+          ],
+          "triggered": true,
+          "selectedSlugs": [
+            "user/fitness-schedule-new"
+          ],
+          "freshHit": true,
+          "hit": true,
+          "inContext": [
+            "user/food-preferences",
+            "user/fitness-schedule-new"
+          ],
+          "note": "知识更新"
+        },
+        {
+          "turn": 2,
+          "text": "帮我写个防抖函数",
+          "expectRecall": false,
+          "expectedSlugs": [],
+          "triggered": false,
+          "selectedSlugs": [],
+          "freshHit": false,
+          "hit": false,
+          "inContext": [
+            "user/food-preferences",
+            "user/fitness-schedule-new"
+          ],
+          "note": "纯技术"
+        },
+        {
+          "turn": 3,
+          "text": "我 8 月底的云南安排是几号到几号？",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "user/vacation-plan"
+          ],
+          "triggered": true,
+          "selectedSlugs": [
+            "user/vacation-plan"
+          ],
+          "freshHit": true,
+          "hit": true,
+          "inContext": [
+            "user/food-preferences",
+            "user/fitness-schedule-new",
+            "user/vacation-plan"
+          ],
+          "note": "计划·出行"
+        },
+        {
+          "turn": 4,
+          "text": "我手机号多少？帮我填一下报名表",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "user/contact-info"
+          ],
+          "triggered": true,
+          "selectedSlugs": [
+            "user/contact-info"
+          ],
+          "freshHit": true,
+          "hit": true,
+          "inContext": [
+            "user/food-preferences",
+            "user/fitness-schedule-new",
+            "user/vacation-plan",
+            "user/contact-info"
+          ],
+          "note": "个人细节"
+        },
+        {
+          "turn": 5,
+          "text": "给一个健身 App 设计数据库表结构",
+          "expectRecall": false,
+          "expectedSlugs": [],
+          "triggered": false,
+          "selectedSlugs": [],
+          "freshHit": false,
+          "hit": false,
+          "inContext": [
+            "user/food-preferences",
+            "user/fitness-schedule-new",
+            "user/vacation-plan",
+            "user/contact-info"
+          ],
+          "note": "语义陷阱"
+        },
+        {
+          "turn": 6,
+          "text": "现在后端代码谁在负责？",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "user/team-relationships"
+          ],
+          "triggered": true,
+          "selectedSlugs": [
+            "user/team-relationships"
+          ],
+          "freshHit": true,
+          "hit": true,
+          "inContext": [
+            "user/food-preferences",
+            "user/fitness-schedule-new",
+            "user/vacation-plan",
+            "user/contact-info",
+            "user/team-relationships"
+          ],
+          "note": "关系·人员"
+        },
+        {
+          "turn": 7,
+          "text": "正则表达式怎么匹配邮箱？",
+          "expectRecall": false,
+          "expectedSlugs": [],
+          "triggered": false,
+          "selectedSlugs": [],
+          "freshHit": false,
+          "hit": false,
+          "inContext": [
+            "user/food-preferences",
+            "user/fitness-schedule-new",
+            "user/vacation-plan",
+            "user/contact-info",
+            "user/team-relationships"
+          ],
+          "note": "纯技术"
+        },
+        {
+          "turn": 8,
+          "text": "我最近在读什么书？",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "user/reading-list"
+          ],
+          "triggered": true,
+          "selectedSlugs": [
+            "user/reading-list"
+          ],
+          "freshHit": true,
+          "hit": true,
+          "inContext": [
+            "user/food-preferences",
+            "user/fitness-schedule-new",
+            "user/vacation-plan",
+            "user/contact-info",
+            "user/team-relationships",
+            "user/reading-list"
+          ],
+          "note": "单跳·个人"
+        },
+        {
+          "turn": 9,
+          "text": "我还能随便吃甜的吗？",
+          "expectRecall": true,
+          "expectedSlugs": [
+            "user/food-sugar-restriction"
+          ],
+          "triggered": true,
+          "selectedSlugs": [
+            "user/food-sugar-restriction"
+          ],
+          "freshHit": true,
+          "hit": true,
+          "inContext": [
+            "user/food-preferences",
+            "user/fitness-schedule-new",
+            "user/vacation-plan",
+            "user/contact-info",
+            "user/team-relationships",
+            "user/reading-list",
+            "user/food-sugar-restriction"
+          ],
+          "note": "知识更新"
+        }
+      ],
+      "metrics": {
+        "recallHit": 1,
+        "falsePositiveTrigger": 0,
+        "falsePositiveInject": 0,
+        "main": {
+          "requests": 10,
+          "input": 3255,
+          "output": 259,
+          "cacheRead": 30848,
+          "cacheCreation": 0,
+          "cacheHitRate": 0.9045538515673108
+        },
+        "all": {
+          "requests": 20,
+          "input": 7510,
+          "output": 402,
+          "cacheRead": 42752,
+          "cacheCreation": 0,
+          "cacheHitRate": 0.8505829453662807
+        }
+      },
+      "calls": [
+        {
+          "label": "sidequery",
+          "turn": 0,
+          "input": 50,
+          "output": 16,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 0,
+          "input": 1771,
+          "output": 31,
+          "cacheRead": 1152,
+          "cacheCreation": 0
+        },
+        {
+          "label": "sidequery",
+          "turn": 1,
+          "input": 440,
+          "output": 17,
+          "cacheRead": 1152,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 1,
+          "input": 260,
+          "output": 26,
+          "cacheRead": 2816,
+          "cacheCreation": 0
+        },
+        {
+          "label": "sidequery",
+          "turn": 2,
+          "input": 451,
+          "output": 10,
+          "cacheRead": 1152,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 2,
+          "input": 29,
+          "output": 32,
+          "cacheRead": 3072,
+          "cacheCreation": 0
+        },
+        {
+          "label": "sidequery",
+          "turn": 3,
+          "input": 459,
+          "output": 16,
+          "cacheRead": 1152,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 3,
+          "input": 196,
+          "output": 32,
+          "cacheRead": 3072,
+          "cacheCreation": 0
+        },
+        {
+          "label": "sidequery",
+          "turn": 4,
+          "input": 465,
+          "output": 15,
+          "cacheRead": 1152,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 4,
+          "input": 233,
+          "output": 26,
+          "cacheRead": 3200,
+          "cacheCreation": 0
+        },
+        {
+          "label": "sidequery",
+          "turn": 5,
+          "input": 473,
+          "output": 10,
+          "cacheRead": 1152,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 5,
+          "input": 126,
+          "output": 32,
+          "cacheRead": 3328,
+          "cacheCreation": 0
+        },
+        {
+          "label": "sidequery",
+          "turn": 6,
+          "input": 470,
+          "output": 16,
+          "cacheRead": 1152,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 6,
+          "input": 265,
+          "output": 9,
+          "cacheRead": 3328,
+          "cacheCreation": 0
+        },
+        {
+          "label": "sidequery",
+          "turn": 7,
+          "input": 479,
+          "output": 10,
+          "cacheRead": 1152,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 7,
+          "input": 23,
+          "output": 32,
+          "cacheRead": 3584,
+          "cacheCreation": 0
+        },
+        {
+          "label": "sidequery",
+          "turn": 8,
+          "input": 479,
+          "output": 15,
+          "cacheRead": 1152,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 8,
+          "input": 154,
+          "output": 14,
+          "cacheRead": 3584,
+          "cacheCreation": 0
+        },
+        {
+          "label": "sidequery",
+          "turn": 9,
+          "input": 489,
+          "output": 18,
+          "cacheRead": 1152,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 9,
+          "input": 198,
+          "output": 25,
+          "cacheRead": 3712,
+          "cacheCreation": 0
+        }
+      ]
+    }
+  ]
+}
