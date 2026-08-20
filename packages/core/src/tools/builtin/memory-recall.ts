@@ -43,7 +43,7 @@ export function createMemoryRecallTool(deps: MemoryRecallToolDeps): Tool<typeof 
       "仅当回答依赖用户个人信息时才调用：用户偏好/习惯、历史决定、进行中的项目、个人资料、收藏资料、用户给过的反馈要求。" +
       "不要调用：通用技术问答、教程/知识类问题、纯无状态任务、世界知识/新闻，以及与用户个人记忆无关的请求。" +
       "每轮独立判断是否调用——上一轮调用过不代表本轮需要。" +
-      "需要调用时，把用户的原始问题原样传入 query，并给出 2-5 个检索关键词。",
+      "需要调用时，把用户问题传入 query，并给出 2-5 个检索关键词。",
     parameters: MemoryRecallParams,
 
     async execute(input, _context) {
