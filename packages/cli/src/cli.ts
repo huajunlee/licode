@@ -20,6 +20,7 @@ import {
   MemoryStore,
   createMemoryRecallTool,
   createRecallAgent,
+  buildRecentContext,
   memoryPresenceLayer,
   LoadedMemoryRegistry,
   SystemPrompt,
@@ -202,7 +203,8 @@ export async function initializeConversationRuntime(
     });
     tools.register(
       createMemoryRecallTool({
-        runRecall: (q, kw) => recallAgent.run(q, kw),
+        runRecall: (q, kw) =>
+          recallAgent.run(q, kw, buildRecentContext(manager.getMessages())),
         store: memoryStore,
         registry: new LoadedMemoryRegistry(),
       })

@@ -21,7 +21,23 @@ export interface RecallAgentConfig {
 }
 
 export interface RecallAgent {
-  run(query: string, keywords: string[]): Promise<string[]>;
+  /** context 为可选的最近对话文本（见 buildRecentContext），供子代理解指代（如"它"→上下文中的健身房）。 */
+  run(query: string, keywords: string[], context?: string): Promise<string[]>;
+}
+
+/** 从最近消息里提取「用户/助手」纯文本轮，传给子代理用于解指代。 */
+export function buildRecentContext(
+  messages: ReadonlyArray<{ role: string; content: unknown }>,
+  maxTurns = 3
+): string {
+  const lines: string[] = [];
+  for (const m of messages.slice(-maxTurns)) {
+    if (m.role !== "user" && m.role !== "assistant") continue;
+    const text = typeof m.content === "string" ? m.content : "";
+    if (!text.trim()) continue;
+    lines.push(`${m.role === "user" ? "用户" : "助手"}：${text}`);
+  }
+  return lines.join("\n");
 }
 
 const ReadMemoryParams = z.object({
@@ -89,7 +105,11 @@ export function createRecallAgent(config: RecallAgentConfig): RecallAgent {
   const timeoutMs = config.timeoutMs ?? 60_000;
   const model = config.model ?? "deepseek-chat";
 
-  async function runOnce(query: string, keywords: string[]): Promise<string[]> {
+  async function runOnce(
+    query: string,
+    keywords: string[],
+    context?: string
+  ): Promise<string[]> {
     const all = await config.store.listAll();
     if (all.length === 0) return [];
     const knownSlugs = new Set(all.map((m) => m.slug));
@@ -108,7 +128,11 @@ export function createRecallAgent(config: RecallAgentConfig): RecallAgent {
     const executor = new ToolExecutor(tools);
 
     conv.addUserMessage(
-      [`查询意图：${query}`, keywords.length ? `关键词：${keywords.join(", ")}` : ""]
+      [
+        `查询意图：${query}`,
+        keywords.length ? `关键词：${keywords.join(", ")}` : "",
+        context ? `最近对话：\n${context}` : "",
+      ]
         .filter(Boolean)
         .join("\n")
     );
@@ -129,10 +153,10 @@ export function createRecallAgent(config: RecallAgentConfig): RecallAgent {
   }
 
   return {
-    async run(query, keywords) {
+    async run(query, keywords, context) {
       try {
         return await Promise.race([
-          runOnce(query, keywords),
+          runOnce(query, keywords, context),
           new Promise<string[]>((resolve) => setTimeout(() => resolve([]), timeoutMs)),
         ]);
       } catch {

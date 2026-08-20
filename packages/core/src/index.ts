@@ -141,7 +141,7 @@ export type { Memory, MemoryType, MemoryEntry } from "./memory/types.js";
 export { toSlug } from "./memory/types.js";
 export { createMemoryRecallTool } from "./tools/builtin/memory-recall.js";
 export type { MemoryRecallToolDeps } from "./tools/builtin/memory-recall.js";
-export { createRecallAgent, parseSelected } from "./memory/recall-agent.js";
+export { createRecallAgent, buildRecentContext, parseSelected } from "./memory/recall-agent.js";
 export type { RecallAgent, RecallAgentConfig } from "./memory/recall-agent.js";
 export { memoryPresenceLayer } from "./memory/presence-layer.js";
 export { buildRichIndex } from "./memory/rich-index.js";

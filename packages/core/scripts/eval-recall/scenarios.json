@@ -30,7 +30,9 @@
       { "text": "现在后端代码谁在负责？", "reply": "小王负责后端。", "expectRecall": true, "expectedSlugs": ["user/team-relationships"], "note": "关系·人员" },
       { "text": "正则表达式怎么匹配邮箱？", "reply": "用这个模式就行，注意转义和边界。", "expectRecall": false, "expectedSlugs": [], "note": "纯技术" },
       { "text": "我最近在读什么书？", "reply": "《禅与摩托车维修艺术》，还有 Rust 教程。", "expectRecall": true, "expectedSlugs": ["user/reading-list"], "note": "单跳·个人" },
-      { "text": "我还能随便吃甜的吗？", "reply": "你在戒糖，蛋挞奶茶都先别碰。", "expectRecall": true, "expectedSlugs": ["user/food-sugar-restriction"], "note": "知识更新" }
+      { "text": "我还能随便吃甜的吗？", "reply": "你在戒糖，蛋挞奶茶都先别碰。", "expectRecall": true, "expectedSlugs": ["user/food-sugar-restriction"], "note": "知识更新" },
+      { "text": "对了，我在金仕堡健身房办了张年卡。", "reply": "好的，记下了。", "expectRecall": false, "expectedSlugs": [], "note": "代词前置·陈述" },
+      { "text": "它的卡到什么时候到期？", "reply": "你的年卡明年 3 月到期。", "expectRecall": true, "expectedSlugs": ["user/gym-membership"], "note": "代词消解·它→健身房" }
     ]
   }
 ]

@@ -21,6 +21,7 @@ import {
   createLoadedMemoryRegistry,
   createMemoryRecallTool,
   createRecallAgent,
+  buildRecentContext,
   memoryPresenceLayer,
   createMemoryExtractionHook,
   createMemoryExtractionState,
@@ -583,7 +584,13 @@ export function useConversation(
         });
         tools.register(
           createMemoryRecallTool({
-            runRecall: (q, kw) => recallAgent.run(q, kw),
+            runRecall: (q, kw) =>
+              recallAgent.run(
+                q, kw,
+                managerRef.current
+                  ? buildRecentContext(managerRef.current.getMessages())
+                  : undefined
+              ),
             store: memoryStoreRef.current,
             registry: loadedMemoryRegistryRef.current,
             dreamState: memoryDreamStateRef.current,

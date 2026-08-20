@@ -18,5 +18,6 @@
   { "slug": "user/team-relationships", "name": "团队分工", "description": "当前项目协作：小王负责后端，小李负责前端", "type": "user", "keywords": ["小王", "后端", "小李", "前端", "团队"], "content": "当前项目协作：小王负责后端（Python/FastAPI），小李负责前端（React）。\n我自己负责 CLI 与整体架构。" },
   { "slug": "user/vacation-plan", "name": "云南年假", "description": "2026 年 8 月底休年假去云南（大理-丽江）", "type": "user", "keywords": ["年假", "云南", "大理", "8月底", "出行"], "content": "计划 2026 年 8 月底休年假，去云南大理、丽江玩 5 天。\n机票已订，9 月初返程。" },
   { "slug": "user/reading-list", "name": "在读", "description": "正在读《禅与摩托车维修艺术》，顺带刷 Rust 教程", "type": "user", "keywords": ["读书", "阅读", "禅与摩托车维修艺术", "Rust"], "content": "最近在读《禅与摩托车维修艺术》（哲学 + 骑行）。\n同时在刷 Rust 官方 The Book。" },
-  { "slug": "reference/docker-cheatsheet", "name": "Docker 备忘", "description": "Docker 镜像/容器/卷常用命令整理", "type": "reference", "keywords": ["docker", "镜像", "容器", "卷"], "content": "Docker 备忘：镜像、容器、卷的常用命令。\n来源：官方文档整理，用于日常开发查用。" }
+  { "slug": "reference/docker-cheatsheet", "name": "Docker 备忘", "description": "Docker 镜像/容器/卷常用命令整理", "type": "reference", "keywords": ["docker", "镜像", "容器", "卷"], "content": "Docker 备忘：镜像、容器、卷的常用命令。\n来源：官方文档整理，用于日常开发查用。" },
+  { "slug": "user/gym-membership", "name": "健身房年卡", "description": "金仕堡健身房年卡 2026-03 办理，有效期一年", "type": "user", "keywords": ["健身房", "年卡", "金仕堡"], "content": "2026-03 在金仕堡健身房办了一年卡，有效期至 2027-03。\n每月去 4-6 次。" }
 ]
