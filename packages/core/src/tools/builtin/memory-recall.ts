@@ -9,7 +9,7 @@ const MemoryRecallParams = z.object({
   query: z
     .string()
     .min(1)
-    .describe("召回意图的陈述：分析用户问题后，说明你想了解关于用户的什么（不要原样转发用户消息）"),
+    .describe("直接传入用户的原始问题，不要改写、提炼或转述成'想了解关于用户的什么'"),
   keywords: z
     .array(z.string())
     .describe("辅助匹配的关键词，2-5 个（如偏好类型/人名/项目名）"),
@@ -33,15 +33,17 @@ const EXCERPT_CHAR_LIMIT = 2000;
  */
 export function createMemoryRecallTool(deps: MemoryRecallToolDeps): Tool<typeof MemoryRecallParams> {
   const { store, registry } = deps;
-  const maxResults = deps.maxResults ?? 5;
+  const maxResults = deps.maxResults ?? 3;
   const tokenCounter = new TokenCounter();
 
   return {
     name: "memory_recall",
     description:
       "查询你的长期记忆（user 用户偏好 / feedback 纠偏反馈 / project 项目理解 / reference 外部资料）。" +
-      "当回答可能受益于用户偏好、历史决定、进行中的项目或收藏的资料时调用；" +
-      "纯技术问题、无状态问答不要调用。先想好要了解什么，再传入意图陈述和关键词。",
+      "仅当回答依赖用户个人信息时才调用：用户偏好/习惯、历史决定、进行中的项目、个人资料、收藏资料、用户给过的反馈要求。" +
+      "不要调用：通用技术问答、教程/知识类问题、纯无状态任务、世界知识/新闻，以及与用户个人记忆无关的请求。" +
+      "每轮独立判断是否调用——上一轮调用过不代表本轮需要。" +
+      "需要调用时，把用户的原始问题原样传入 query，并给出 2-5 个检索关键词。",
     parameters: MemoryRecallParams,
 
     async execute(input, _context) {

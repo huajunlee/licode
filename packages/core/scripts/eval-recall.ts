@@ -121,7 +121,8 @@ async function main(): Promise<void> {
     conv.addUserMessage(c.query);
 
     const registry = new LoadedMemoryRegistry();
-    const agent = createRecallAgent({ llm: provider, model: MODEL, store });
+    const trace: string[] = [];
+    const agent = createRecallAgent({ llm: provider, model: MODEL, store, trace });
     const tools = new ToolRegistry();
     tools.register(
       createMemoryRecallTool({ runRecall: (q, kw) => agent.run(q, kw), store, registry })
@@ -141,7 +142,7 @@ async function main(): Promise<void> {
       }
     }
     const hit = c.expectedSlugs.length > 0 && c.expectedSlugs.every((s) => selectedSlugs.includes(s));
-    perCase.push({ id: c.id, group: c.group, triggered, selectedSlugs, hit });
+    perCase.push({ id: c.id, group: c.group, triggered, selectedSlugs, hit, trace });
     console.log(`${c.id} [${c.group}] triggered=${triggered} hit=${hit} selected=${selectedSlugs.join(",") || "-"}`);
   }
 

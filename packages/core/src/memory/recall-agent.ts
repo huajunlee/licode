@@ -16,6 +16,8 @@ export interface RecallAgentConfig {
   maxSteps?: number;
   maxResults?: number;
   timeoutMs?: number;
+  /** 可选轨迹记录：传入数组后，每步向其中追加一条人类可读描述（read_memory 调用 / 最终文本）。 */
+  trace?: string[];
 }
 
 export interface RecallAgent {
@@ -61,16 +63,18 @@ export function parseSelected(text: string, knownSlugs: Set<string>): string[] {
 
 function buildAgentPrompt(richIndex: string, maxResults: number): string {
   return [
-    "你是记忆召回助手。根据主模型传来的查询意图，从下面的记忆索引中选出真正相关的记忆。",
+    "你是记忆召回助手。根据主模型传来的用户问题，从下面的记忆索引中选出真正相关的记忆。",
     "",
     "## 记忆索引（每条：名称 - 描述 [关键词] 「首行预览」）",
     richIndex,
     "",
     "## 工作方式",
-    `1. 先用索引初筛候选；拿不准时用 read_memory 工具阅读正文再判断（建议对每个候选读一次）。`,
-    `2. 默认不选；不确定相关的不选。最多选 ${maxResults} 条。`,
-    "3. 判断完成后，最后一行严格输出：SELECTED: slug1, slug2（无相关则 SELECTED: none）。",
-    "4. slug 必须来自上面的索引，禁止编造；写路径部分即可，不要带 .md 后缀（如 user/food-preferences）。",
+    "0. 首要原则：拿不准就不选。宁可漏选（SELECTED: none），不可错选无关记忆。",
+    "1. 先用索引初筛候选；对每个候选先自检：这条记忆描述的是『用户的个人事实/历史决定』，而当前问题是『通用知识/教程/设计任务』吗？若是，说明看着相关实则无关，不要选。",
+    "2. 拿不准时必须用 read_memory 工具阅读正文，凭正文而非索引预览判断；读后仍不确定就不选。",
+    `3. 最多选 ${maxResults} 条；能少选就少选。`,
+    "4. 判断完成后，最后一行严格输出：SELECTED: slug1, slug2（无相关则 SELECTED: none）。",
+    "5. slug 必须来自上面的索引，禁止编造；写路径部分即可，不要带 .md 后缀（如 user/food-preferences）。",
   ].join("\n");
 }
 
@@ -81,7 +85,7 @@ function buildAgentPrompt(richIndex: string, maxResults: number): string {
  */
 export function createRecallAgent(config: RecallAgentConfig): RecallAgent {
   const maxSteps = config.maxSteps ?? 4;
-  const maxResults = config.maxResults ?? 5;
+  const maxResults = config.maxResults ?? 3;
   const timeoutMs = config.timeoutMs ?? 60_000;
   const model = config.model ?? "deepseek-chat";
 
@@ -112,8 +116,12 @@ export function createRecallAgent(config: RecallAgentConfig): RecallAgent {
     for (let step = 0; step < maxSteps; step++) {
       const res = await collectResponse(config.llm, conv.buildMessages(), tools.toLLMTools(), conv);
       if (res.type === "text") {
+        config.trace?.push(`step${step}: text: ${res.content.slice(0, 200)}`);
         return parseSelected(res.content, knownSlugs).slice(0, maxResults);
       }
+      config.trace?.push(
+        `step${step}: tool: ${res.toolUses.map((t) => `${t.name}(${JSON.stringify(t.input)})`).join(", ")}`
+      );
       const results = await executor.executeParallel(res.toolUses);
       conv.addToolMessages(res.toolUses, results);
     }

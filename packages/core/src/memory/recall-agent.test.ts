@@ -82,4 +82,26 @@ describe("createRecallAgent", () => {
     const agent = createRecallAgent({ llm, store: fakeStore([FOOD]) });
     expect(await agent.run("q", [])).toEqual([]);
   });
+
+  it("records each agent step into config.trace when provided", async () => {
+    const llm = scriptedLlm([
+      { toolSlug: "user/food-preferences" },
+      { text: "SELECTED: user/food-preferences" },
+    ]);
+    const trace: string[] = [];
+    const agent = createRecallAgent({ llm, store: fakeStore([FOOD]), trace });
+    expect(await agent.run("宵夜吃什么", ["宵夜"])).toEqual(["user/food-preferences"]);
+    expect(trace.length).toBe(2);
+    expect(trace[0]).toMatch(/read_memory/);
+    expect(trace[1]).toContain("SELECTED");
+  });
+
+  it("caps selections at default maxResults=3", async () => {
+    const four = ["user/1", "user/2", "user/3", "user/4"].map((slug) => ({
+      ...FOOD, slug, name: slug,
+    }));
+    const llm = scriptedLlm([{ text: "SELECTED: user/1, user/2, user/3, user/4" }]);
+    const agent = createRecallAgent({ llm, store: fakeStore(four) });
+    expect(await agent.run("q", [])).toEqual(["user/1", "user/2", "user/3"]);
+  });
 });
