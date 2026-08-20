@@ -248,9 +248,10 @@
     }
   ],
   "summary": {
-    "recallA": 0.9090909090909091,
+    "recallA": 0.909091,
+    "triggerRateB": 0.125,
     "falsePositiveB": 0.125,
     "precision": 0.8333333333333334,
-    "fabricateD": 0
+    "fabricateD": 0.0
   }
 }

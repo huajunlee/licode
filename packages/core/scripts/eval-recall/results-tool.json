@@ -264,9 +264,10 @@
     }
   ],
   "summary": {
-    "recallA": 1,
-    "falsePositiveB": 0.5,
+    "recallA": 1.0,
+    "triggerRateB": 0.5,
+    "falsePositiveB": 0.25,
     "precision": 0.868421052631579,
-    "fabricateD": 0
+    "fabricateD": 0.0
   }
 }

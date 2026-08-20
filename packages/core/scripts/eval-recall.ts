@@ -155,13 +155,18 @@ async function main(): Promise<void> {
   // C 组只记录不判分（expectRecall=null）
   const summary = {
     recallA: groupA.filter((p) => p.hit).length / groupA.length,
-    falsePositiveB: groupB.filter((p) => p.triggered).length / groupB.length,
+    // 误触发率：B 组中「主模型调用了 memory_recall 工具」的比例（含空触发）。
+    // 度量工具调用的成本信号，不代表真的注入了无关记忆。
+    triggerRateB: groupB.filter((p) => p.triggered).length / groupB.length,
+    // 误召回率：B 组中「确实把记忆注入主对话上下文」的比例。B 组 expectedSlugs 为空，
+    // 选中任何 slug 都属无关记忆；空触发（选中 0 条）不算误召回。
+    falsePositiveB: groupB.filter((p) => p.selectedSlugs.length > 0).length / groupB.length,
     precision: totalSelected === 0 ? 1 : totalCorrect / totalSelected,
     // D 组（对抗/防幻觉）：问「看似有答案但记忆里不存在」的个人问题，
     // 正确行为是弃权（不召回任何记忆）；召回任意一条即视为幻觉联想。
     fabricateD: groupD.filter((p) => p.selectedSlugs.length > 0).length / groupD.length,
   };
-  console.log(`\nA组召回率=${(summary.recallA * 100).toFixed(0)}%  B组误召回率=${(summary.falsePositiveB * 100).toFixed(0)}%  选中准确率=${(summary.precision * 100).toFixed(0)}%  D组幻觉联想=${(summary.fabricateD * 100).toFixed(0)}%`);
+  console.log(`\nA组召回率=${(summary.recallA * 100).toFixed(0)}%  B组误触发率=${(summary.triggerRateB * 100).toFixed(0)}%  B组误召回率=${(summary.falsePositiveB * 100).toFixed(0)}%  选中准确率=${(summary.precision * 100).toFixed(0)}%  D组幻觉联想=${(summary.fabricateD * 100).toFixed(0)}%`);
 
   const out = path.join(DATA, `results-${mode}.json`);
   fs.writeFileSync(out, JSON.stringify({ model: MODEL, temperature: 0, perCase, summary }, null, 2));
