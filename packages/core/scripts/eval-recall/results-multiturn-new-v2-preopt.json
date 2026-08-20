@@ -48,15 +48,13 @@
           ],
           "triggered": true,
           "selectedSlugs": [
-            "project/q3-launch",
-            "project/memory-redesign"
+            "project/q3-launch"
           ],
           "freshHit": true,
           "hit": true,
           "inContext": [
             "project/deepseek-default",
-            "project/q3-launch",
-            "project/memory-redesign"
+            "project/q3-launch"
           ],
           "note": "单跳·项目计划"
         },
@@ -68,8 +66,10 @@
             "project/memory-redesign"
           ],
           "triggered": true,
-          "selectedSlugs": [],
-          "freshHit": false,
+          "selectedSlugs": [
+            "project/memory-redesign"
+          ],
+          "freshHit": true,
           "hit": true,
           "inContext": [
             "project/deepseek-default",
@@ -123,7 +123,8 @@
           "selectedSlugs": [
             "feedback/chinese-reply",
             "feedback/concise-answers",
-            "feedback/conclusion-first"
+            "feedback/conclusion-first",
+            "feedback/no-emoji"
           ],
           "freshHit": true,
           "hit": true,
@@ -133,7 +134,8 @@
             "project/memory-redesign",
             "feedback/chinese-reply",
             "feedback/concise-answers",
-            "feedback/conclusion-first"
+            "feedback/conclusion-first",
+            "feedback/no-emoji"
           ],
           "note": "反馈·风格"
         },
@@ -152,7 +154,8 @@
             "project/memory-redesign",
             "feedback/chinese-reply",
             "feedback/concise-answers",
-            "feedback/conclusion-first"
+            "feedback/conclusion-first",
+            "feedback/no-emoji"
           ],
           "note": "语义陷阱"
         },
@@ -162,7 +165,9 @@
           "expectRecall": false,
           "expectedSlugs": [],
           "triggered": true,
-          "selectedSlugs": [],
+          "selectedSlugs": [
+            "user/neovim-workflow"
+          ],
           "freshHit": false,
           "hit": false,
           "inContext": [
@@ -171,7 +176,9 @@
             "project/memory-redesign",
             "feedback/chinese-reply",
             "feedback/concise-answers",
-            "feedback/conclusion-first"
+            "feedback/conclusion-first",
+            "feedback/no-emoji",
+            "user/neovim-workflow"
           ],
           "note": "语义陷阱"
         },
@@ -192,7 +199,9 @@
             "project/memory-redesign",
             "feedback/chinese-reply",
             "feedback/concise-answers",
-            "feedback/conclusion-first"
+            "feedback/conclusion-first",
+            "feedback/no-emoji",
+            "user/neovim-workflow"
           ],
           "note": "隐指·跨轮"
         },
@@ -214,6 +223,8 @@
             "feedback/chinese-reply",
             "feedback/concise-answers",
             "feedback/conclusion-first",
+            "feedback/no-emoji",
+            "user/neovim-workflow",
             "reference/docker-cheatsheet"
           ],
           "note": "语义陷阱"
@@ -236,6 +247,8 @@
             "feedback/chinese-reply",
             "feedback/concise-answers",
             "feedback/conclusion-first",
+            "feedback/no-emoji",
+            "user/neovim-workflow",
             "reference/docker-cheatsheet"
           ],
           "note": "单跳·项目"
@@ -244,37 +257,45 @@
       "metrics": {
         "recallHit": 1,
         "falsePositiveTrigger": 1,
-        "falsePositiveInject": 0.2,
+        "falsePositiveInject": 0.4,
         "main": {
           "requests": 12,
-          "input": 1176,
-          "output": 968,
-          "cacheRead": 43776,
+          "input": 1476,
+          "output": 977,
+          "cacheRead": 43008,
           "cacheCreation": 0,
-          "cacheHitRate": 0.9738387613454351
+          "cacheHitRate": 0.9668195306177502
         },
         "all": {
-          "requests": 31,
-          "input": 2826,
-          "output": 1902,
-          "cacheRead": 75520,
+          "requests": 36,
+          "input": 4070,
+          "output": 2765,
+          "cacheRead": 81280,
           "cacheCreation": 0,
-          "cacheHitRate": 0.9639292369744467
+          "cacheHitRate": 0.9523140011716462
         }
       },
       "calls": [
         {
           "label": "main",
           "turn": 0,
-          "input": 99,
-          "output": 79,
+          "input": 43,
+          "output": 78,
           "cacheRead": 2816,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
           "turn": 0,
-          "input": 33,
+          "input": 84,
+          "output": 66,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 0,
+          "input": 74,
           "output": 8,
           "cacheRead": 1664,
           "cacheCreation": 0
@@ -282,63 +303,71 @@
         {
           "label": "main",
           "turn": 1,
-          "input": 115,
-          "output": 76,
+          "input": 58,
+          "output": 81,
           "cacheRead": 2944,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
           "turn": 1,
-          "input": 30,
-          "output": 4,
+          "input": 86,
+          "output": 50,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 1,
+          "input": 53,
+          "output": 188,
           "cacheRead": 1664,
           "cacheCreation": 0
         },
         {
           "label": "main",
           "turn": 2,
-          "input": 116,
-          "output": 87,
+          "input": 64,
+          "output": 86,
           "cacheRead": 3072,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
           "turn": 2,
-          "input": 41,
-          "output": 83,
-          "cacheRead": 1664,
+          "input": 92,
+          "output": 118,
+          "cacheRead": 1536,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
           "turn": 2,
-          "input": 218,
-          "output": 14,
+          "input": 220,
+          "output": 88,
           "cacheRead": 1664,
           "cacheCreation": 0
         },
         {
           "label": "main",
           "turn": 3,
-          "input": 184,
-          "output": 82,
+          "input": 93,
+          "output": 76,
           "cacheRead": 3200,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
           "turn": 3,
-          "input": 34,
+          "input": 82,
           "output": 48,
-          "cacheRead": 1664,
+          "cacheRead": 1536,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
           "turn": 3,
-          "input": 131,
+          "input": 51,
           "output": 8,
           "cacheRead": 1664,
           "cacheCreation": 0
@@ -346,143 +375,167 @@
         {
           "label": "main",
           "turn": 4,
-          "input": 65,
+          "input": 119,
           "output": 81,
+          "cacheRead": 3328,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 4,
+          "input": 87,
+          "output": 48,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 4,
+          "input": 56,
+          "output": 184,
+          "cacheRead": 1664,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 5,
+          "input": 123,
+          "output": 85,
           "cacheRead": 3456,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
-          "turn": 4,
-          "input": 35,
-          "output": 48,
-          "cacheRead": 1664,
+          "turn": 5,
+          "input": 89,
+          "output": 85,
+          "cacheRead": 1536,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
-          "turn": 4,
-          "input": 132,
-          "output": 110,
+          "turn": 5,
+          "input": 136,
+          "output": 84,
           "cacheRead": 1664,
           "cacheCreation": 0
         },
         {
           "label": "main",
-          "turn": 5,
-          "input": 69,
-          "output": 79,
+          "turn": 6,
+          "input": 131,
+          "output": 81,
           "cacheRead": 3584,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
-          "turn": 5,
-          "input": 31,
-          "output": 4,
-          "cacheRead": 1664,
+          "turn": 6,
+          "input": 87,
+          "output": 230,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 6,
+          "input": 534,
+          "output": 44,
+          "cacheRead": 1536,
           "cacheCreation": 0
         },
         {
           "label": "main",
-          "turn": 6,
-          "input": 71,
-          "output": 80,
+          "turn": 7,
+          "input": 297,
+          "output": 81,
           "cacheRead": 3712,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
-          "turn": 6,
-          "input": 34,
-          "output": 153,
-          "cacheRead": 1664,
-          "cacheCreation": 0
-        },
-        {
-          "label": "subagent",
-          "turn": 6,
-          "input": 272,
-          "output": 26,
-          "cacheRead": 1792,
-          "cacheCreation": 0
-        },
-        {
-          "label": "main",
           "turn": 7,
-          "input": 191,
-          "output": 76,
-          "cacheRead": 3840,
+          "input": 87,
+          "output": 155,
+          "cacheRead": 1536,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
           "turn": 7,
-          "input": 30,
-          "output": 76,
+          "input": 211,
+          "output": 40,
           "cacheRead": 1664,
           "cacheCreation": 0
         },
         {
           "label": "main",
           "turn": 8,
-          "input": 53,
-          "output": 83,
+          "input": 164,
+          "output": 86,
+          "cacheRead": 3968,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 8,
+          "input": 91,
+          "output": 50,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 8,
+          "input": 58,
+          "output": 10,
+          "cacheRead": 1664,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
+          "turn": 9,
+          "input": 194,
+          "output": 80,
           "cacheRead": 4096,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
-          "turn": 8,
-          "input": 36,
-          "output": 135,
-          "cacheRead": 1664,
-          "cacheCreation": 0
-        },
-        {
-          "label": "subagent",
-          "turn": 8,
-          "input": 220,
-          "output": 66,
-          "cacheRead": 1664,
-          "cacheCreation": 0
-        },
-        {
-          "label": "main",
           "turn": 9,
-          "input": 51,
-          "output": 79,
-          "cacheRead": 4224,
-          "cacheCreation": 0
-        },
-        {
-          "label": "subagent",
-          "turn": 9,
-          "input": 32,
+          "input": 86,
           "output": 48,
-          "cacheRead": 1664,
+          "cacheRead": 1536,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
           "turn": 9,
-          "input": 129,
-          "output": 28,
+          "input": 55,
+          "output": 122,
           "cacheRead": 1664,
           "cacheCreation": 0
         },
         {
           "label": "main",
           "turn": 10,
-          "input": 58,
-          "output": 87,
+          "input": 74,
+          "output": 83,
           "cacheRead": 4352,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
           "turn": 10,
-          "input": 35,
+          "input": 83,
+          "output": 49,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 10,
+          "input": 53,
           "output": 9,
           "cacheRead": 1664,
           "cacheCreation": 0
@@ -490,7 +543,7 @@
         {
           "label": "main",
           "turn": 11,
-          "input": 104,
+          "input": 116,
           "output": 79,
           "cacheRead": 4480,
           "cacheCreation": 0
@@ -498,15 +551,15 @@
         {
           "label": "subagent",
           "turn": 11,
-          "input": 33,
-          "output": 58,
-          "cacheRead": 1664,
+          "input": 85,
+          "output": 48,
+          "cacheRead": 1536,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
           "turn": 11,
-          "input": 144,
+          "input": 54,
           "output": 8,
           "cacheRead": 1664,
           "cacheCreation": 0
@@ -546,6 +599,7 @@
           ],
           "triggered": true,
           "selectedSlugs": [
+            "user/fitness-schedule",
             "user/fitness-schedule-new"
           ],
           "freshHit": true,
@@ -553,6 +607,7 @@
           "inContext": [
             "user/food-preferences",
             "user/food-sugar-restriction",
+            "user/fitness-schedule",
             "user/fitness-schedule-new"
           ],
           "note": "知识更新"
@@ -569,6 +624,7 @@
           "inContext": [
             "user/food-preferences",
             "user/food-sugar-restriction",
+            "user/fitness-schedule",
             "user/fitness-schedule-new"
           ],
           "note": "纯技术"
@@ -589,6 +645,7 @@
           "inContext": [
             "user/food-preferences",
             "user/food-sugar-restriction",
+            "user/fitness-schedule",
             "user/fitness-schedule-new",
             "user/vacation-plan"
           ],
@@ -610,6 +667,7 @@
           "inContext": [
             "user/food-preferences",
             "user/food-sugar-restriction",
+            "user/fitness-schedule",
             "user/fitness-schedule-new",
             "user/vacation-plan",
             "user/contact-info"
@@ -622,15 +680,23 @@
           "expectRecall": false,
           "expectedSlugs": [],
           "triggered": true,
-          "selectedSlugs": [],
+          "selectedSlugs": [
+            "user/neovim-workflow",
+            "user/reading-list",
+            "user/team-relationships"
+          ],
           "freshHit": false,
           "hit": false,
           "inContext": [
             "user/food-preferences",
             "user/food-sugar-restriction",
+            "user/fitness-schedule",
             "user/fitness-schedule-new",
             "user/vacation-plan",
-            "user/contact-info"
+            "user/contact-info",
+            "user/neovim-workflow",
+            "user/reading-list",
+            "user/team-relationships"
           ],
           "note": "语义陷阱"
         },
@@ -642,17 +708,18 @@
             "user/team-relationships"
           ],
           "triggered": true,
-          "selectedSlugs": [
-            "user/team-relationships"
-          ],
-          "freshHit": true,
+          "selectedSlugs": [],
+          "freshHit": false,
           "hit": true,
           "inContext": [
             "user/food-preferences",
             "user/food-sugar-restriction",
+            "user/fitness-schedule",
             "user/fitness-schedule-new",
             "user/vacation-plan",
             "user/contact-info",
+            "user/neovim-workflow",
+            "user/reading-list",
             "user/team-relationships"
           ],
           "note": "关系·人员"
@@ -669,9 +736,12 @@
           "inContext": [
             "user/food-preferences",
             "user/food-sugar-restriction",
+            "user/fitness-schedule",
             "user/fitness-schedule-new",
             "user/vacation-plan",
             "user/contact-info",
+            "user/neovim-workflow",
+            "user/reading-list",
             "user/team-relationships"
           ],
           "note": "纯技术"
@@ -684,19 +754,19 @@
             "user/reading-list"
           ],
           "triggered": true,
-          "selectedSlugs": [
-            "user/reading-list"
-          ],
-          "freshHit": true,
+          "selectedSlugs": [],
+          "freshHit": false,
           "hit": true,
           "inContext": [
             "user/food-preferences",
             "user/food-sugar-restriction",
+            "user/fitness-schedule",
             "user/fitness-schedule-new",
             "user/vacation-plan",
             "user/contact-info",
-            "user/team-relationships",
-            "user/reading-list"
+            "user/neovim-workflow",
+            "user/reading-list",
+            "user/team-relationships"
           ],
           "note": "单跳·个人"
         },
@@ -714,11 +784,13 @@
           "inContext": [
             "user/food-preferences",
             "user/food-sugar-restriction",
+            "user/fitness-schedule",
             "user/fitness-schedule-new",
             "user/vacation-plan",
             "user/contact-info",
-            "user/team-relationships",
-            "user/reading-list"
+            "user/neovim-workflow",
+            "user/reading-list",
+            "user/team-relationships"
           ],
           "note": "知识更新"
         }
@@ -726,165 +798,181 @@
       "metrics": {
         "recallHit": 1,
         "falsePositiveTrigger": 1,
-        "falsePositiveInject": 0,
+        "falsePositiveInject": 0.3333333333333333,
         "main": {
           "requests": 10,
-          "input": 1379,
+          "input": 1139,
           "output": 763,
-          "cacheRead": 34944,
+          "cacheRead": 35328,
           "cacheCreation": 0,
-          "cacheHitRate": 0.9620350741954133
+          "cacheHitRate": 0.9687662818438588
         },
         "all": {
-          "requests": 25,
-          "input": 2644,
-          "output": 1358,
-          "cacheRead": 60032,
+          "requests": 28,
+          "input": 3039,
+          "output": 1933,
+          "cacheRead": 64000,
           "cacheCreation": 0,
-          "cacheHitRate": 0.9578147935413874
+          "cacheHitRate": 0.9546681782246155
         }
       },
       "calls": [
         {
           "label": "main",
           "turn": 0,
-          "input": 95,
-          "output": 78,
+          "input": 39,
+          "output": 80,
           "cacheRead": 2816,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
           "turn": 0,
-          "input": 32,
+          "input": 86,
           "output": 85,
-          "cacheRead": 1664,
+          "cacheRead": 1536,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
           "turn": 0,
-          "input": 114,
-          "output": 52,
+          "input": 40,
+          "output": 71,
           "cacheRead": 1792,
           "cacheCreation": 0
         },
         {
           "label": "main",
           "turn": 1,
-          "input": 190,
+          "input": 8,
           "output": 77,
-          "cacheRead": 2944,
+          "cacheRead": 3072,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
           "turn": 1,
-          "input": 31,
-          "output": 84,
-          "cacheRead": 1664,
+          "input": 83,
+          "output": 94,
+          "cacheRead": 1536,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
           "turn": 1,
-          "input": 231,
-          "output": 54,
-          "cacheRead": 1664,
+          "input": 297,
+          "output": 31,
+          "cacheRead": 1536,
           "cacheCreation": 0
         },
         {
           "label": "main",
           "turn": 2,
-          "input": 93,
-          "output": 75,
-          "cacheRead": 3200,
+          "input": 218,
+          "output": 77,
+          "cacheRead": 3072,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
           "turn": 2,
-          "input": 29,
-          "output": 4,
+          "input": 83,
+          "output": 119,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 2,
+          "input": 202,
+          "output": 175,
           "cacheRead": 1664,
           "cacheCreation": 0
         },
         {
           "label": "main",
           "turn": 3,
-          "input": 88,
-          "output": 86,
+          "input": 87,
+          "output": 80,
           "cacheRead": 3328,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
           "turn": 3,
-          "input": 40,
+          "input": 86,
           "output": 48,
-          "cacheRead": 1664,
+          "cacheRead": 1536,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
           "turn": 3,
-          "input": 146,
-          "output": 24,
+          "input": 64,
+          "output": 8,
           "cacheRead": 1664,
           "cacheCreation": 0
         },
         {
           "label": "main",
           "turn": 4,
-          "input": 138,
-          "output": 78,
+          "input": 131,
+          "output": 71,
           "cacheRead": 3456,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
           "turn": 4,
-          "input": 33,
+          "input": 77,
           "output": 7,
-          "cacheRead": 1664,
+          "cacheRead": 1536,
           "cacheCreation": 0
         },
         {
           "label": "main",
           "turn": 5,
-          "input": 168,
-          "output": 76,
+          "input": 154,
+          "output": 78,
           "cacheRead": 3584,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
           "turn": 5,
-          "input": 30,
-          "output": 84,
-          "cacheRead": 1664,
+          "input": 83,
+          "output": 119,
+          "cacheRead": 1536,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
           "turn": 5,
-          "input": 230,
-          "output": 39,
+          "input": 202,
+          "output": 170,
           "cacheRead": 1664,
           "cacheCreation": 0
         },
         {
           "label": "main",
           "turn": 6,
-          "input": 153,
-          "output": 74,
+          "input": 239,
+          "output": 78,
           "cacheRead": 3712,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
           "turn": 6,
-          "input": 28,
+          "input": 83,
+          "output": 48,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 6,
+          "input": 52,
           "output": 8,
           "cacheRead": 1664,
           "cacheCreation": 0
@@ -892,56 +980,64 @@
         {
           "label": "main",
           "turn": 7,
-          "input": 162,
-          "output": 70,
-          "cacheRead": 3840,
-          "cacheCreation": 0
-        },
-        {
-          "label": "subagent",
-          "turn": 7,
-          "input": 24,
-          "output": 4,
-          "cacheRead": 1664,
-          "cacheCreation": 0
-        },
-        {
-          "label": "main",
-          "turn": 8,
-          "input": 141,
-          "output": 73,
+          "input": 101,
+          "output": 75,
           "cacheRead": 3968,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
-          "turn": 8,
-          "input": 27,
-          "output": 7,
+          "turn": 7,
+          "input": 81,
+          "output": 47,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 7,
+          "input": 59,
+          "output": 32,
           "cacheRead": 1664,
           "cacheCreation": 0
         },
         {
           "label": "main",
-          "turn": 9,
-          "input": 151,
-          "output": 76,
+          "turn": 8,
+          "input": 85,
+          "output": 72,
           "cacheRead": 4096,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
+          "turn": 8,
+          "input": 78,
+          "output": 7,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "main",
           "turn": 9,
-          "input": 30,
-          "output": 85,
-          "cacheRead": 1664,
+          "input": 77,
+          "output": 75,
+          "cacheRead": 4224,
           "cacheCreation": 0
         },
         {
           "label": "subagent",
           "turn": 9,
-          "input": 240,
-          "output": 10,
+          "input": 81,
+          "output": 85,
+          "cacheRead": 1536,
+          "cacheCreation": 0
+        },
+        {
+          "label": "subagent",
+          "turn": 9,
+          "input": 163,
+          "output": 16,
           "cacheRead": 1664,
           "cacheCreation": 0
         }
