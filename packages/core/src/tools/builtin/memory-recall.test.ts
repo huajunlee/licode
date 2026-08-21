@@ -99,4 +99,20 @@ describe("memory_recall tool", () => {
     expect(res.content).toContain("…（摘录）");
     expect(res.content.length).toBeLessThan(2600);
   });
+
+  it("caps injected memories at default maxResults=3", async () => {
+    const five = ["user/1", "user/2", "user/3", "user/4", "user/5"].map((slug) => ({
+      ...FOOD, slug, name: slug,
+    }));
+    const { deps: d } = deps(
+      { runRecall: async () => ["user/1", "user/2", "user/3", "user/4", "user/5"] },
+      five
+    );
+    const tool = createMemoryRecallTool(d);
+    const res = await tool.execute({ query: "q", keywords: [] }, { workingDirectory: "/tmp", sessionId: "s" });
+    expect(res.status).toBe("success");
+    if (res.status !== "success") return;
+    const sections = (res.content.match(/^## /gm) ?? []).length;
+    expect(sections).toBe(3);
+  });
 });

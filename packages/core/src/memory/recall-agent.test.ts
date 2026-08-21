@@ -82,4 +82,40 @@ describe("createRecallAgent", () => {
     const agent = createRecallAgent({ llm, store: fakeStore([FOOD]) });
     expect(await agent.run("q", [])).toEqual([]);
   });
+
+  it("records each agent step into config.trace when provided", async () => {
+    const llm = scriptedLlm([
+      { toolSlug: "user/food-preferences" },
+      { text: "SELECTED: user/food-preferences" },
+    ]);
+    const trace: string[] = [];
+    const agent = createRecallAgent({ llm, store: fakeStore([FOOD]), trace });
+    expect(await agent.run("宵夜吃什么", ["宵夜"])).toEqual(["user/food-preferences"]);
+    expect(trace.length).toBe(2);
+    expect(trace[0]).toMatch(/read_memory/);
+    expect(trace[1]).toContain("SELECTED");
+  });
+
+  it("caps selections at default maxResults=3", async () => {
+    const four = ["user/1", "user/2", "user/3", "user/4"].map((slug) => ({
+      ...FOOD, slug, name: slug,
+    }));
+    const llm = scriptedLlm([{ text: "SELECTED: user/1, user/2, user/3, user/4" }]);
+    const agent = createRecallAgent({ llm, store: fakeStore(four) });
+    expect(await agent.run("q", [])).toEqual(["user/1", "user/2", "user/3"]);
+  });
+
+  it("passes recent conversation context into the agent user message", async () => {
+    const llm = scriptedLlm([{ text: "SELECTED: user/food-preferences" }]);
+    const agent = createRecallAgent({ llm, store: fakeStore([FOOD]) });
+    await agent.run(
+      "它的卡到什么时候到期？",
+      ["到期"],
+      "用户：我在金仕堡健身房办了张年卡。\n助手：好的，记下了。"
+    );
+    const userMsg = llm.requests[0].messages.find((m) => m.role === "user");
+    const text = typeof userMsg?.content === "string" ? userMsg.content : JSON.stringify(userMsg?.content);
+    expect(text).toContain("金仕堡");
+    expect(text).toContain("最近对话");
+  });
 });

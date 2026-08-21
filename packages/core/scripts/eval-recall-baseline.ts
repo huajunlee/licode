@@ -80,11 +80,14 @@ async function main(): Promise<void> {
     (n, p) => n + p.selectedSlugs.filter((s) => totalExpected.includes(s)).length, 0);
   const summary = {
     recallA: groupA.filter((p) => p.hit).length / groupA.length,
-    falsePositiveB: groupB.filter((p) => p.triggered).length / groupB.length,
+    // 旧版 side-query：triggered 定义为「注入 ≥1 条」（只会注入选中的，不存在空触发），
+    // 故误触发率与误召回率数值恒等；为与新版输出对称，两个字段都给出。
+    triggerRateB: groupB.filter((p) => p.triggered).length / groupB.length,
+    falsePositiveB: groupB.filter((p) => p.selectedSlugs.length > 0).length / groupB.length,
     precision: totalSelected === 0 ? 1 : totalCorrect / totalSelected,
     fabricateD: groupD.filter((p) => p.selectedSlugs.length > 0).length / groupD.length,
   };
-  console.log(`\nA组召回率=${(summary.recallA * 100).toFixed(0)}%  B组误召回率=${(summary.falsePositiveB * 100).toFixed(0)}%  选中准确率=${(summary.precision * 100).toFixed(0)}%  D组幻觉联想=${(summary.fabricateD * 100).toFixed(0)}%`);
+  console.log(`\nA组召回率=${(summary.recallA * 100).toFixed(0)}%  B组误触发率=${(summary.triggerRateB * 100).toFixed(0)}%  B组误召回率=${(summary.falsePositiveB * 100).toFixed(0)}%  选中准确率=${(summary.precision * 100).toFixed(0)}%  D组幻觉联想=${(summary.fabricateD * 100).toFixed(0)}%`);
 
   const out = path.join(DATA, `results-baseline.json`);
   fs.writeFileSync(out, JSON.stringify({ model: MODEL, temperature: 0, perCase, summary }, null, 2));

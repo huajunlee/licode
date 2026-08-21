@@ -17,7 +17,7 @@ import { ToolRegistry } from "../src/tools/registry.js";
 import { ToolExecutor } from "../src/tools/executor.js";
 import { collectResponse } from "../src/agent/react.js";
 import { createMemoryRecallTool } from "../src/tools/builtin/memory-recall.js";
-import { createRecallAgent } from "../src/memory/recall-agent.js";
+import { createRecallAgent, buildRecentContext } from "../src/memory/recall-agent.js";
 import { memoryPresenceLayer } from "../src/memory/presence-layer.js";
 import { LoadedMemoryRegistry } from "../src/memory/loaded-memory-registry.js";
 
@@ -79,12 +79,17 @@ async function runScenario(scenario: Scenario, store: MemoryStore, recs: UsageRe
   const mainProvider = new LoggingProvider(provider, recs, "main", turnState);
   const subProvider = new LoggingProvider(provider, recs, "subagent", turnState);
   const registry = new LoadedMemoryRegistry();
-  const agent = createRecallAgent({ llm: subProvider, model: MODEL, store });
+  const trace: string[] = [];
+  const agent = createRecallAgent({ llm: subProvider, model: MODEL, store, trace });
   const tools = new ToolRegistry();
-  tools.register(createMemoryRecallTool({ runRecall: (q, kw) => agent.run(q, kw), store, registry }));
+  tools.register(createMemoryRecallTool({
+    runRecall: (q, kw) => agent.run(q, kw, buildRecentContext(conv.getMessages())),
+    store, registry,
+  }));
 
   const perTurn = [];
   for (let t = 0; t < scenario.turns.length; t++) {
+    trace.length = 0; // 每轮清空，只留本轮子代理轨迹
     turnState.turn = t;
     const turn = scenario.turns[t];
     conv.addUserMessage(turn.text);
@@ -123,7 +128,7 @@ async function runScenario(scenario: Scenario, store: MemoryStore, recs: UsageRe
     const inContext = registry.getAll();
     const hit = turn.expectRecall && turn.expectedSlugs.every((s) => inContext.includes(s));
     const freshHit = turn.expectRecall && turn.expectedSlugs.every((s) => selectedSlugs.includes(s));
-    perTurn.push({ turn: t, text: turn.text, expectRecall: turn.expectRecall, expectedSlugs: turn.expectedSlugs, triggered, selectedSlugs, freshHit, hit, inContext, note: turn.note });
+    perTurn.push({ turn: t, text: turn.text, expectRecall: turn.expectRecall, expectedSlugs: turn.expectedSlugs, triggered, selectedSlugs, freshHit, hit, inContext, trace: [...trace], note: turn.note });
     console.log(`  t${t} ${turn.note}: trig=${triggered} freshHit=${freshHit} hit=${hit} sel=${selectedSlugs.join(",") || "-"} ctx=${inContext.length}`);
   }
   return perTurn;

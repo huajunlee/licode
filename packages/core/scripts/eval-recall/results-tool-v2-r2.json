@@ -13,7 +13,7 @@
       "hit": true,
       "trace": [
         "step0: tool: read_memory({\"slug\":\"user/food-preferences\"}), read_memory({\"slug\":\"user/food-sugar-restriction\"})",
-        "step1: text: 用户问宵夜吃什么好。食物偏好记忆提到用户宵夜爱吃蛋挞、喜欢甜食，但戒糖计划（2026-07 起）明确戒掉甜食包括蛋挞。两条记忆都直接相关，且戒糖计划更新了食物偏好，需要同时召回以给出准确建议。\n\nSELECTED: user/food-preferences, user/food-sugar-restriction"
+        "step1: text: 两条记忆都相关：食物偏好提到宵夜爱吃蛋挞，但戒糖计划（2026-07 起）已覆盖并推翻甜食建议。宵夜问题需要结合这两条来回答。\n\nSELECTED: user/food-preferences, user/food-sugar-restriction"
       ]
     },
     {
@@ -55,7 +55,7 @@
       "hit": true,
       "trace": [
         "step0: tool: read_memory({\"slug\":\"user/fitness-schedule\"}), read_memory({\"slug\":\"user/fitness-schedule-new\"})",
-        "step1: text: 两条健身相关记忆都与\"锻炼计划\"和\"晚上空闲时间\"直接相关，且新安排覆盖旧安排，两条都选上以便主模型判断时间线。\n\nSELECTED: user/fitness-schedule, user/fitness-schedule-new"
+        "step1: text: 用户问的是\"这周哪几天晚上有空锻炼\"。两条健身相关记忆都涉及，但需要判断当前时间点。旧安排是周三、周五晚上，新安排（2026-08起）改为周一、周四早上晨练，且明确\"原周三、周五晚上的健身安排已取消\"。\n\n用户问的是\"晚上有空锻炼\"，而新安排是早上晨练，晚上并没有安排。但用户问的是\"有空\"（空闲时间），这需要结合当前日期判断。两条记忆都相关，需要都召回供主模型判断。\n\nSELECTED: user"
       ]
     },
     {
@@ -81,7 +81,7 @@
       "hit": true,
       "trace": [
         "step0: tool: read_memory({\"slug\":\"user/fitness-schedule\"}), read_memory({\"slug\":\"user/fitness-schedule-new\"})",
-        "step1: text: 两条记忆都直接相关，且新安排明确说明原周三周五已取消。\n\nSELECTED: user/fitness-schedule-new, user/fitness-schedule"
+        "step1: text: 两条记忆都直接相关，且新安排明确说明原周三周五已取消。用户问的是\"现在\"，应选新安排，但旧安排也提供了背景对照。\n\nSELECTED: user/fitness-schedule-new, user/fitness-schedule"
       ]
     },
     {
@@ -95,7 +95,7 @@
       "hit": true,
       "trace": [
         "step0: tool: read_memory({\"slug\":\"user/food-sugar-restriction\"}), read_memory({\"slug\":\"user/food-preferences\"})",
-        "step1: text: 用户问\"还能随便吃甜的吗\"，这直接关联到戒糖计划（2026-07 起因血糖偏高开始戒糖），以及食物偏好（喜欢吃甜食）。两条记忆都相关。\n\nSELECTED: user/food-sugar-restriction, user/food-preferences"
+        "step1: text: 用户问\"还能随便吃甜的吗\"，这直接关联到戒糖计划（2026-07 起因血糖偏高开始戒糖），以及食物偏好（喜欢吃甜食）。两条都相关。\n\nSELECTED: user/food-sugar-restriction, user/food-preferences"
       ]
     },
     {
@@ -109,7 +109,7 @@
       "hit": true,
       "trace": [
         "step0: tool: read_memory({\"slug\":\"user/vacation-plan\"}), read_memory({\"slug\":\"project/q3-launch\"})",
-        "step1: text: 两条记忆都与查询意图直接相关：用户8月底去云南（旅行计划），以及Q3上线计划（时间安排）。这两条都涉及时间安排，且与用户问题中的关键词完全匹配。\n\nSELECTED: user/vacation-plan, project/q3-launch"
+        "step1: text: 两条记忆都直接相关：用户问的是云南旅行（8月底）与 Q3 上线（9月底前）的时间安排关系。\n\nSELECTED: user/vacation-plan, project/q3-launch"
       ]
     },
     {
@@ -122,7 +122,7 @@
       "hit": true,
       "trace": [
         "step0: tool: read_memory({\"slug\":\"project/memory-redesign\"})",
-        "step1: text: 这条记忆与查询意图直接相关。\n\nSELECTED: project/memory-redesign"
+        "step1: text: 这条记忆与用户询问的\"记忆召回重构进展\"直接相关。\n\nSELECTED: project/memory-redesign"
       ]
     },
     {
@@ -161,13 +161,10 @@
     {
       "id": "b2",
       "group": "B",
-      "triggered": true,
+      "triggered": false,
       "selectedSlugs": [],
       "hit": false,
-      "trace": [
-        "step0: tool: read_memory({\"slug\":\"user/neovim-workflow\"}), read_memory({\"slug\":\"user/reading-list\"}), read_memory({\"slug\":\"user/team-relationships\"})",
-        "step1: text: 候选记忆分析：\n\n- **user/neovim-workflow**：描述编辑器习惯（Neovim），属于工具偏好而非编程语言/技术栈/代码风格偏好。相关性较弱。\n- **user/reading-list**：提到在刷 Rust 教程，这暗示用户对 Rust 有兴趣，属于技术栈/编程语言偏好的一部分。有一定相关性。\n- **user/team-relationships**：提到团队分工中用户"
-      ]
+      "trace": []
     },
     {
       "id": "b3",
@@ -191,10 +188,7 @@
       "triggered": true,
       "selectedSlugs": [],
       "hit": false,
-      "trace": [
-        "step0: tool: read_memory({\"slug\":\"user/fitness-schedule\"}), read_memory({\"slug\":\"user/fitness-schedule-new\"}), read_memory({\"slug\":\"project/memory-redesign\"})",
-        "step1: text: 这些记忆都是关于用户个人健身时间安排和项目重构的，与\"健身 App 数据库设计\"这一通用设计任务无关。索引中没有与健身 App 数据库设计相关的记忆。\n\nSELECTED: none"
-      ]
+      "trace": []
     },
     {
       "id": "b6",
@@ -203,7 +197,7 @@
       "selectedSlugs": [],
       "hit": false,
       "trace": [
-        "step0: text: 这条查询是关于 DeepSeek 股价走势的，属于通用金融信息查询。\n\n让我检查一下相关记忆。索引中有 [DeepSeek API 文档](reference/deepseek-docs.md)，但那是关于 API 文档的，与股价无关。其他记忆也都与用户个人事实或项目相关，与股价查询无关。\n\nSELECTED: none"
+        "step0: text: 这条查询是关于 DeepSeek 股价走势的，属于通用金融信息查询。让我检查一下相关记忆。\n\nDeepSeek 相关记忆是 [DeepSeek API 文档](reference/deepseek-docs.md)，但那是 API 文档地址，与股价无关。其他记忆都是用户个人事实或项目信息，与股价查询无关。\n\nSELECTED: none"
       ]
     },
     {
@@ -213,7 +207,7 @@
       "selectedSlugs": [],
       "hit": false,
       "trace": [
-        "step0: text: 这条记忆是关于用户个人编辑器习惯的，而当前问题是通用教程类问题，看着相关实则无关。\n\nSELECTED: none"
+        "step0: text: 这条记忆是关于用户个人事实（用户主力编辑器是 Neovim），而当前问题是通用知识/教程类问题，看着相关实则无关。\n\nSELECTED: none"
       ]
     },
     {
@@ -269,12 +263,13 @@
       "group": "C",
       "triggered": true,
       "selectedSlugs": [
-        "reference/zhihu-memory-article",
-        "reference/locomo-paper"
+        "reference/locomo-paper",
+        "reference/zhihu-memory-article"
       ],
       "hit": true,
       "trace": [
-        "step0: text: SELECTED: reference/zhihu-memory-article, reference/locomo-paper"
+        "step0: tool: read_memory({\"slug\":\"reference/locomo-paper\"}), read_memory({\"slug\":\"reference/zhihu-memory-article\"})",
+        "step1: text: 两条记忆都与\"记忆系统研究\"直接相关：LoCoMo 是记忆评测基准（学术研究），知乎文章是记忆系统设计对比（业界实践参考）。两者都符合查询意图。\n\nSELECTED: reference/locomo-paper, reference/zhihu-memory-article"
       ]
     },
     {
@@ -300,7 +295,7 @@
       ],
       "hit": true,
       "trace": [
-        "step0: text: 索引中有 [记忆系统对比文章](reference/zhihu-memory-article.md) 这条记忆，描述是\"知乎上 Claude Code 与 Codex 记忆设计对比文\"，与用户想找的记忆系统对比文章高度相关。\n\nSELECTED: reference/zhihu-memory-article"
+        "step0: text: SELECTED: reference/zhihu-memory-article"
       ]
     },
     {
@@ -314,7 +309,7 @@
       "hit": true,
       "trace": [
         "step0: tool: read_memory({\"slug\":\"user/fitness-schedule\"}), read_memory({\"slug\":\"user/fitness-schedule-new\"}), read_memory({\"slug\":\"user/vacation-plan\"})",
-        "step1: text: SELECTED: user/fitness-schedule-new, user/vacation-plan"
+        "step1: text: The user wants to plan the next two weeks avoiding their workout and travel times. The relevant memories are the fitness schedules (current one is the new morning schedule) and the vacation plan.\n\nSEL"
       ]
     },
     {
@@ -328,7 +323,7 @@
       "hit": true,
       "trace": [
         "step0: tool: read_memory({\"slug\":\"user/food-preferences\"}), read_memory({\"slug\":\"user/food-sugar-restriction\"})",
-        "step1: text: 两条记忆都直接相关：一条记录用户原本喜欢甜食，另一条记录用户因健康原因开始戒糖，正好覆盖\"态度和偏好\"及\"态度变化\"。\n\nSELECTED: user/food-preferences, user/food-sugar-restriction"
+        "step1: text: SELECTED: user/food-preferences, user/food-sugar-restriction"
       ]
     },
     {
@@ -347,7 +342,7 @@
   ],
   "summary": {
     "recallA": 1,
-    "triggerRateB": 0.5,
+    "triggerRateB": 0.375,
     "falsePositiveB": 0,
     "precision": 0.9285714285714286,
     "fabricateD": 0
