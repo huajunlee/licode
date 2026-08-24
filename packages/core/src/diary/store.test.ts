@@ -82,6 +82,34 @@ describe("JournalStore", () => {
     expect(hits.map((e) => e.meta.id)).toEqual(["a1"]);
   });
 
+  it("listRange returns entries within [start, end] in ascending date order", async () => {
+    const store = new JournalStore(dir);
+    await store.save(entry("a1", "2026-07-30", "跑步"));
+    await store.save(entry("a2", "2026-07-31", "和老板开会", "老板"));
+    await store.save(entry("a3", "2026-08-01", "晨跑"));
+    const list = await store.listRange("2026-07-31", "2026-08-01");
+    expect(list.map((e) => `${e.meta.date}:${e.meta.id}`)).toEqual([
+      "2026-07-31:a2",
+      "2026-08-01:a3",
+    ]);
+  });
+
+  it("listRange with start === end returns only that day", async () => {
+    const store = new JournalStore(dir);
+    await store.save(entry("a1", "2026-07-30", "跑步"));
+    await store.save(entry("a2", "2026-07-31", "开会"));
+    const list = await store.listRange("2026-07-31", "2026-07-31");
+    expect(list.map((e) => e.meta.id)).toEqual(["a2"]);
+  });
+
+  it("search with a date range excludes matches outside the range", async () => {
+    const store = new JournalStore(dir);
+    await store.save(entry("a1", "2026-07-31", "和老板开会", "老板"));
+    await store.save(entry("a2", "2026-08-02", "和老板吃饭", "老板"));
+    const hits = await store.search("老板", { start: "2026-08-01", end: "2026-08-31" });
+    expect(hits.map((e) => e.meta.id)).toEqual(["a2"]);
+  });
+
   it("listAll returns every entry across all dates", async () => {
     const store = new JournalStore(dir);
     await store.save(entry("a1", "2026-07-31", "x"));
