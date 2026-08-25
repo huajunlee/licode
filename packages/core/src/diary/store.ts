@@ -10,7 +10,8 @@ export interface DiaryStore {
   listByDate(date: string): Promise<DiaryEntry[]>;
   listRecent(limit: number): Promise<DiaryEntry[]>;
   listAll(): Promise<DiaryEntry[]>;
-  search(query: string): Promise<DiaryEntry[]>;
+  listRange(start: string, end: string): Promise<DiaryEntry[]>;
+  search(query: string, range?: { start: string; end: string }): Promise<DiaryEntry[]>;
 }
 
 async function readEntries(dir: string): Promise<DiaryEntry[]> {
@@ -29,6 +30,13 @@ function entryFilename(entry: DiaryEntry): string {
   const hhmm = hhmmFromISO(entry.meta.createdAt);
   const title = cleanName(entry.title).slice(0, 12).replace(/-+$/, "") || "无标题";
   return `${entry.meta.date}-${hhmm}-${title}.md`;
+}
+
+/** 升序稳定排序：先按日期（YYYY-MM-DD 字典序即时间序），同日内按 id。 */
+function byDate(a: DiaryEntry, b: DiaryEntry): number {
+  return (
+    a.meta.date.localeCompare(b.meta.date) || a.meta.id.localeCompare(b.meta.id)
+  );
 }
 
 export class JournalStore implements DiaryStore {
@@ -94,17 +102,35 @@ export class JournalStore implements DiaryStore {
     return out;
   }
 
-  async search(query: string): Promise<DiaryEntry[]> {
+  /** 读取日期目录下所有条目，可选按 [start, end] 日期范围过滤（目录名字典序即时间序）。 */
+  private async readRange(
+    start?: string,
+    end?: string
+  ): Promise<DiaryEntry[]> {
     if (!fs.existsSync(this.dir)) return [];
-    const q = query.toLowerCase();
-    const all: DiaryEntry[] = [];
+    const out: DiaryEntry[] = [];
     for (const date of await fs.promises.readdir(this.dir)) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+      if (start !== undefined && date < start) continue;
+      if (end !== undefined && date > end) continue;
       const dateDir = path.join(this.dir, date);
       const stat = await fs.promises.stat(dateDir);
       if (!stat.isDirectory()) continue;
-      all.push(...(await readEntries(dateDir)));
+      out.push(...(await readEntries(dateDir)));
     }
-    return all.filter((e) => {
+    return out;
+  }
+
+  async listRange(start: string, end: string): Promise<DiaryEntry[]> {
+    return (await this.readRange(start, end)).sort(byDate);
+  }
+
+  async search(
+    query: string,
+    range?: { start: string; end: string }
+  ): Promise<DiaryEntry[]> {
+    const q = query.toLowerCase();
+    const hits = (await this.readRange(range?.start, range?.end)).filter((e) => {
       const hay = [
         e.raw.content,
         e.summary,
@@ -113,5 +139,6 @@ export class JournalStore implements DiaryStore {
       ].join("\n").toLowerCase();
       return hay.includes(q);
     });
+    return hits.sort(byDate);
   }
 }
