@@ -1,0 +1,551 @@
+{
+  "model": "kimi-k3",
+  "kind": "rag-keyword",
+  "seeds": 21,
+  "cases": 29,
+  "summary": {
+    "kind": "rag-keyword",
+    "perCase": [
+      {
+        "id": "a1",
+        "group": "A",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "user/food-preferences"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/food-preferences",
+          "user/food-sugar-restriction"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "a2",
+        "group": "A",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "feedback/conclusion-first"
+        ],
+        "k": 5,
+        "candidates": [
+          "feedback/no-emoji",
+          "feedback/chinese-reply",
+          "feedback/conclusion-first",
+          "feedback/concise-answers",
+          "project/q3-launch"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "a3",
+        "group": "A",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "project/q3-launch"
+        ],
+        "k": 5,
+        "candidates": [
+          "project/q3-launch",
+          "user/team-relationships",
+          "user/fitness-schedule",
+          "project/deepseek-default",
+          "user/fitness-schedule-new"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "a4",
+        "group": "A",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "user/fitness-schedule"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/fitness-schedule",
+          "user/fitness-schedule-new",
+          "project/q3-launch",
+          "feedback/concise-answers",
+          "user/gym-membership"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "a5",
+        "group": "A",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "project/deepseek-default"
+        ],
+        "k": 5,
+        "candidates": [
+          "project/deepseek-default",
+          "feedback/no-emoji",
+          "feedback/chinese-reply",
+          "reference/docker-cheatsheet",
+          "reference/zhihu-memory-article"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "a6",
+        "group": "A",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "user/fitness-schedule-new"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/fitness-schedule",
+          "user/fitness-schedule-new",
+          "user/gym-membership",
+          "project/q3-launch",
+          "user/reading-list"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "a7",
+        "group": "A",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "user/food-sugar-restriction"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/food-preferences",
+          "user/food-sugar-restriction",
+          "feedback/concise-answers",
+          "reference/locomo-paper",
+          "reference/zhihu-memory-article"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "a8",
+        "group": "A",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "user/vacation-plan",
+          "project/q3-launch"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/vacation-plan",
+          "project/q3-launch",
+          "user/team-relationships",
+          "project/memory-redesign",
+          "user/fitness-schedule"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "a9",
+        "group": "A",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "project/memory-redesign"
+        ],
+        "k": 5,
+        "candidates": [
+          "project/memory-redesign",
+          "reference/zhihu-memory-article",
+          "reference/locomo-paper",
+          "project/q3-launch",
+          "feedback/no-emoji"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "a10",
+        "group": "A",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "user/contact-info"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/contact-info",
+          "user/fitness-schedule-new",
+          "feedback/no-emoji",
+          "user/gym-membership",
+          "user/team-relationships"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "a11",
+        "group": "A",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "user/team-relationships"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/team-relationships",
+          "user/reading-list",
+          "project/memory-redesign",
+          "project/q3-launch",
+          "reference/locomo-paper"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "b1",
+        "group": "B",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [],
+        "k": 5,
+        "candidates": [
+          "user/food-preferences",
+          "user/gym-membership",
+          "feedback/chinese-reply",
+          "feedback/concise-answers",
+          "feedback/conclusion-first"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "b2",
+        "group": "B",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [],
+        "k": 5,
+        "candidates": [
+          "user/fitness-schedule-new",
+          "project/q3-launch",
+          "user/gym-membership",
+          "feedback/concise-answers",
+          "project/deepseek-default"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "b3",
+        "group": "B",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [],
+        "k": 5,
+        "candidates": [
+          "user/neovim-workflow",
+          "reference/locomo-paper",
+          "reference/zhihu-memory-article",
+          "project/deepseek-default",
+          "user/food-preferences"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "b4",
+        "group": "B",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [],
+        "k": 5,
+        "candidates": [
+          "user/contact-info",
+          "reference/deepseek-docs",
+          "feedback/no-emoji",
+          "project/memory-redesign",
+          "user/neovim-workflow"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "b5",
+        "group": "B",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [],
+        "k": 5,
+        "candidates": [
+          "user/gym-membership",
+          "user/fitness-schedule",
+          "user/fitness-schedule-new",
+          "feedback/conclusion-first",
+          "reference/zhihu-memory-article"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "b6",
+        "group": "B",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [],
+        "k": 5,
+        "candidates": [
+          "reference/deepseek-docs",
+          "user/vacation-plan",
+          "project/deepseek-default",
+          "project/q3-launch",
+          "user/gym-membership"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "b7",
+        "group": "B",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [],
+        "k": 5,
+        "candidates": [
+          "user/neovim-workflow",
+          "feedback/no-emoji",
+          "reference/zhihu-memory-article",
+          "project/deepseek-default",
+          "reference/locomo-paper"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "b8",
+        "group": "B",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [],
+        "k": 5,
+        "candidates": [
+          "reference/docker-cheatsheet",
+          "feedback/no-emoji",
+          "feedback/chinese-reply",
+          "user/neovim-workflow",
+          "user/contact-info"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "d1",
+        "group": "D",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [],
+        "k": 5,
+        "candidates": [
+          "user/food-preferences",
+          "reference/locomo-paper",
+          "reference/zhihu-memory-article",
+          "feedback/concise-answers",
+          "feedback/no-emoji"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "d2",
+        "group": "D",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [],
+        "k": 5,
+        "candidates": [
+          "project/q3-launch",
+          "user/gym-membership",
+          "reference/zhihu-memory-article",
+          "user/fitness-schedule",
+          "reference/locomo-paper"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "d3",
+        "group": "D",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [],
+        "k": 5,
+        "candidates": [
+          "reference/zhihu-memory-article",
+          "user/fitness-schedule",
+          "reference/locomo-paper",
+          "user/neovim-workflow",
+          "feedback/concise-answers"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "d4",
+        "group": "D",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [],
+        "k": 5,
+        "candidates": [
+          "user/reading-list",
+          "feedback/conclusion-first",
+          "project/memory-redesign",
+          "user/gym-membership",
+          "reference/locomo-paper"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "c1",
+        "group": "C",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "reference/locomo-paper"
+        ],
+        "k": 5,
+        "candidates": [
+          "reference/zhihu-memory-article",
+          "project/memory-redesign",
+          "reference/locomo-paper",
+          "user/contact-info",
+          "feedback/no-emoji"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "c2",
+        "group": "C",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "project/memory-redesign"
+        ],
+        "k": 5,
+        "candidates": [
+          "project/q3-launch",
+          "user/team-relationships",
+          "project/deepseek-default",
+          "project/memory-redesign",
+          "reference/zhihu-memory-article"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "c3",
+        "group": "C",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "reference/zhihu-memory-article"
+        ],
+        "k": 5,
+        "candidates": [
+          "reference/zhihu-memory-article",
+          "project/memory-redesign",
+          "reference/locomo-paper",
+          "feedback/chinese-reply",
+          "reference/deepseek-docs"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "c4",
+        "group": "C",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "user/fitness-schedule-new",
+          "user/vacation-plan"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/fitness-schedule",
+          "user/fitness-schedule-new",
+          "feedback/concise-answers",
+          "feedback/conclusion-first",
+          "user/vacation-plan"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "c5",
+        "group": "C",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "user/food-preferences",
+          "user/food-sugar-restriction"
+        ],
+        "k": 5,
+        "candidates": [
+          "reference/zhihu-memory-article",
+          "user/food-preferences",
+          "user/food-sugar-restriction",
+          "user/team-relationships",
+          "reference/locomo-paper"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "c6",
+        "group": "C",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "user/reading-list"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/reading-list",
+          "project/memory-redesign",
+          "project/q3-launch",
+          "reference/docker-cheatsheet",
+          "reference/zhihu-memory-article"
+        ],
+        "triggered": true,
+        "hit": true
+      }
+    ],
+    "failed": 0,
+    "rag": {
+      "recallAtK": 0.5862068965517241,
+      "precisionAtK": 0.13793103448275862,
+      "mrr": 0.4454022988505747
+    },
+    "behavior": {
+      "recallA": 1,
+      "triggerRateB": 1,
+      "falsePositiveB": 1,
+      "precision": 0.704225352112676,
+      "fabricateD": 1
+    }
+  }
+}
