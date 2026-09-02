@@ -1,0 +1,1097 @@
+{
+  "model": "kimi-k3",
+  "kind": "rag-keyword",
+  "seeds": 91,
+  "cases": 55,
+  "summary": {
+    "kind": "rag-keyword",
+    "perCase": [
+      {
+        "id": "a1",
+        "group": "A",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "user/food-preferences"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/food-preferences",
+          "user/work-standup",
+          "user/diet-no-seafood",
+          "user/food-sugar-restriction",
+          "user/online-shopping-habit"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "a2",
+        "group": "A",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "feedback/conclusion-first"
+        ],
+        "k": 5,
+        "candidates": [
+          "feedback/no-emoji",
+          "user/photo-style",
+          "feedback/chinese-reply",
+          "user/mattress-brand",
+          "feedback/conclusion-first"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "a3",
+        "group": "A",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "project/q3-launch"
+        ],
+        "k": 5,
+        "candidates": [
+          "project/q3-launch",
+          "project/ci-pipeline-history",
+          "user/work-standup",
+          "user/team-relationships",
+          "user/coffee-habit"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "a4",
+        "group": "A",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "user/fitness-schedule"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/fitness-schedule",
+          "user/fitness-schedule-new",
+          "project/work-deploy-window",
+          "user/camping-group",
+          "user/dinner-club"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "a5",
+        "group": "A",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "project/deepseek-default"
+        ],
+        "k": 5,
+        "candidates": [
+          "project/deepseek-default",
+          "user/backup-email",
+          "reference/rust-learning-journey",
+          "feedback/no-emoji",
+          "user/mattress-brand"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "a6",
+        "group": "A",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "user/fitness-schedule-new"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/fitness-schedule",
+          "user/fitness-schedule-new",
+          "reference/fitness-general-tips",
+          "user/fitness-personal-tips",
+          "user/gym-membership"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "a7",
+        "group": "A",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "user/food-sugar-restriction"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/food-preferences",
+          "user/food-sugar-restriction",
+          "user/mattress-brand",
+          "user/mortgage-repay-date",
+          "user/tv-series-watching"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "a8",
+        "group": "A",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "user/vacation-plan",
+          "project/q3-launch"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/vacation-plan",
+          "project/q3-launch",
+          "project/ci-pipeline-history",
+          "user/camping-group",
+          "user/apartment-renovation"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "a9",
+        "group": "A",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "project/memory-redesign"
+        ],
+        "k": 5,
+        "candidates": [
+          "project/memory-redesign",
+          "reference/rag-chunking-notes",
+          "reference/zhihu-memory-article",
+          "reference/locomo-paper",
+          "reference/rust-learning-journey"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "a10",
+        "group": "A",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "user/contact-info"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/contact-info",
+          "user/work-review-meeting",
+          "user/camera-model",
+          "user/online-shopping-habit",
+          "user/parents-contact"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "a11",
+        "group": "A",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "user/team-relationships"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/team-relationships",
+          "user/colleague-lin-workstyle",
+          "user/home-router-password",
+          "reference/go-course",
+          "user/reading-list"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "b1",
+        "group": "B",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [],
+        "k": 5,
+        "candidates": [
+          "user/home-wifi-ssid",
+          "user/work-standup",
+          "user/fishing-gear",
+          "user/home-plants",
+          "user/passport-expiry"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "b2",
+        "group": "B",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [],
+        "k": 5,
+        "candidates": [
+          "user/work-review-meeting",
+          "user/fitness-personal-tips",
+          "reference/rust-learning-journey",
+          "user/coffee-habit",
+          "user/investment-portfolio"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "b3",
+        "group": "B",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [],
+        "k": 5,
+        "candidates": [
+          "user/mattress-brand",
+          "user/tv-series-watching",
+          "user/camping-group",
+          "project/tui-beautify-history",
+          "user/booked-flight-tokyo"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "b4",
+        "group": "B",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [],
+        "k": 5,
+        "candidates": [
+          "user/contact-info",
+          "user/backup-email",
+          "user/shipping-address",
+          "reference/deepseek-docs",
+          "user/appliance-warranty"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "b5",
+        "group": "B",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [],
+        "k": 5,
+        "candidates": [
+          "user/fitness-personal-tips",
+          "user/gym-membership",
+          "reference/fitness-general-tips",
+          "user/fitness-schedule",
+          "user/fitness-schedule-new"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "b6",
+        "group": "B",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [],
+        "k": 5,
+        "candidates": [
+          "user/annual-checkup-date",
+          "reference/deepseek-docs",
+          "user/booked-flight-tokyo",
+          "user/vacation-plan",
+          "project/deepseek-default"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "b7",
+        "group": "B",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [],
+        "k": 5,
+        "candidates": [
+          "user/neovim-workflow",
+          "user/mattress-brand",
+          "user/investment-portfolio",
+          "user/door-lock-fingerprint",
+          "user/tv-series-watching"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "b8",
+        "group": "B",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [],
+        "k": 5,
+        "candidates": [
+          "reference/docker-cheatsheet",
+          "user/backup-email",
+          "feedback/no-emoji",
+          "user/home-wifi-ssid",
+          "reference/rust-learning-journey"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "d1",
+        "group": "D",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [],
+        "k": 5,
+        "candidates": [
+          "user/pet-vet",
+          "user/pet-cat-name",
+          "user/home-plants",
+          "user/mattress-brand",
+          "user/tv-series-watching"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "d2",
+        "group": "D",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [],
+        "k": 5,
+        "candidates": [
+          "user/mortgage-repay-date",
+          "user/camping-group",
+          "user/mattress-brand",
+          "user/apartment-renovation",
+          "user/home-plants"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "d3",
+        "group": "D",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [],
+        "k": 5,
+        "candidates": [
+          "user/friend-chen-career",
+          "user/mother-birthday",
+          "user/credit-card-bill-date",
+          "user/mattress-brand",
+          "project/work-deploy-window"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "d4",
+        "group": "D",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [],
+        "k": 5,
+        "candidates": [
+          "user/mortgage-repay-date",
+          "user/online-shopping-habit",
+          "user/diet-low-oil",
+          "user/home-plants",
+          "user/passport-expiry"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "c1",
+        "group": "C",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "reference/locomo-paper"
+        ],
+        "k": 5,
+        "candidates": [
+          "reference/zhihu-memory-article",
+          "project/memory-redesign",
+          "reference/coffee-research",
+          "reference/locomo-paper",
+          "reference/rag-chunking-notes"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "c2",
+        "group": "C",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "project/memory-redesign"
+        ],
+        "k": 5,
+        "candidates": [
+          "project/q3-launch",
+          "project/migration-journey",
+          "user/mattress-brand",
+          "user/tv-series-watching",
+          "user/team-relationships"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "c3",
+        "group": "C",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "reference/zhihu-memory-article"
+        ],
+        "k": 5,
+        "candidates": [
+          "reference/zhihu-memory-article",
+          "project/memory-redesign",
+          "reference/locomo-paper",
+          "reference/rag-chunking-notes",
+          "reference/tech-docs-bookmark"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "c4",
+        "group": "C",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "user/fitness-schedule-new",
+          "user/vacation-plan"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/fitness-schedule",
+          "user/fitness-schedule-new",
+          "reference/go-course",
+          "user/fitness-personal-tips",
+          "user/tv-series-watching"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "c5",
+        "group": "C",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "user/food-preferences",
+          "user/food-sugar-restriction"
+        ],
+        "k": 5,
+        "candidates": [
+          "reference/zhihu-memory-article",
+          "user/food-preferences",
+          "user/work-review-meeting",
+          "user/food-sugar-restriction",
+          "user/tv-series-watching"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "c6",
+        "group": "C",
+        "set": "core",
+        "dimensions": [],
+        "expectedSlugs": [
+          "user/reading-list"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/reading-list",
+          "user/tech-stack-langchain",
+          "reference/go-course",
+          "reference/tech-docs-bookmark",
+          "user/tv-series-watching"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "r1",
+        "group": "A",
+        "set": "extended",
+        "dimensions": [
+          "semantic-robustness"
+        ],
+        "expectedSlugs": [
+          "user/food-preferences"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/food-sugar-restriction",
+          "project/work-deploy-window",
+          "user/fitness-schedule",
+          "user/mattress-brand",
+          "user/wishlist-countries"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "r2",
+        "group": "A",
+        "set": "extended",
+        "dimensions": [
+          "semantic-robustness"
+        ],
+        "expectedSlugs": [
+          "project/deepseek-default"
+        ],
+        "k": 5,
+        "candidates": [
+          "project/deepseek-default",
+          "reference/zhihu-memory-article"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "r3",
+        "group": "A",
+        "set": "extended",
+        "dimensions": [
+          "semantic-robustness"
+        ],
+        "expectedSlugs": [
+          "feedback/conclusion-first"
+        ],
+        "k": 5,
+        "candidates": [
+          "feedback/conclusion-first",
+          "feedback/concise-answers",
+          "feedback/no-emoji",
+          "user/mattress-brand",
+          "reference/rag-chunking-notes"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "r4",
+        "group": "A",
+        "set": "extended",
+        "dimensions": [
+          "semantic-robustness"
+        ],
+        "expectedSlugs": [
+          "project/q3-launch"
+        ],
+        "k": 5,
+        "candidates": [
+          "project/work-deploy-window",
+          "reference/locomo-paper",
+          "user/backup-email",
+          "user/diet-low-oil",
+          "project/tui-beautify-history"
+        ],
+        "triggered": true,
+        "hit": false
+      },
+      {
+        "id": "r5",
+        "group": "A",
+        "set": "extended",
+        "dimensions": [
+          "semantic-robustness"
+        ],
+        "expectedSlugs": [
+          "user/fitness-schedule"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/fitness-schedule-new",
+          "user/fitness-schedule",
+          "user/fitness-personal-tips",
+          "user/gym-membership",
+          "reference/fitness-general-tips"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "r6",
+        "group": "A",
+        "set": "extended",
+        "dimensions": [
+          "semantic-robustness"
+        ],
+        "expectedSlugs": [
+          "user/food-sugar-restriction"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/food-preferences",
+          "user/food-sugar-restriction",
+          "user/booked-flight-tokyo",
+          "user/mattress-brand",
+          "user/tv-series-watching"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "r7",
+        "group": "A",
+        "set": "extended",
+        "dimensions": [
+          "semantic-robustness"
+        ],
+        "expectedSlugs": [
+          "user/contact-info"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/contact-info",
+          "user/booked-flight-tokyo",
+          "user/camera-model",
+          "user/home-router-password",
+          "user/diet-low-oil"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "r8",
+        "group": "A",
+        "set": "extended",
+        "dimensions": [
+          "semantic-robustness"
+        ],
+        "expectedSlugs": [
+          "user/team-relationships"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/team-relationships",
+          "user/colleague-lin-workstyle",
+          "reference/rag-chunking-notes",
+          "user/home-router-password",
+          "project/tui-beautify-history"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "r9",
+        "group": "A",
+        "set": "extended",
+        "dimensions": [
+          "semantic-robustness"
+        ],
+        "expectedSlugs": [
+          "user/vacation-plan"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/vacation-plan",
+          "user/backup-email",
+          "user/booked-flight-tokyo",
+          "reference/locomo-paper",
+          "user/annual-checkup-date"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "r10",
+        "group": "A",
+        "set": "extended",
+        "dimensions": [
+          "semantic-robustness"
+        ],
+        "expectedSlugs": [
+          "project/memory-redesign"
+        ],
+        "k": 5,
+        "candidates": [
+          "project/memory-redesign",
+          "reference/rag-chunking-notes",
+          "reference/zhihu-memory-article",
+          "reference/rust-learning-journey",
+          "user/dev-toolchain"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "tc1",
+        "group": "A",
+        "set": "extended",
+        "dimensions": [
+          "time-conflict"
+        ],
+        "expectedSlugs": [
+          "project/migration-journey"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/backup-email",
+          "user/credit-card-bill-date",
+          "user/tech-stack-langchain",
+          "project/migration-journey",
+          "reference/rust-learning-journey"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "tc2",
+        "group": "A",
+        "set": "extended",
+        "dimensions": [
+          "time-conflict"
+        ],
+        "expectedSlugs": [
+          "user/flight-chengdu-new"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/flight-chengdu-old",
+          "user/flight-chengdu-new",
+          "user/tv-series-watching",
+          "user/booked-flight-tokyo",
+          "project/tui-beautify-history"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "tc3",
+        "group": "A",
+        "set": "extended",
+        "dimensions": [
+          "time-conflict"
+        ],
+        "expectedSlugs": [
+          "user/tv-model-new"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/tv-model-old",
+          "user/tv-model-new",
+          "reference/go-course",
+          "user/camera-model",
+          "project/deepseek-default"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "tc4",
+        "group": "A",
+        "set": "extended",
+        "dimensions": [
+          "time-conflict"
+        ],
+        "expectedSlugs": [
+          "user/office-location-new"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/office-location-old",
+          "user/office-location-new",
+          "user/team-relationships",
+          "user/housing-fund-balance",
+          "user/pet-cat-name"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "sp1",
+        "group": "A",
+        "set": "extended",
+        "dimensions": [
+          "similar-pair"
+        ],
+        "expectedSlugs": [
+          "user/fitness-personal-tips"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/fitness-personal-tips",
+          "user/fitness-schedule",
+          "user/fitness-schedule-new",
+          "reference/fitness-general-tips",
+          "user/gym-membership"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "sp2",
+        "group": "A",
+        "set": "extended",
+        "dimensions": [
+          "similar-pair"
+        ],
+        "expectedSlugs": [
+          "user/coffee-habit"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/coffee-habit",
+          "reference/coffee-research",
+          "user/photo-style",
+          "user/fitness-personal-tips",
+          "user/investment-portfolio"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "sp3",
+        "group": "A",
+        "set": "extended",
+        "dimensions": [
+          "similar-pair"
+        ],
+        "expectedSlugs": [
+          "reference/photo-composition-tips"
+        ],
+        "k": 5,
+        "candidates": [
+          "reference/photo-composition-tips",
+          "reference/investment-basics",
+          "user/friend-chen-career",
+          "user/photo-style",
+          "user/wishlist-countries"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "sp4",
+        "group": "A",
+        "set": "extended",
+        "dimensions": [
+          "similar-pair"
+        ],
+        "expectedSlugs": [
+          "reference/investment-basics"
+        ],
+        "k": 5,
+        "candidates": [
+          "reference/investment-basics",
+          "reference/fitness-general-tips",
+          "user/investment-portfolio",
+          "user/wishlist-countries",
+          "project/ci-pipeline-history"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "lm1",
+        "group": "A",
+        "set": "extended",
+        "dimensions": [
+          "long-memory"
+        ],
+        "expectedSlugs": [
+          "project/migration-journey"
+        ],
+        "k": 5,
+        "candidates": [
+          "project/ci-pipeline-history",
+          "project/migration-journey",
+          "reference/go-course",
+          "user/tv-series-watching",
+          "user/mattress-brand"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "lm2",
+        "group": "A",
+        "set": "extended",
+        "dimensions": [
+          "long-memory"
+        ],
+        "expectedSlugs": [
+          "user/xinjiang-roadtrip-2025"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/xinjiang-roadtrip-2025",
+          "user/wishlist-countries",
+          "user/apartment-renovation",
+          "user/mattress-brand",
+          "user/vacation-plan"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "lm3",
+        "group": "A",
+        "set": "extended",
+        "dimensions": [
+          "long-memory"
+        ],
+        "expectedSlugs": [
+          "project/ci-pipeline-history"
+        ],
+        "k": 5,
+        "candidates": [
+          "project/ci-pipeline-history",
+          "user/flight-chengdu-new",
+          "user/annual-checkup-date",
+          "project/q3-launch",
+          "user/gym-membership"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "dmn1",
+        "group": "A",
+        "set": "extended",
+        "dimensions": [
+          "single-hop"
+        ],
+        "expectedSlugs": [
+          "user/home-router-password"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/home-router-password",
+          "user/home-plants",
+          "user/home-wifi-ssid",
+          "user/online-shopping-habit",
+          "user/neovim-workflow"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "dmn2",
+        "group": "A",
+        "set": "extended",
+        "dimensions": [
+          "single-hop"
+        ],
+        "expectedSlugs": [
+          "user/pet-cat-name"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/pet-cat-name",
+          "user/home-wifi-ssid",
+          "user/pet-food-brand",
+          "user/parents-contact",
+          "user/pet-vaccine-date"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "dmn3",
+        "group": "A",
+        "set": "extended",
+        "dimensions": [
+          "single-hop"
+        ],
+        "expectedSlugs": [
+          "user/passport-expiry"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/passport-expiry",
+          "reference/go-course",
+          "user/mattress-brand",
+          "user/tv-series-watching",
+          "user/coffee-habit"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "dmn4",
+        "group": "A",
+        "set": "extended",
+        "dimensions": [
+          "single-hop"
+        ],
+        "expectedSlugs": [
+          "user/credit-card-bill-date"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/credit-card-bill-date",
+          "user/mortgage-repay-date",
+          "user/annual-checkup-date",
+          "user/backup-email",
+          "user/monthly-budget"
+        ],
+        "triggered": true,
+        "hit": true
+      },
+      {
+        "id": "dmn5",
+        "group": "A",
+        "set": "extended",
+        "dimensions": [
+          "single-hop"
+        ],
+        "expectedSlugs": [
+          "user/english-learning"
+        ],
+        "k": 5,
+        "candidates": [
+          "user/english-learning",
+          "user/tv-series-watching",
+          "user/credit-card-bill-date",
+          "reference/go-course",
+          "user/backup-email"
+        ],
+        "triggered": true,
+        "hit": true
+      }
+    ],
+    "failed": 0,
+    "rag": {
+      "recallAtK": 0.7090909090909091,
+      "precisionAtK": 0.15272727272727277,
+      "mrr": 0.5945454545454546
+    },
+    "behavior": {
+      "recallA": 0.9459459459459459,
+      "triggerRateB": 1,
+      "falsePositiveB": 1,
+      "precision": 0.3786764705882353,
+      "fabricateD": 1
+    }
+  }
+}

@@ -250,3 +250,56 @@ pnpm tsx packages/core/scripts/eval-recall/run.ts --recaller=v1-tool
 - **v1 方法论文档**：`A-B-test-v1.md`（同目录）—— v1 召回链路 A/B 测试（memory_recall 工具 vs side-query 注入），21 种子 / 29 用例与行为指标口径的出处。
 - **设计 spec**：`docs/superpowers/specs/2026-08-25-memory-test-suite-design.md`——共享数据 + 双路径评测框架的设计决策（检索层为主、可插拔 Recaller、指标语义、数据自检）。
 - **实施计划**：`docs/superpowers/plans/2026-08-25-memory-test-suite.md`——13 个任务的分步实施计划（本框架代码与数据的落地依据）。
+
+---
+
+## 7. 首批结果（全库 91 种子 / 55 用例）
+
+> 日期：2026-09-02
+> 模型：`EVAL_MODEL=deepseek-chat`（v1-tool 路径）；rag-keyword / rag-retriever 为确定性路径，不涉模型（其结果 JSON 的 `model` 字段仅记录 run.ts 默认 `kimi-k3`，对确定性检索不生效）。
+> 命令：
+> ```bash
+> pnpm tsx packages/core/scripts/eval-recall/run.ts --recaller=rag-keyword
+> pnpm tsx packages/core/scripts/eval-recall/run.ts --recaller=rag-retriever
+> EVAL_MODEL=deepseek-chat pnpm tsx packages/core/scripts/eval-recall/run.ts --recaller=v1-tool   # 跑两轮
+> ```
+
+### 7.1 三路径汇总
+
+| 路径 | recall@k | precision@k | MRR | recallA | triggerRateB | falsePositiveB | precision | fabricateD |
+|---|---|---|---|---|---|---|---|---|
+| rag-keyword | 70.9% | 15.3% | 0.595 | 94.6% | 100.0% | 100.0% | 37.9% | 100.0% |
+| rag-retriever | 70.9% | 15.3% | 0.595 | 94.6% | 100.0% | 100.0% | 37.9% | 100.0% |
+| v1-tool（round 1） | 38.2% | 8.0% | 0.379 | 51.4% | 50.0% | 12.5% | 69.2% | 0.0% |
+| v1-tool（round 2） | 40.0% | 8.4% | 0.385 | 54.1% | 50.0% | 12.5% | 73.0% | 0.0% |
+
+- RAG 路径只读 `rag` 指标（recall@k / precision@k / MRR）；v1 路径只读 `behavior` 指标（recallA / triggerRateB / falsePositiveB / precision / fabricateD）。两者共用同一份数据、同一把尺子。
+- rag-retriever 骨架当前委托 rag-keyword，故汇总**逐位一致**（确认无差异）。
+- v1-tool 跑两轮：recallA 51.4% → 54.1%、precision 69.2% → 73.0%，逐条有波动但结论稳定（见 §7.3 第 4 条）。
+
+### 7.2 RAG 关键词基线的分维度表现
+
+A 组 37 条（11 核心 + 26 扩展）按维度拆 recall：
+
+| 维度 | rag-keyword | v1-tool R1 | v1-tool R2 |
+|---|---|---|---|
+| 核心 A | 11/11 | 7/11 | 7/11 |
+| semantic-robustness | 8/10 | 1/10 | 1/10 |
+| similar-pair | 4/4 | 1/4 | 2/4 |
+| time-conflict | 4/4 | 4/4 | 4/4 |
+| long-memory | 3/3 | 1/3 | 1/3 |
+| single-hop | 5/5 | 5/5 | 5/5 |
+
+### 7.3 关键观察
+
+1. **rag-keyword 在语义鲁棒性上漏 2 条（r1、r4），全库跑仍复现 T11 冒烟结论。** 10 条中 8 条命中，漏的是 `r1`（"晚上想来点甜的解解馋，有啥推荐？" → 期望 `user/food-preferences`）与 `r4`（"咱们这个产品准备什么时候正式对外发布？" → 期望 `project/q3-launch`）。r1 的候选里 `user/food-sugar-restriction` 因共享"甜/吃"关键词顶上来，但目标 `food-preferences` 的 name/keywords 与口语化改写几乎零重叠；r4 的口语化"对外发布"与 `q3-launch` 的 name/keywords 无共享 token，纯关键词打分捞不到。这是关键词基线对同义/口语改写的结构性盲区，不是数据问题。
+
+2. **rag-keyword 在 time-conflict 上 4/4 命中，但旧态记忆全部排在新态之前——recency 盲区。** tc2/tc3/tc4 的候选里旧态（`flight-chengdu-old` / `tv-model-old` / `office-location-old`）排第 1、新态排第 2；tc1 里旧态 `user/tech-stack-langchain` 排第 3、新态 `project/migration-journey` 排第 4，且还有 `backup-email`、`credit-card-bill-date` 两条无关干扰排在更前。`expectedSlugs` 只标新态，所以 recall 不扣分，但 MRR 与 precision@k 被"旧压新"拖低（MRR 0.595）。这正是 §2.5 预言的"纯关键词检索器的 recency 盲区"——新旧共享关键词，基线无法判断哪条是当前态。
+
+3. **v1-tool 的 recallA（51.4% / 54.1%）远低于 rag-keyword（94.6%），且差距几乎全来自语义鲁棒性与长段落。** v1 真实 LLM 路径在 semantic-robustness 上两轮都只有 1/10（仅 `r2` 英文改写命中），long-memory 1/3（仅 `lm2`），核心 A 还稳定漏 a5/a6/a7/a8。R1 的 18 处漏召回里，13 处是"触发但候选为空"（a6/a7 与 r1/r3/r4/r6–r10、sp1、lm1/lm3：主模型调了 `memory_recall` 但子代理一条没选）、5 处是"根本没触发"（a5/a8/r5/sp2/sp3）；R2 的 17 处漏召回里 13 处触发空、3 处未触发（r1/r5/sp3），另有 a8 召回了 `user/vacation-plan` 但漏了 `project/q3-launch`（部分召回）。与"恒返回 top-k"的关键词基线相比，v1 链路的召回判定保守得多。
+
+4. **v1-tool 以低召回换高精度、零幻觉，重现 A-B-test-v1.md 的已知取舍。** triggerRateB 两轮都稳定在 50%（b2/b5/b6/b7 触发），与 v1 文档 §10 后的口径一致；falsePositiveB 仅 12.5%（只有 b2 真正注入无关记忆——3 条候选 `user/dev-toolchain`/`user/neovim-workflow`/`user/tech-stack-langchain`，其余触发均为空触发），fabricateD 两轮 0%（D 组防幻觉合格）。与此同时行为 precision 69.2% / 73.0%，远高于 rag-keyword 的 37.9%——v1 召回得少但干净，关键词基线召回得全但脏。两条路径在同一尺度上是典型的 precision/recall 互换。
+
+5. **v1-tool 在 time-conflict 上是"新态优先 + 旧态并现"，与关键词基线方向相反。** R1 的 tc2/tc3/tc4 与 R2 的 tc2 里，v1 召回当前态的同时把旧态一并带出，但**新态排第一、旧态排第二**（如 `['user/flight-chengdu-new', 'user/flight-chengdu-old']`），即 LLM 能正确区分"当前 vs 历史"并把当前态置顶；R2 的 tc3/tc4 回落到只召回新态（`['user/tv-model-new']`、`['user/office-location-new']`）。注：tc1（"现在跑 agent 还是用 LangChain 吗？"）两轮都只召回 `project/migration-journey` 一条新态、无旧态并现——旧态并现现象 R1 落在 tc2/tc3/tc4，R2 仅 tc2，tc1 始终干净。
+
+6. **逐条异常值得标记：**（a）`a5`（中文"LICode 默认用的是哪个模型？"）两轮都未命中（R1 未触发、R2 触发但候选为空——这本身是一次 R1→R2 的触发翻转），而同一问题的英文改写 `r2`（"What model does LICode use by default?"）两轮都命中 `project/deepseek-default`——同一 slug、同一语义，中英两种问法触发行为相反，指向主模型触发判据对中文改写更保守；（b）`sp2`（"我自己平时喝咖啡有什么讲究吗？"）R1 漏、R2 命中，是 55 条里唯一在两轮间翻转的 similar-pair 用例；（c）`lm1`（"agent runtime 怎么演进过来的"）与 `tc1` 同指 `project/migration-journey`，但 lm1 两轮漏、tc1 两轮命中——lm1 未含 "LangChain" 这一区分性关键词，长段落记忆靠纯语义难以稳定召回。
