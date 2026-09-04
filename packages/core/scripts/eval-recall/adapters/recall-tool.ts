@@ -1,7 +1,7 @@
 // packages/core/scripts/eval-recall/adapters/recall-tool.ts
 import type { LLMProvider } from "../../../src/llm/provider.js";
 import type { MemoryStore } from "../../../src/memory/store.js";
-import type { LoadedMemoryRegistry } from "../../../src/memory/loaded-memory-registry.js";
+import { LoadedMemoryRegistry } from "../../../src/memory/loaded-memory-registry.js";
 import { ConversationManager } from "../../../src/conversation/manager.js";
 import { SystemPrompt, loadDefaultLayers, currentDateLayer } from "../../../src/conversation/system-prompt.js";
 import { ToolRegistry } from "../../../src/tools/registry.js";
@@ -16,7 +16,6 @@ export interface RecallToolRecallerDeps {
   llm: LLMProvider;
   model?: string;
   store: MemoryStore;
-  registry: LoadedMemoryRegistry;
   /** 可注入（测试用）；默认走真实 recall-agent。 */
   runRecall?: (query: string, keywords: string[]) => Promise<string[]>;
   trace?: string[];
@@ -45,8 +44,10 @@ export function createRecallToolRecaller(deps: RecallToolRecallerDeps): Recaller
 
       const agent = createRecallAgent({ llm: deps.llm, model: deps.model ?? "deepseek-chat", store: deps.store, trace: deps.trace });
       const runRecall = deps.runRecall ?? ((q, kw) => agent.run(q, kw));
+      // 每个用例独立会话：每次 retrieve 新建 registry，避免跨用例的已加载 slug 被静默抑制（参照 eval-recall.ts:112-147）。
+      const registry = new LoadedMemoryRegistry();
       const tools = new ToolRegistry();
-      tools.register(createMemoryRecallTool({ runRecall, store: deps.store, registry: deps.registry }));
+      tools.register(createMemoryRecallTool({ runRecall, store: deps.store, registry }));
 
       const res = await collectResponse(deps.llm, conv.buildMessages(), tools.toLLMTools(), conv);
       if (res.type === "tool-use") {

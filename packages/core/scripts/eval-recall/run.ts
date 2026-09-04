@@ -13,7 +13,6 @@ import { createRagRetriever } from "./adapters/rag-retriever.js";
 import { createRecallToolRecaller } from "./adapters/recall-tool.js";
 import { AnthropicProvider } from "../../src/llm/anthropic.js";
 import type { LLMProvider, ChatRequest, ChatResponse, StreamChunk, Message } from "../../src/llm/provider.js";
-import { LoadedMemoryRegistry } from "../../src/memory/loaded-memory-registry.js";
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const DATA = DIR; // 本脚本即位于 eval-recall/ 数据目录内（seed-memories.json / cases.json 同目录）
@@ -37,31 +36,34 @@ async function main(): Promise<void> {
   const cases = JSON.parse(fs.readFileSync(path.join(DATA, "cases.json"), "utf-8")) as Case[];
   const { store, cleanup } = await buildEvalStore(seeds);
 
-  let recaller: Recaller;
-  if (kind === "rag-keyword") {
-    recaller = createRagKeywordRecaller({ store });
-  } else if (kind === "rag-retriever") {
-    recaller = createRagRetriever({ store });
-  } else {
-    const apiKey = process.env.ANTHROPIC_AUTH_TOKEN ?? process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) throw new Error("v1-tool 需要 ANTHROPIC_AUTH_TOKEN 或 ANTHROPIC_API_KEY");
-    recaller = createRecallToolRecaller({
-      llm: new ZeroTempProvider(new AnthropicProvider({ apiKey, baseUrl: process.env.ANTHROPIC_BASE_URL })),
-      model: MODEL, store, registry: new LoadedMemoryRegistry(),
-    });
+  try {
+    let recaller: Recaller;
+    if (kind === "rag-keyword") {
+      recaller = createRagKeywordRecaller({ store });
+    } else if (kind === "rag-retriever") {
+      recaller = createRagRetriever({ store });
+    } else {
+      const apiKey = process.env.ANTHROPIC_AUTH_TOKEN ?? process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) throw new Error("v1-tool 需要 ANTHROPIC_AUTH_TOKEN 或 ANTHROPIC_API_KEY");
+      recaller = createRecallToolRecaller({
+        llm: new ZeroTempProvider(new AnthropicProvider({ apiKey, baseUrl: process.env.ANTHROPIC_BASE_URL })),
+        model: MODEL, store,
+      });
+    }
+
+    const summary = await runEvaluation({ recaller, seeds, cases });
+
+    console.log(`\n[${kind}] 种子=${seeds.length} 用例=${cases.length} 失败=${summary.failed}`);
+    console.log(`  RAG 指标: recall@k=${(summary.rag.recallAtK * 100).toFixed(1)}%  precision@k=${(summary.rag.precisionAtK * 100).toFixed(1)}%  MRR=${summary.rag.mrr.toFixed(3)}`);
+    console.log(`  v1 行为指标: recallA=${(summary.behavior.recallA * 100).toFixed(1)}%  triggerB=${(summary.behavior.triggerRateB * 100).toFixed(1)}%  falsePosB=${(summary.behavior.falsePositiveB * 100).toFixed(1)}%  precision=${(summary.behavior.precision * 100).toFixed(1)}%  fabricateD=${(summary.behavior.fabricateD * 100).toFixed(1)}%`);
+
+    const out = path.join(DATA, "results", `results-${kind}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`);
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    fs.writeFileSync(out, JSON.stringify({ model: MODEL, kind, seeds: seeds.length, cases: cases.length, summary }, null, 2));
+    console.log(`结果已写入 ${out}`);
+  } finally {
+    cleanup();
   }
-
-  const summary = await runEvaluation({ recaller, seeds, cases });
-  cleanup();
-
-  console.log(`\n[${kind}] 种子=${seeds.length} 用例=${cases.length} 失败=${summary.failed}`);
-  console.log(`  RAG 指标: recall@k=${(summary.rag.recallAtK * 100).toFixed(1)}%  precision@k=${(summary.rag.precisionAtK * 100).toFixed(1)}%  MRR=${summary.rag.mrr.toFixed(3)}`);
-  console.log(`  v1 行为指标: recallA=${(summary.behavior.recallA * 100).toFixed(1)}%  triggerB=${(summary.behavior.triggerRateB * 100).toFixed(1)}%  falsePosB=${(summary.behavior.falsePositiveB * 100).toFixed(1)}%  precision=${(summary.behavior.precision * 100).toFixed(1)}%  fabricateD=${(summary.behavior.fabricateD * 100).toFixed(1)}%`);
-
-  const out = path.join(DATA, "results", `results-${kind}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`);
-  fs.mkdirSync(path.dirname(out), { recursive: true });
-  fs.writeFileSync(out, JSON.stringify({ model: MODEL, kind, seeds: seeds.length, cases: cases.length, summary }, null, 2));
-  console.log(`结果已写入 ${out}`);
 }
 
 main().catch((err) => { console.error(err); process.exit(1); });

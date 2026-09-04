@@ -14,8 +14,8 @@ export function tokenize(text: string): string[] {
   return tokens;
 }
 
-const FIELDS: Array<{ pick: (m: { name: string; description: string; keywords: string[]; content: string }) => string; weight: number }> = [
-  { pick: (m) => m.keywords.join(""), weight: 3 },
+const FIELDS: Array<{ pick: (m: { name: string; description: string; keywords?: string[]; content: string }) => string; weight: number }> = [
+  { pick: (m) => m.keywords?.join("") ?? "", weight: 3 },
   { pick: (m) => m.name, weight: 3 },
   { pick: (m) => m.description, weight: 2 },
   { pick: (m) => m.content, weight: 1 },

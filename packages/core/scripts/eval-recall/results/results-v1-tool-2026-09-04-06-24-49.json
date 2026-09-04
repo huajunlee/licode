@@ -18,7 +18,7 @@
         "candidates": [
           "user/food-preferences",
           "user/food-sugar-restriction",
-          "user/diet-low-oil"
+          "user/diet-no-seafood"
         ],
         "triggered": true,
         "hit": true
@@ -33,9 +33,9 @@
         ],
         "k": 5,
         "candidates": [
-          "feedback/conclusion-first",
+          "feedback/chinese-reply",
           "feedback/concise-answers",
-          "feedback/no-emoji"
+          "feedback/conclusion-first"
         ],
         "triggered": true,
         "hit": true
@@ -81,9 +81,11 @@
           "project/deepseek-default"
         ],
         "k": 5,
-        "candidates": [],
-        "triggered": false,
-        "hit": false
+        "candidates": [
+          "project/deepseek-default"
+        ],
+        "triggered": true,
+        "hit": true
       },
       {
         "id": "a6",
@@ -94,9 +96,11 @@
           "user/fitness-schedule-new"
         ],
         "k": 5,
-        "candidates": [],
+        "candidates": [
+          "user/fitness-schedule-new"
+        ],
         "triggered": true,
-        "hit": false
+        "hit": true
       },
       {
         "id": "a7",
@@ -107,9 +111,12 @@
           "user/food-sugar-restriction"
         ],
         "k": 5,
-        "candidates": [],
+        "candidates": [
+          "user/food-sugar-restriction",
+          "user/food-preferences"
+        ],
         "triggered": true,
-        "hit": false
+        "hit": true
       },
       {
         "id": "a8",
@@ -121,9 +128,12 @@
           "project/q3-launch"
         ],
         "k": 5,
-        "candidates": [],
-        "triggered": false,
-        "hit": false
+        "candidates": [
+          "user/vacation-plan",
+          "project/q3-launch"
+        ],
+        "triggered": true,
+        "hit": true
       },
       {
         "id": "a9",
@@ -188,11 +198,7 @@
         "dimensions": [],
         "expectedSlugs": [],
         "k": 5,
-        "candidates": [
-          "user/dev-toolchain",
-          "user/neovim-workflow",
-          "user/tech-stack-langchain"
-        ],
+        "candidates": [],
         "triggered": true,
         "hit": false
       },
@@ -247,7 +253,9 @@
         "dimensions": [],
         "expectedSlugs": [],
         "k": 5,
-        "candidates": [],
+        "candidates": [
+          "user/neovim-workflow"
+        ],
         "triggered": true,
         "hit": false
       },
@@ -259,7 +267,7 @@
         "expectedSlugs": [],
         "k": 5,
         "candidates": [],
-        "triggered": false,
+        "triggered": true,
         "hit": false
       },
       {
@@ -333,10 +341,12 @@
         ],
         "k": 5,
         "candidates": [
+          "project/q3-launch",
+          "project/memory-redesign",
           "project/ci-pipeline-history"
         ],
         "triggered": true,
-        "hit": false
+        "hit": true
       },
       {
         "id": "c3",
@@ -347,9 +357,11 @@
           "reference/zhihu-memory-article"
         ],
         "k": 5,
-        "candidates": [],
+        "candidates": [
+          "reference/zhihu-memory-article"
+        ],
         "triggered": true,
-        "hit": false
+        "hit": true
       },
       {
         "id": "c4",
@@ -362,10 +374,12 @@
         ],
         "k": 5,
         "candidates": [
-          "user/vacation-plan"
+          "user/fitness-schedule-new",
+          "user/vacation-plan",
+          "user/booked-flight-tokyo"
         ],
         "triggered": true,
-        "hit": false
+        "hit": true
       },
       {
         "id": "c5",
@@ -377,9 +391,12 @@
           "user/food-sugar-restriction"
         ],
         "k": 5,
-        "candidates": [],
+        "candidates": [
+          "user/food-preferences",
+          "user/food-sugar-restriction"
+        ],
         "triggered": true,
-        "hit": false
+        "hit": true
       },
       {
         "id": "c6",
@@ -410,7 +427,7 @@
         ],
         "k": 5,
         "candidates": [],
-        "triggered": true,
+        "triggered": false,
         "hit": false
       },
       {
@@ -441,9 +458,11 @@
           "feedback/conclusion-first"
         ],
         "k": 5,
-        "candidates": [],
+        "candidates": [
+          "feedback/conclusion-first"
+        ],
         "triggered": true,
-        "hit": false
+        "hit": true
       },
       {
         "id": "r4",
@@ -456,9 +475,11 @@
           "project/q3-launch"
         ],
         "k": 5,
-        "candidates": [],
+        "candidates": [
+          "project/q3-launch"
+        ],
         "triggered": true,
-        "hit": false
+        "hit": true
       },
       {
         "id": "r5",
@@ -471,9 +492,13 @@
           "user/fitness-schedule"
         ],
         "k": 5,
-        "candidates": [],
-        "triggered": false,
-        "hit": false
+        "candidates": [
+          "user/fitness-schedule",
+          "user/fitness-schedule-new",
+          "user/gym-membership"
+        ],
+        "triggered": true,
+        "hit": true
       },
       {
         "id": "r6",
@@ -486,9 +511,12 @@
           "user/food-sugar-restriction"
         ],
         "k": 5,
-        "candidates": [],
+        "candidates": [
+          "user/food-sugar-restriction",
+          "user/food-preferences"
+        ],
         "triggered": true,
-        "hit": false
+        "hit": true
       },
       {
         "id": "r7",
@@ -501,9 +529,11 @@
           "user/contact-info"
         ],
         "k": 5,
-        "candidates": [],
+        "candidates": [
+          "user/contact-info"
+        ],
         "triggered": true,
-        "hit": false
+        "hit": true
       },
       {
         "id": "r8",
@@ -516,9 +546,11 @@
           "user/team-relationships"
         ],
         "k": 5,
-        "candidates": [],
+        "candidates": [
+          "user/team-relationships"
+        ],
         "triggered": true,
-        "hit": false
+        "hit": true
       },
       {
         "id": "r9",
@@ -531,9 +563,11 @@
           "user/vacation-plan"
         ],
         "k": 5,
-        "candidates": [],
+        "candidates": [
+          "user/vacation-plan"
+        ],
         "triggered": true,
-        "hit": false
+        "hit": true
       },
       {
         "id": "r10",
@@ -546,9 +580,11 @@
           "project/memory-redesign"
         ],
         "k": 5,
-        "candidates": [],
+        "candidates": [
+          "project/memory-redesign"
+        ],
         "triggered": true,
-        "hit": false
+        "hit": true
       },
       {
         "id": "tc1",
@@ -562,7 +598,8 @@
         ],
         "k": 5,
         "candidates": [
-          "project/migration-journey"
+          "project/migration-journey",
+          "user/tech-stack-langchain"
         ],
         "triggered": true,
         "hit": true
@@ -632,9 +669,12 @@
           "user/fitness-personal-tips"
         ],
         "k": 5,
-        "candidates": [],
+        "candidates": [
+          "user/fitness-schedule-new",
+          "user/fitness-personal-tips"
+        ],
         "triggered": true,
-        "hit": false
+        "hit": true
       },
       {
         "id": "sp2",
@@ -647,9 +687,11 @@
           "user/coffee-habit"
         ],
         "k": 5,
-        "candidates": [],
-        "triggered": false,
-        "hit": false
+        "candidates": [
+          "user/coffee-habit"
+        ],
+        "triggered": true,
+        "hit": true
       },
       {
         "id": "sp3",
@@ -694,9 +736,12 @@
           "project/migration-journey"
         ],
         "k": 5,
-        "candidates": [],
+        "candidates": [
+          "project/migration-journey",
+          "user/tech-stack-langchain"
+        ],
         "triggered": true,
-        "hit": false
+        "hit": true
       },
       {
         "id": "lm2",
@@ -726,9 +771,11 @@
           "project/ci-pipeline-history"
         ],
         "k": 5,
-        "candidates": [],
+        "candidates": [
+          "project/ci-pipeline-history"
+        ],
         "triggered": true,
-        "hit": false
+        "hit": true
       },
       {
         "id": "dmn1",
@@ -818,15 +865,15 @@
     ],
     "failed": 0,
     "rag": {
-      "recallAtK": 0.38181818181818183,
-      "precisionAtK": 0.08000000000000003,
-      "mrr": 0.37878787878787884
+      "recallAtK": 0.7454545454545455,
+      "precisionAtK": 0.16,
+      "mrr": 0.6939393939393939
     },
     "behavior": {
-      "recallA": 0.5135135135135135,
-      "triggerRateB": 0.5,
+      "recallA": 0.9459459459459459,
+      "triggerRateB": 0.625,
       "falsePositiveB": 0.125,
-      "precision": 0.6923076923076923,
+      "precision": 0.7941176470588235,
       "fabricateD": 0
     }
   }
