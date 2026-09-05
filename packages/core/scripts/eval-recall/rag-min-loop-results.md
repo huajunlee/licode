@@ -25,7 +25,7 @@ LICode 记忆召回此前走「主模型自主调用 `memory_recall` 工具」�
 
 - **种子记忆**：`seed-memories.json` 91 条（含核心集 + 扩展集：语义鲁棒性、时间冲突、相似对、长段、干扰域）。
 - **用例**：`cases.json` 55 条，四组 A/B/C/D（A=应召回、B=不应召回、C=探索、D=对抗）。
-- **嵌入缓存**：`results/embedding-cache.json`（sha256(model+NUL+text) → 向量），仅建索引时写入；重跑命中缓存不再调 API。
+- **嵌入缓存**：`results/embedding-cache.json`（sha256(model+NUL+text) → 向量），仅**建索引阶段**写入并命中；重跑建索引不再调 API。注意：hybrid 的**查询向量**每轮实时 embed（不缓存，55 条用例各 1 次）。
 
 ## 3. 指标定义
 
@@ -93,10 +93,10 @@ pnpm tsx packages/core/scripts/eval-recall/run.ts --recaller=rag-retriever
 ## 6. 关键发现
 
 1. **混合（RAG）显著优于纯关键词 / 纯 BM25**：recall@k 74.5% vs 70.9% / 69.1%（+3.6pp / +5.4pp），MRR 0.640 vs 0.595 / 0.602，A 组召回率 100%（关键词/BM25 均 94.6%）——向量路补上了纯关键词漏掉的语义召回（语义鲁棒性、隐指类用例）。
-2. **纯 BM25 相对关键词基线不占优**：recall@k 略低（69.1% vs 70.9%），但 precision@k/MRR 略高、B 组误召回率更低（87.5% vs 100%）——关键词路本身的召回已不错，换引擎（LanceDB ICU FTS）增益有限，主要增益来自向量路。
+2. **纯 BM25 相对关键词基线不占优**：recall@k 略低（69.1% vs 70.9%）、precision@k 略低（14.9% vs 15.3%），但 MRR 略高（0.602 vs 0.595）、precision（v1 口径）略高（45.4% vs 37.9%）、B 组误召回率更低（87.5% vs 100%）——关键词路本身的召回已不错，换引擎（LanceDB ICU FTS）增益有限，主要增益来自向量路。
 3. **B 组误召回率高是检索器的天然口径**：三条曲线 triggerB/falsePosB 都在 87.5–100%——纯检索器对「不该召回」的查询也会返回 top-k 候选（与 v1 模型驱动路径的「空触发弃权」行为不同，见 A-B-test-v1 §6.1）。这不代表对话侧会注入——真实入口是否注入由上层工具调用判据决定。
 4. **fabricateD=100%**：D 组对抗查询（记忆里不存在的事实）检索器仍返回 top-k 候选，属检索器固有行为；防幻觉需依赖上层「是否调用/是否采纳」判据（v1 工具路径的 D 组 0% 即由模型驱动达成）。
-5. **确定性 + 缓存复用**：`rag-retriever` 重跑指标与首次完全一致；`results/embedding-cache.json` 体积不变（3,086,129 字节），建索引零 embed 调用（命中缓存）。
+5. **确定性 + 缓存复用**：`rag-retriever` 重跑指标与首次完全一致；`results/embedding-cache.json` 体积不变（3,086,129 字节），建索引零 embed 调用（命中缓存）。查询向量每轮仍实时 embed（55 次/轮，有意不缓存——评测规模可接受；若需重跑零 API，可加查询向量缓存）。
 
 ## 7. 结论与遗留
 
