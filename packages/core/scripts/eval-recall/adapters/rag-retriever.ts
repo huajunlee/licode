@@ -1,20 +1,19 @@
 // packages/core/scripts/eval-recall/adapters/rag-retriever.ts
 import type { MemoryStore } from "../../../src/memory/store.js";
 import type { RecallResult, Recaller } from "../lib/recaller.js";
-import { createRagKeywordRecaller } from "./rag-keyword.js";
+import type { LanceIndex } from "../lib/lance-index.js";
 
 /**
- * RAG 混合检索器（向量 + 关键词）。
- * 骨架态：向量模型未接入，当前委托关键词基线（确定性），保证评测管线先行跑通。
- * 接入点：在此处新增向量评分项，与关键词分数混合加权排序后返回 topK。
+ * RAG 混合检索器（BM25 + 向量 + RRF）。
+ * 两路各取 topK 后由 LanceDB 内置 RRFReranker 融合排名返回。
+ * 关键词路经 `lance-fts`（纯 BM25 对照）隔离其单独贡献。
  */
-export function createRagRetriever(deps: { store: MemoryStore }): Recaller {
-  const keyword = createRagKeywordRecaller(deps);
+export function createRagRetriever(deps: { store: MemoryStore; index: LanceIndex }): Recaller {
   return {
     kind: "rag-retriever",
     async retrieve(query, opts): Promise<RecallResult> {
-      // TODO(vector): 叠加 embedding 相似度评分后再排序。当前仅关键词基线。
-      return keyword.retrieve(query, opts);
+      const candidates = await deps.index.hybrid(query, opts.topK);
+      return { candidates, triggered: true };
     },
   };
 }
