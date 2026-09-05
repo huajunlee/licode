@@ -4,6 +4,7 @@
 //   pnpm tsx packages/core/scripts/eval-recall/run.ts --recaller=v1-tool
 //   （EVAL_MODEL 可覆盖默认模型；v1-tool 需要 ANTHROPIC_AUTH_TOKEN 或 ANTHROPIC_API_KEY）
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Seed, Case, Recaller, RecallerKind } from "./lib/recaller.js";
@@ -11,6 +12,9 @@ import { buildEvalStore, runEvaluation } from "./lib/eval-runner.js";
 import { createRagKeywordRecaller } from "./adapters/rag-keyword.js";
 import { createRagRetriever } from "./adapters/rag-retriever.js";
 import { createRecallToolRecaller } from "./adapters/recall-tool.js";
+import { envEmbeddingProvider } from "../../src/llm/embedding.js";
+import { buildLanceIndex, type LanceIndex } from "./lib/lance-index.js";
+import { createLanceFtsRecaller } from "./adapters/lancedb-fts.js";
 import { AnthropicProvider } from "../../src/llm/anthropic.js";
 import type { LLMProvider, ChatRequest, ChatResponse, StreamChunk, Message } from "../../src/llm/provider.js";
 
@@ -30,18 +34,29 @@ class ZeroTempProvider implements LLMProvider {
 
 async function main(): Promise<void> {
   const kind = (process.argv.find((a) => a.startsWith("--recaller="))?.slice(11) ?? "rag-keyword") as RecallerKind;
-  if (!["v1-tool", "rag-keyword", "rag-retriever"].includes(kind)) throw new Error(`未知 --recaller=${kind}`);
+  if (!["v1-tool", "rag-keyword", "lance-fts", "rag-retriever"].includes(kind)) throw new Error(`未知 --recaller=${kind}`);
 
   const seeds = JSON.parse(fs.readFileSync(path.join(DATA, "seed-memories.json"), "utf-8")) as Seed[];
   const cases = JSON.parse(fs.readFileSync(path.join(DATA, "cases.json"), "utf-8")) as Case[];
   const { store, cleanup } = await buildEvalStore(seeds);
 
+  let index: LanceIndex | undefined;
   try {
     let recaller: Recaller;
     if (kind === "rag-keyword") {
       recaller = createRagKeywordRecaller({ store });
-    } else if (kind === "rag-retriever") {
-      recaller = createRagRetriever({ store });
+    } else if (kind === "lance-fts" || kind === "rag-retriever") {
+      const embedder = envEmbeddingProvider();
+      const uri = fs.mkdtempSync(path.join(os.tmpdir(), "rag-eval-"));
+      index = await buildLanceIndex({
+        memories: seeds,
+        embedder,
+        cachePath: path.join(DATA, "results", "embedding-cache.json"),
+        uri,
+      });
+      recaller = kind === "lance-fts"
+        ? createLanceFtsRecaller({ store, index })
+        : createRagRetriever({ store, index });
     } else {
       const apiKey = process.env.ANTHROPIC_AUTH_TOKEN ?? process.env.ANTHROPIC_API_KEY;
       if (!apiKey) throw new Error("v1-tool 需要 ANTHROPIC_AUTH_TOKEN 或 ANTHROPIC_API_KEY");
@@ -62,6 +77,7 @@ async function main(): Promise<void> {
     fs.writeFileSync(out, JSON.stringify({ model: MODEL, kind, seeds: seeds.length, cases: cases.length, summary }, null, 2));
     console.log(`结果已写入 ${out}`);
   } finally {
+    if (index) { await index.close(); index.cleanup(); }
     cleanup();
   }
 }

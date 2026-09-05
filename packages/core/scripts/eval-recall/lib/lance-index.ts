@@ -88,7 +88,13 @@ export async function buildLanceIndex(opts: {
   const missing: number[] = [];
   const vectors: Array<number[] | undefined> = texts.map((t, i) => cache.get(t) ?? (missing.push(i), undefined));
   if (missing.length > 0) {
-    const got = await opts.embedder.embed(missing.map((i) => texts[i]));
+    // 分片调用 embed：doubao-embedding-vision 单请求上限 10 条（真实端点 2026-09-05 实测 400 InvalidParameter）。
+    const missingTexts = missing.map((i) => texts[i]);
+    const CHUNK = 10;
+    const got: number[][] = [];
+    for (let i = 0; i < missingTexts.length; i += CHUNK) {
+      got.push(...(await opts.embedder.embed(missingTexts.slice(i, i + CHUNK))));
+    }
     missing.forEach((i, j) => {
       vectors[i] = got[j];
       cache.set(texts[i], got[j]);
