@@ -1,4 +1,9 @@
 packages:
   - "packages/*"
+# @lancedb/lancedb 的可选 embedding 函数依赖（本地 transformers / openai）本项目不用，
+# 排除以免拖入 onnxruntime-node / sharp / protobufjs 原生构建脚本。
+ignoredOptionalDependencies:
+  - openai
+  - "@huggingface/transformers"
 allowBuilds:
   esbuild: true

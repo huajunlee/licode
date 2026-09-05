@@ -6,3 +6,6 @@ dist/
 *.tsbuildinfo
 .DS_Store
 *.zip
+
+# eval-recall embedding 缓存（内容哈希 → 向量，可再生成）
+packages/core/scripts/eval-recall/results/embedding-cache.json
