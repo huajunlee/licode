@@ -7,5 +7,5 @@ dist/
 .DS_Store
 *.zip
 
-# eval-recall embedding 缓存（内容哈希 → 向量，可再生成）
-packages/core/scripts/eval-recall/results/embedding-cache.json
+# eval-recall 评测产物（结果归档 + embedding 缓存，均可再生成；对比表 .md 入库）
+packages/core/scripts/eval-recall/results/
