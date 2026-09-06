@@ -21,13 +21,14 @@
 run.ts --recaller=rag-rerank
   └─ adapters/rag-rerank.ts（新增）
        deps: { llm: LLMProvider, model: "deepseek-chat", index: LanceIndex }
-       1. index.hybrid(query, 20)        ← 池深 20，纯本地计算
+       1. index.hybrid(query, 20)        ← 池深 20，纯本地计算，候选含 text
        2. llm.chat(无 tools)              ← reranker，1 次 LLM 调用
        3. 保留判相关项 → 按 hybrid 分数序 → 截回 top-5 → RecallResult
 ```
 
 - `lib/recaller.ts` 的 `RecallerKind` 扩 `"rag-rerank"`；既有四条曲线（v1-tool / rag-keyword / lance-fts / rag-retriever）一行不动，新增第五条。
-- 复用既有件：`LanceIndex.hybrid`、`LLMProvider`（`src/llm/provider.js`，v1-tool 同款）、`buildMemoryText`（lance-index.ts 建索引同款文本）。
+- **`LanceIndex.hybrid`/`fts` 返回值扩展为 `{slug, text, score}`**（`lance-index.ts` 小改：`toCandidates` 不再丢弃行内 text）。text 即索引层写入的文本表示——今天由 `buildMemoryText` 生成（整条记忆=单 chunk），**reranker 只消费 hybrid 结果，与文本构造/切片策略完全解耦**；后续改切片只动索引层。
+- 复用既有件：`LanceIndex.hybrid`、`LLMProvider`（`src/llm/provider.js`，v1-tool 同款）。
 - 输出语义：`triggered` 恒 true；`score` 沿用 hybrid 分数（区别于 v1 的 `1-i/10`，trace 可辨层来源）；判相关项按 hybrid 原始分数序排列（排序归因仍属检索层，确定性）。
 
 ## 3. Prompt 设计
@@ -39,7 +40,7 @@ System（角色声明 + 判据，刻意不含任何评测用例内容，防 prom
 > 2. 语义相邻不等于相关。判别方法：设想你在直接回答用户的问题——只有当这条记忆的内容能作为答案的依据被引用时，才判相关；如果它只是与问题谈论相近的话题、共享相似的词汇或属于同一领域，但内容本身并不回答问题所问的事实，判 false。典型情形：问题询问某个具体事实，而记忆记载的是相近的另一件事（主体、对象或场合不同），此时不相关；
 > 3. 拿不准时判 false——宁可清空也不凑数（top-k 里没有"必须保留一条"的义务）。
 
-User：问题原文 + 20 条候选（编号 + `buildMemoryText` 全文）+ 输出格式说明：
+User：问题原文 + 20 条候选（编号 + hybrid 返回的 text，即索引层检索所用的文本表示，reranker 不自建文本）+ 输出格式说明：
 
 ```json
 {"verdicts": [{"id": 1, "relevant": true}, {"id": 2, "relevant": false}]}
@@ -82,4 +83,5 @@ User：问题原文 + 20 条候选（编号 + `buildMemoryText` 全文）+ 输�
 ## 7. 后续展望（不在本次交付）
 
 - 若验收达标：reranker 即生产侧"上层判据"的原型，可与 v1 的 recall-agent 判据做行为对比，为 `lance-index` 上移 `src/memory/` 后的完整链路提供参照；
-- 若 recallA 受损：探索判据松紧、池深（20→10/30）、或对"判 false 的期望项"做错误分析反哺 prompt。
+- 若 recallA 受损：探索判据松紧、池深（20→10/30）、或对"判 false 的期望项"做错误分析反哺 prompt；
+- 切片策略演进（如一条记忆拆多 chunk）：因 reranker 只消费 hybrid 结果，改动限于索引层；届时需考虑 chunk 去重/聚合（同一记忆多 chunk 命中时合并），不在本次范围。
