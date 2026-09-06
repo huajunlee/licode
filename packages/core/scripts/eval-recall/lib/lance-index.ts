@@ -47,8 +47,8 @@ export class EmbeddingCache {
 }
 
 export interface LanceIndex {
-  fts(query: string, topK: number): Promise<Array<{ slug: string; score: number }>>;
-  hybrid(query: string, topK: number): Promise<Array<{ slug: string; score: number }>>;
+  fts(query: string, topK: number): Promise<Array<{ slug: string; text: string; score: number }>>;
+  hybrid(query: string, topK: number): Promise<Array<{ slug: string; text: string; score: number }>>;
   close(): Promise<void>;
   cleanup(): void;
 }
@@ -61,13 +61,13 @@ type ScoreMode = "fts" | "hybrid";
  * 行 → 候选；score 按查询模式取对应字段，无则排名兜底。
  * hybrid 行同时带 _score（FTS 子分，与最终排序无关）与 _relevance_score（RRF 融合分），必须优先 _relevance_score。
  */
-function toCandidates(rows: Row[], topK: number, mode: ScoreMode): Array<{ slug: string; score: number }> {
+function toCandidates(rows: Row[], topK: number, mode: ScoreMode): Array<{ slug: string; text: string; score: number }> {
   const pref = mode === "hybrid" ? ["_relevance_score", "_score"] : ["_score"];
   return rows.map((r, i) => {
     for (const f of pref) {
-      if (typeof r[f] === "number") return { slug: String(r.slug), score: r[f] as number };
+      if (typeof r[f] === "number") return { slug: String(r.slug), text: String(r.text), score: r[f] as number };
     }
-    return { slug: String(r.slug), score: topK - i };
+    return { slug: String(r.slug), text: String(r.text), score: topK - i };
   });
 }
 

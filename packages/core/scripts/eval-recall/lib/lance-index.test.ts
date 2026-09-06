@@ -107,4 +107,19 @@ describe("buildLanceIndex", () => {
       expect(r[0].score).toBeLessThanOrEqual(1); // RRF 融合分 ∈ (0,1]
     } finally { await idx.close(); idx.cleanup(); }
   });
+
+  it("hybrid/fts 候选携带索引文本 text（= buildMemoryText 输出，reranker 消费）", async () => {
+    const dir = tmpDir();
+    const memories = [MEM("user/a"), MEM("user/b")];
+    const idx = await buildLanceIndex({
+      memories, embedder: new FakeEmbedder(), cachePath: path.join(dir, "cache.json"), uri: path.join(dir, "l"),
+    });
+    try {
+      for (const r of [await idx.hybrid("kw-user/a", 2), await idx.fts("kw-user/a", 2)]) {
+        expect(r.length).toBeGreaterThanOrEqual(1);
+        const a = r.find((c) => c.slug === "user/a")!;
+        expect(a.text).toBe(buildMemoryText(MEM("user/a")));
+      }
+    } finally { await idx.close(); idx.cleanup(); }
+  });
 });
