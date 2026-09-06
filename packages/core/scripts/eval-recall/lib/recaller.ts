@@ -35,7 +35,7 @@ export interface RecallResult {
   triggered?: boolean;            // v1：主模型是否调了工具（RAG 恒 true）
 }
 
-export type RecallerKind = "v1-tool" | "rag-keyword" | "lance-fts" | "rag-retriever";
+export type RecallerKind = "v1-tool" | "rag-keyword" | "lance-fts" | "rag-retriever" | "rag-rerank";
 
 export interface Recaller {
   readonly kind: RecallerKind;
