@@ -2,6 +2,8 @@
 // 用法：
 //   pnpm tsx packages/core/scripts/eval-recall/run.ts --recaller=rag-keyword
 //   pnpm tsx packages/core/scripts/eval-recall/run.ts --recaller=v1-tool
+//   pnpm tsx packages/core/scripts/eval-recall/run.ts --recaller=rag-rerank
+//   （rag-rerank 需要 EMBEDDING_* 与 ANTHROPIC_* 环境变量；EVAL_MODEL 建议设 deepseek-chat）
 //   （EVAL_MODEL 可覆盖默认模型；v1-tool 需要 ANTHROPIC_AUTH_TOKEN 或 ANTHROPIC_API_KEY）
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -11,6 +13,7 @@ import type { Seed, Case, Recaller, RecallerKind } from "./lib/recaller.js";
 import { buildEvalStore, runEvaluation } from "./lib/eval-runner.js";
 import { createRagKeywordRecaller } from "./adapters/rag-keyword.js";
 import { createRagRetriever } from "./adapters/rag-retriever.js";
+import { createRagRerankRecaller } from "./adapters/rag-rerank.js";
 import { createRecallToolRecaller } from "./adapters/recall-tool.js";
 import { envEmbeddingProvider } from "../../src/llm/embedding.js";
 import { buildLanceIndex, type LanceIndex } from "./lib/lance-index.js";
@@ -34,7 +37,7 @@ class ZeroTempProvider implements LLMProvider {
 
 async function main(): Promise<void> {
   const kind = (process.argv.find((a) => a.startsWith("--recaller="))?.slice(11) ?? "rag-keyword") as RecallerKind;
-  if (!["v1-tool", "rag-keyword", "lance-fts", "rag-retriever"].includes(kind)) throw new Error(`未知 --recaller=${kind}`);
+  if (!["v1-tool", "rag-keyword", "lance-fts", "rag-retriever", "rag-rerank"].includes(kind)) throw new Error(`未知 --recaller=${kind}`);
 
   const seeds = JSON.parse(fs.readFileSync(path.join(DATA, "seed-memories.json"), "utf-8")) as Seed[];
   const cases = JSON.parse(fs.readFileSync(path.join(DATA, "cases.json"), "utf-8")) as Case[];
@@ -45,7 +48,7 @@ async function main(): Promise<void> {
     let recaller: Recaller;
     if (kind === "rag-keyword") {
       recaller = createRagKeywordRecaller({ store });
-    } else if (kind === "lance-fts" || kind === "rag-retriever") {
+    } else if (kind === "lance-fts" || kind === "rag-retriever" || kind === "rag-rerank") {
       const embedder = envEmbeddingProvider();
       const uri = fs.mkdtempSync(path.join(os.tmpdir(), "rag-eval-"));
       index = await buildLanceIndex({
@@ -54,9 +57,18 @@ async function main(): Promise<void> {
         cachePath: path.join(DATA, "results", "embedding-cache.json"),
         uri,
       });
-      recaller = kind === "lance-fts"
-        ? createLanceFtsRecaller({ store, index })
-        : createRagRetriever({ store, index });
+      if (kind === "lance-fts") {
+        recaller = createLanceFtsRecaller({ store, index });
+      } else if (kind === "rag-retriever") {
+        recaller = createRagRetriever({ store, index });
+      } else {
+        const apiKey = process.env.ANTHROPIC_AUTH_TOKEN ?? process.env.ANTHROPIC_API_KEY;
+        if (!apiKey) throw new Error("rag-rerank 需要 ANTHROPIC_AUTH_TOKEN 或 ANTHROPIC_API_KEY");
+        recaller = createRagRerankRecaller({
+          llm: new ZeroTempProvider(new AnthropicProvider({ apiKey, baseUrl: process.env.ANTHROPIC_BASE_URL })),
+          model: MODEL, index,
+        });
+      }
     } else {
       const apiKey = process.env.ANTHROPIC_AUTH_TOKEN ?? process.env.ANTHROPIC_API_KEY;
       if (!apiKey) throw new Error("v1-tool 需要 ANTHROPIC_AUTH_TOKEN 或 ANTHROPIC_API_KEY");
