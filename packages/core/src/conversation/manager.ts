@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { Message, TokenUsage, ToolUseBlock, AssistantMessage } from "../llm/provider.js";
+import type { Message, TokenUsage, ToolUseBlock, AssistantMessage, ThinkingBlock } from "../llm/provider.js";
 import type { ToolResult } from "../tools/types.js";
 import { SystemPrompt } from "./system-prompt.js";
 import { TokenCounter } from "../llm/token-counter.js";
@@ -84,13 +84,17 @@ export class ConversationManager {
   /** Phase 2: add tool_use + tool_result message pair to history */
   addToolMessages(
     toolUses: ToolUseBlock[],
-    results: ToolResult[]
+    results: ToolResult[],
+    thinking?: ThinkingBlock[],
+    text?: string
   ): void {
     const now = new Date().toISOString();
 
     this.messages.push({
       role: "assistant",
       content: toolUses,
+      ...(thinking?.length ? { thinking } : {}),
+      ...(text ? { text } : {}),
       timestamp: now,
     });
 
@@ -105,6 +109,25 @@ export class ConversationManager {
     });
 
     this.metadata.updatedAt = now;
+  }
+
+  /**
+   * 取出并移除「本次响应追加的助手文本消息」，返回其文本。
+   *
+   * 流式过程中每个 token 都会调 appendToAssistantMessage，于是 tool_use 响应里
+   * tool_use 之前的那段文本会先落成一条独立消息。但 thinking 模式下 API 不接受
+   * 一次响应拆成两条 assistant 消息（实测整轮 400），所以 tool-use 分支要把这段
+   * 文本回收，改由 addToolMessages 存进同一条消息。
+   *
+   * 末尾若是助手文本消息，必定来自本次响应：上一轮正常结束时末尾是 tool_result。
+   */
+  takeTrailingAssistantText(): string {
+    const last = this.messages[this.messages.length - 1];
+    if (last && last.role === "assistant" && typeof last.content === "string") {
+      this.messages.pop();
+      return last.content;
+    }
+    return "";
   }
 
   /** Phase 2: find the most recent assistant-or-tool-use message */
@@ -131,10 +154,13 @@ export class ConversationManager {
     }
   }
 
-  finalizeAssistantMessage(usage: TokenUsage): void {
+  finalizeAssistantMessage(usage: TokenUsage, thinking?: ThinkingBlock[]): void {
     const last = this.messages[this.messages.length - 1];
     if (last && last.role === "assistant" && typeof last.content === "string") {
-      (last as AssistantMessage).usage = usage;
+      const msg = last as AssistantMessage;
+      msg.usage = usage;
+      // thinking 块必须留在消息上，下一轮要原样回传给 API
+      if (thinking?.length) msg.thinking = thinking;
     }
     this.metadata.updatedAt = new Date().toISOString();
   }

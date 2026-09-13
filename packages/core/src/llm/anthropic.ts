@@ -8,6 +8,7 @@ import type {
   SystemMessage,
   ToolUseBlock,
   ToolResultBlock,
+  ThinkingBlock,
 } from "./provider.js";
 import { TokenCounter } from "./token-counter.js";
 
@@ -59,6 +60,9 @@ export class AnthropicProvider implements LLMProvider {
       name: string;
       inputJson: string;
     } | null = null;
+    // 当前正在累积的 thinking 块。与 pendingToolUse 同一套按块收尾的写法：
+    // content_block_stop 时产出完整块（含 signature），交由上层存进消息历史。
+    let pendingThinking: ThinkingBlock | null = null;
 
     try {
       const stream = this.client.messages.stream({
@@ -89,9 +93,17 @@ export class AnthropicProvider implements LLMProvider {
               inputJson: "",
             };
           }
+          if (contentBlock?.type === "thinking" || contentBlock?.type === "redacted_thinking") {
+            pendingThinking = { thinking: "", signature: "" };
+          }
         } else if (e.type === "content_block_delta") {
           const delta = e.delta as
-            | { type: string; partial_json?: string }
+            | {
+                type: string;
+                partial_json?: string;
+                thinking?: string;
+                signature?: string;
+              }
             | undefined;
           if (
             delta?.type === "input_json_delta" &&
@@ -100,7 +112,20 @@ export class AnthropicProvider implements LLMProvider {
           ) {
             pendingToolUse.inputJson += delta.partial_json;
           }
+          // thinking 块的正文与 signature 分两个 delta 到达，都要攒下来，
+          // 否则下一轮无法把完整的 thinking 块回传给 API。
+          if (pendingThinking) {
+            if (delta?.type === "thinking_delta" && delta.thinking) {
+              pendingThinking.thinking += delta.thinking;
+            } else if (delta?.type === "signature_delta" && delta.signature) {
+              pendingThinking.signature += delta.signature;
+            }
+          }
         } else if (e.type === "content_block_stop") {
+          if (pendingThinking) {
+            yield { type: "thinking-block", block: pendingThinking };
+            pendingThinking = null;
+          }
           if (pendingToolUse) {
             let input: Record<string, unknown> = {};
             try {
@@ -225,16 +250,37 @@ export class AnthropicProvider implements LLMProvider {
           };
         }
         // role === "assistant"
+        // thinking 块必须排在内容最前面，且原样回传（含 signature）——
+        // 这是 API 在 thinking 模式下的硬性要求，漏了整轮请求会被 400 拒掉。
+        const thinking = (m as { thinking?: ThinkingBlock[] }).thinking ?? [];
+        const thinkingBlocks = thinking.map((t) => ({
+          type: "thinking" as const,
+          thinking: t.thinking,
+          signature: t.signature,
+        }));
+
         if (Array.isArray(m.content)) {
-          // ToolUseMessage: content is ToolUseBlock[]
+          // ToolUseMessage: content is ToolUseBlock[]，同轮的文本在 m.text 上
+          const text = (m as { text?: string }).text;
           return {
             role: "assistant" as const,
-            content: m.content.map((block: ToolUseBlock) => ({
-              type: "tool_use" as const,
-              id: block.id,
-              name: block.name,
-              input: block.input,
-            })),
+            content: [
+              ...thinkingBlocks,
+              ...(text ? [{ type: "text" as const, text }] : []),
+              ...m.content.map((block: ToolUseBlock) => ({
+                type: "tool_use" as const,
+                id: block.id,
+                name: block.name,
+                input: block.input,
+              })),
+            ],
+          };
+        }
+        // 纯文本助手消息：有 thinking 时内容必须变成块数组（文本也要包装成块）
+        if (thinkingBlocks.length > 0) {
+          return {
+            role: "assistant" as const,
+            content: [...thinkingBlocks, { type: "text" as const, text: m.content }],
           };
         }
         return {

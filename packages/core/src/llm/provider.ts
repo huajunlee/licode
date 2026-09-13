@@ -14,9 +14,31 @@ export interface ToolResultBlock {
 
 // --- Phase 2: tool messages (Anthropic Messages API conformant) ---
 
+/**
+ * Extended-thinking 内容块。
+ *
+ * Anthropic 的 thinking 模式要求：开了 thinking 的请求，助手消息里的 thinking 块
+ * **必须原样回传**（含 signature）到下一轮，否则整个请求被拒：
+ * `400 The content[].thinking in the thinking mode must be passed back to the API.`
+ * 所以这里不能只把它当成展示用的中间产物。
+ */
+export interface ThinkingBlock {
+  thinking: string;
+  signature: string;
+}
+
 export interface ToolUseMessage {
   role: "assistant";
   content: ToolUseBlock[];
+  thinking?: ThinkingBlock[];
+  /**
+   * 同一次响应里 tool_use 之前的那段文本。
+   *
+   * 必须和 tool_use 存在**同一条**消息里：thinking 模式下把一次响应拆成
+   * 「文本一条 + tool_use 一条」会被 API 整轮拒掉（实测 400
+   * `The content[].thinking in the thinking mode must be passed back to the API.`）。
+   */
+  text?: string;
   timestamp: string;
 }
 
@@ -57,6 +79,8 @@ export interface UserMessage {
 export interface AssistantMessage {
   role: "assistant";
   content: string;
+  /** 见 ThinkingBlock：开了 thinking 时必须随消息回传。 */
+  thinking?: ThinkingBlock[];
   usage?: TokenUsage;
   timestamp: string;
 }
@@ -72,7 +96,10 @@ export interface TokenUsage {
 
 export type StreamChunk =
   | { type: "token"; text: string; index: number }
+  /** 流式增量，只用于实时展示；存回历史请用 thinking-block。 */
   | { type: "thinking"; text: string }
+  /** 一个完整的 thinking 块（文本 + signature），用于回传给下一轮请求。 */
+  | { type: "thinking-block"; block: ThinkingBlock }
   | { type: "tool-use"; toolUse: ToolUseBlock }
   | { type: "stop"; stopReason: string; usage: TokenUsage }
   | { type: "error"; error: Error };

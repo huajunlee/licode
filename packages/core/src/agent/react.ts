@@ -4,13 +4,14 @@ import type {
   ToolUseBlock,
   TokenUsage,
   Message,
+  ThinkingBlock,
 } from "../llm/provider.js";
 import type { ConversationManager } from "../conversation/manager.js";
 import type { PipelineEvent } from "../events/types.js";
 
 export type CollectResult =
-  | { type: "text"; content: string; usage: TokenUsage }
-  | { type: "tool-use"; toolUses: ToolUseBlock[]; usage: TokenUsage };
+  | { type: "text"; content: string; thinking: ThinkingBlock[]; usage: TokenUsage }
+  | { type: "tool-use"; toolUses: ToolUseBlock[]; thinking: ThinkingBlock[]; usage: TokenUsage };
 
 export interface EventBus {
   emit(event: PipelineEvent): void;
@@ -25,6 +26,9 @@ export async function collectResponse(
 ): Promise<CollectResult> {
   const textChunks: string[] = [];
   const toolUses: ToolUseBlock[] = [];
+  // 完整 thinking 块（含 signature）要随消息存回历史，下一轮必须原样回传给 API。
+  // 上面 case "thinking" 收到的只是增量，只用于实时展示，不能替代这里。
+  const thinkingBlocks: ThinkingBlock[] = [];
   let usage: TokenUsage = { input: 0, output: 0 };
   let tokenIndex = 0;
   let inThinking = false;
@@ -56,6 +60,11 @@ export async function collectResponse(
         tokenIndex++;
         break;
       }
+      case "thinking-block": {
+        // 不在这里发展示事件：增量已经发过了，重复发会让 CLI 里出现两遍
+        thinkingBlocks.push(chunk.block);
+        break;
+      }
       case "tool-use": {
         if (inThinking) {
           eventBus?.emit({ type: "llm-thinking-complete" });
@@ -84,8 +93,8 @@ export async function collectResponse(
   }
 
   if (toolUses.length > 0) {
-    return { type: "tool-use", toolUses, usage };
+    return { type: "tool-use", toolUses, thinking: thinkingBlocks, usage };
   }
 
-  return { type: "text", content: textChunks.join(""), usage };
+  return { type: "text", content: textChunks.join(""), thinking: thinkingBlocks, usage };
 }

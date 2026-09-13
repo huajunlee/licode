@@ -190,7 +190,7 @@ export class AgentLoop {
           if (!response.content) {
             this.conversation.appendToAssistantMessage("");
           }
-          this.conversation.finalizeAssistantMessage(response.usage);
+          this.conversation.finalizeAssistantMessage(response.usage, response.thinking);
           this.eventBus?.emit({
             type: "agent-loop-complete",
             message: response.content,
@@ -229,7 +229,15 @@ export class AgentLoop {
           });
         }
 
-        this.conversation.addToolMessages(response.toolUses, results);
+        // 同一次响应的文本与 tool_use 必须落在同一条 assistant 消息里，
+        // 否则 thinking 模式端点会整轮 400（见 provider.ts 的 ToolUseMessage.text）
+        const inlineText = this.conversation.takeTrailingAssistantText();
+        this.conversation.addToolMessages(
+          response.toolUses,
+          results,
+          response.thinking,
+          inlineText
+        );
         this.termination.incrementStep();
         stepIndex++;
         continue;
