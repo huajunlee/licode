@@ -70,9 +70,8 @@ export { loadMCPConfig } from "./extensions/mcp/config.js";
 // Phase 3: Skill
 export { SkillLoader } from "./extensions/skills/loader.js";
 export type { Skill } from "./extensions/skills/loader.js";
-export type { SkillToolDef } from "./extensions/skills/parser.js";
-export { skillToolToAdapter, skillToPromptLayer, skillsToPromptLayer } from "./extensions/skills/adapter.js";
-export { parseYamlFrontmatter, skillParamsToZod } from "./extensions/skills/parser.js";
+export { skillsToPromptLayer } from "./extensions/skills/adapter.js";
+export { parseYamlFrontmatter } from "./extensions/skills/parser.js";
 
 // Phase 3: Command
 export { CommandRouter } from "./extensions/commands/router.js";
