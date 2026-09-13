@@ -102,6 +102,29 @@ describe("JournalStore", () => {
     expect(list.map((e) => e.meta.id)).toEqual(["a2"]);
   });
 
+  it("search 多词：命中任一词即返回（模型传的是关键词串，不是整句）", async () => {
+    const store = new JournalStore(dir);
+    await store.save(entry("a1", "2026-07-31", "投递简历到字节跳动"));
+    await store.save(entry("a2", "2026-07-31", "晚上独自跑步"));
+    // 整串匹配的话这里必然 0 条——"面试"在原文里根本没有
+    const hits = await store.search("字节跳动 投递简历 面试 大厂");
+    expect(hits.map((e) => e.meta.id)).toEqual(["a1"]);
+  });
+
+  it("search 多词：命中词多的排前面，同分再按日期", async () => {
+    const store = new JournalStore(dir);
+    await store.save(entry("a1", "2026-07-30", "投递了简历")); // 只中「简历」
+    await store.save(entry("a2", "2026-07-31", "投递简历到字节跳动")); // 中「简历」+「字节跳动」
+    const hits = await store.search("字节跳动 简历");
+    expect(hits.map((e) => e.meta.id)).toEqual(["a2", "a1"]);
+  });
+
+  it("search 空白查询返回空，不返回全部", async () => {
+    const store = new JournalStore(dir);
+    await store.save(entry("a1", "2026-07-31", "跑步"));
+    expect(await store.search("   ")).toEqual([]);
+  });
+
   it("search with a date range excludes matches outside the range", async () => {
     const store = new JournalStore(dir);
     await store.save(entry("a1", "2026-07-31", "和老板开会", "老板"));

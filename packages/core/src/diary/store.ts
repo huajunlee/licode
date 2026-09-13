@@ -39,6 +39,30 @@ function byDate(a: DiaryEntry, b: DiaryEntry): number {
   );
 }
 
+/** 参与检索的文本：原文 + 摘要 + 人名 + 事实，全部转小写。 */
+function haystack(e: DiaryEntry): string {
+  return [
+    e.raw.content,
+    e.summary,
+    ...e.people.map((p) => p.name),
+    ...e.facts.map((f) => f.what),
+  ]
+    .join("\n")
+    .toLowerCase();
+}
+
+/**
+ * 按空白切词。调用方（journal_recall 的 query、/diary-find）传的是模型或用户写的
+ * 关键词串，如「字节跳动 投递简历 面试」——之前整串当一个子串匹配，只要其中一个词
+ * 不在原文里就整条查不到，等于多词查询全部失效，所以必须切词。
+ */
+function tokenize(query: string): string[] {
+  return query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((t) => t.length > 0);
+}
+
 export class JournalStore implements DiaryStore {
   constructor(private dir: string) {}
 
@@ -125,20 +149,27 @@ export class JournalStore implements DiaryStore {
     return (await this.readRange(start, end)).sort(byDate);
   }
 
+  /**
+   * 关键词检索：命中**任一词**即返回（OR），命中词多的排前面，同分再按日期。
+   * 用 OR 而非 AND 是刻意的——这是召回工具，宁可多给几条让模型自己筛，
+   * 也不要因为用户顺口多写一个词就返回空（"面试"没写进日记就整条查不到，
+   * 正是之前的病）。打分让「三个词全中」的条目浮到最上面，弥补放宽带来的噪声。
+   */
   async search(
     query: string,
     range?: { start: string; end: string }
   ): Promise<DiaryEntry[]> {
-    const q = query.toLowerCase();
-    const hits = (await this.readRange(range?.start, range?.end)).filter((e) => {
-      const hay = [
-        e.raw.content,
-        e.summary,
-        ...e.people.map((p) => p.name),
-        ...e.facts.map((f) => f.what),
-      ].join("\n").toLowerCase();
-      return hay.includes(q);
+    const tokens = tokenize(query);
+    if (tokens.length === 0) return [];
+
+    const scored = (await this.readRange(range?.start, range?.end)).map((e) => {
+      const hay = haystack(e);
+      return { entry: e, score: tokens.filter((t) => hay.includes(t)).length };
     });
-    return hits.sort(byDate);
+
+    return scored
+      .filter((s) => s.score > 0)
+      .sort((a, b) => b.score - a.score || byDate(a.entry, b.entry))
+      .map((s) => s.entry);
   }
 }
