@@ -35,6 +35,26 @@ describe("PersonProfile serialize", () => {
     expect(parsed!.relationshipState[0].state).toBe("直属领导");
   });
 
+  it("多段概述不会把 frontmatter 撑破（summary 行必须单行）", () => {
+    const p = emptyProfile("爸妈", "2026-08-01");
+    // 前 100 字里带换行——不处理的话 frontmatter 会在换行处断掉，
+    // 后面的段落变成伪 key，外部工具读这段 YAML 就崩
+    p.summary = "第一段概述。\n\n第二段概述。\n\n第三段。";
+    const raw = serializeProfile(p);
+
+    // frontmatter 是首个 --- 到第二个 --- 之间，里面不能有裸换行开头的续行
+    const fm = raw.split("---\n")[1];
+    const summaryLine = fm.split("\n").find((l) => l.startsWith("summary: "));
+    expect(summaryLine).toBeDefined();
+    expect(summaryLine).toBe("summary: 第一段概述。 第二段概述。 第三段。");
+
+    // 正文里的概述仍保留分段
+    expect(raw).toContain("## 概述\n第一段概述。\n\n第二段概述。\n\n第三段。");
+
+    // 往返仍能取回完整概述
+    expect(parseProfile(raw)!.summary).toBe("第一段概述。\n\n第二段概述。\n\n第三段。");
+  });
+
   it("parseProfile returns null on non-frontmatter input", () => {
     expect(parseProfile("just text")).toBeNull();
   });

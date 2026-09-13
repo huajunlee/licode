@@ -30,7 +30,10 @@ export function serializeProfile(p: PersonProfile): string {
     `firstSeen: ${p.meta.firstSeen}`,
     `lastSeen: ${p.meta.lastSeen}`,
     `mentionCount: ${p.meta.mentionCount}`,
-    `summary: ${p.summary.slice(0, SUMMARY_MAX)}`,
+    // frontmatter 是逐行解析的，所以这里必须先压平成单行：
+    // 概述是多段文本，直接 slice 会把换行留在 summary 行后面，
+    // 后续段落被当成新的 key，整段 YAML 就废了（正文的 ## 概述 不受影响）。
+    `summary: ${p.summary.replace(/\s+/g, " ").trim().slice(0, SUMMARY_MAX)}`,
     "---",
     "",
   ].join("\n");
