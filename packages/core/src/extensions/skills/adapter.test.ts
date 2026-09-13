@@ -3,7 +3,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { skillToolToAdapter, skillToPromptLayer } from "./adapter.js";
-import type { Skill, SkillToolDef } from "./loader.js";
+import type { Skill } from "./loader.js";
+import type { SkillToolDef } from "./parser.js";
 
 describe("skillToolToAdapter", () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "licode-adapter-test-"));
@@ -94,9 +95,7 @@ describe("skillToPromptLayer", () => {
   it("creates a SystemPromptLayer from a Skill", () => {
     const skill: Skill = {
       name: "web-access",
-      version: "1.0.0",
       description: "# Web Access\n\nUse this skill to search the web.",
-      tools: [],
       dir: "/tmp/web-access",
     };
 

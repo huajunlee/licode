@@ -36,7 +36,7 @@ describe("initializeExtensions", () => {
     }
   });
 
-  it("loads MCP tools, skill tools, prompt layers, commands, and hooks from project config", async () => {
+  it("loads MCP tools, skill prompt layer, commands, and hooks from project config", async () => {
     workspace = mkdtempSync(path.join(tmpdir(), "licode-ext-"));
     const licodeDir = path.join(workspace, ".licode");
     const skillDir = path.join(licodeDir, "skills", "hello");
@@ -55,24 +55,15 @@ describe("initializeExtensions", () => {
       })
     );
     writeFileSync(
-      path.join(skillDir, "skill.md"),
+      path.join(skillDir, "SKILL.md"),
       [
         "---",
         "name: hello",
-        "version: 1.0.0",
-        "tools:",
-        "  - name: greet",
-        "    description: Greet someone",
-        "    script: greet.js",
-        "    parameters:",
-        "      name:",
-        "        type: string",
-        "        description: Name to greet",
+        "description: 打招呼时使用",
         "---",
-        "Use this skill to greet people.",
+        "这是技能正文。",
       ].join("\n")
     );
-    writeFileSync(path.join(skillDir, "greet.js"), "#!/usr/bin/env node\n");
     writeFileSync(
       path.join(licodeDir, "hooks.json"),
       JSON.stringify({
@@ -106,7 +97,7 @@ describe("initializeExtensions", () => {
     });
 
     expect(tools.list()).toEqual(
-      expect.arrayContaining(["builtin", "mcp__mock__echo", "skill__greet"])
+      expect.arrayContaining(["builtin", "mcp__mock__echo"])
     );
     expect(systemPrompt.getLayers().map((layer) => layer.name)).toContain(
       "skill:hello"

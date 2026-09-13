@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
 import * as path from "node:path";
 import type { Tool, ToolResult } from "../../tools/types.js";
-import type { Skill, SkillToolDef } from "./loader.js";
+import type { Skill } from "./loader.js";
+import type { SkillToolDef } from "./parser.js";
 import { skillParamsToZod } from "./parser.js";
 import type { SystemPromptLayer } from "../../conversation/system-prompt.js";
 

@@ -16,7 +16,7 @@ import { subagentCommand, SubAgentSettings } from "../multi-agent/commands.js";
 import { createAgentTool } from "../multi-agent/agent-tool.js";
 import { SubAgentManager } from "../multi-agent/subagent.js";
 import type { AgentRunner } from "../multi-agent/types.js";
-import { skillToPromptLayer, skillToolToAdapter } from "./skills/adapter.js";
+import { skillToPromptLayer } from "./skills/adapter.js";
 import { SkillLoader } from "./skills/loader.js";
 import type { Skill } from "./skills/loader.js";
 
@@ -83,9 +83,6 @@ export async function initializeExtensions(
   );
   for (const skill of skills) {
     options.systemPrompt.addLayer(skillToPromptLayer(skill));
-    options.toolRegistry.registerAll(
-      skill.tools.map((tool) => skillToolToAdapter(tool, skill.dir))
-    );
   }
 
   const hooks = new HookManager();

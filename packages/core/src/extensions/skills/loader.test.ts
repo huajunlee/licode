@@ -11,110 +11,77 @@ describe("SkillLoader", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  function createSkillDir(baseDir: string, name: string, skillMdContent: string): string {
+  function createSkillDir(baseDir: string, name: string, content: string): string {
     const dir = path.join(baseDir, name);
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, "skill.md"), skillMdContent);
+    fs.writeFileSync(path.join(dir, "SKILL.md"), content);
     return dir;
   }
 
-  it("loads a skill from a directory with skill.md", async () => {
-    createSkillDir(tmpDir, "web-access", `---
-name: web-access
-version: 1.0.0
-tools:
-  - name: web_search
-    description: Search the web
-    parameters:
-      query:
-        type: string
----
-# Web Access
+  it("从 SKILL.md 读取 name 与 description，正文不进 Skill 对象", async () => {
+    const dir = createSkillDir(
+      tmpDir,
+      "web-access",
+      [
+        "---",
+        "name: web-access",
+        "description: 搜索网页时使用",
+        "---",
+        "# Web Access",
+        "",
+        "这段正文不应出现在 Skill 对象里。",
+      ].join("\n")
+    );
 
-Use this skill for web searches.`);
-
-    const loader = new SkillLoader();
-    const skills = await loader.loadFromDir(tmpDir);
+    const skills = await new SkillLoader().loadFromDir(tmpDir);
 
     expect(skills).toHaveLength(1);
-    expect(skills[0].name).toBe("web-access");
-    expect(skills[0].version).toBe("1.0.0");
-    expect(skills[0].description).toContain("# Web Access");
-    expect(skills[0].tools).toHaveLength(1);
-    expect(skills[0].tools[0].name).toBe("web_search");
+    expect(skills[0]).toEqual({
+      name: "web-access",
+      description: "搜索网页时使用",
+      dir,
+    });
   });
 
-  it("returns empty array when directory has no skill subdirectories", async () => {
-    // Empty tmpDir with no subdirectories
-    const loader = new SkillLoader();
-    const skills = await loader.loadFromDir(tmpDir);
-    expect(skills).toEqual([]);
+  it("缺 description 的技能被跳过", async () => {
+    createSkillDir(tmpDir, "no-desc", "---\nname: no-desc\n---\nbody");
+    expect(await new SkillLoader().loadFromDir(tmpDir)).toEqual([]);
   });
 
-  it("skips directories without skill.md", async () => {
-    const dir = path.join(tmpDir, "no-skill-md");
+  it("缺 name 的技能被跳过", async () => {
+    createSkillDir(tmpDir, "no-name", "---\ndescription: 只有描述\n---\nbody");
+    expect(await new SkillLoader().loadFromDir(tmpDir)).toEqual([]);
+  });
+
+  it("不认小写的 skill.md（旧格式）", async () => {
+    const dir = path.join(tmpDir, "legacy");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "skill.md"),
+      "---\nname: legacy\ndescription: 旧格式\n---\nbody"
+    );
+    expect(await new SkillLoader().loadFromDir(tmpDir)).toEqual([]);
+  });
+
+  it("目录里没有 SKILL.md 时跳过", async () => {
+    const dir = path.join(tmpDir, "empty");
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, "readme.txt"), "not a skill");
-
-    const loader = new SkillLoader();
-    const skills = await loader.loadFromDir(tmpDir);
-    expect(skills).toHaveLength(0);
+    expect(await new SkillLoader().loadFromDir(tmpDir)).toEqual([]);
   });
 
-  it("loadAll scans both user-level and project-level dirs", async () => {
+  it("loadAll 同扫用户与项目目录，同名以项目为准", async () => {
     const userDir = path.join(tmpDir, "user-skills");
     const projectDir = path.join(tmpDir, "project-skills");
-    fs.mkdirSync(userDir, { recursive: true });
-    fs.mkdirSync(projectDir, { recursive: true });
+    createSkillDir(userDir, "my-skill", "---\nname: my-skill\ndescription: 用户版\n---\nb");
+    createSkillDir(projectDir, "my-skill", "---\nname: my-skill\ndescription: 项目版\n---\nb");
+    createSkillDir(projectDir, "only-project", "---\nname: only-project\ndescription: 仅项目\n---\nb");
 
-    createSkillDir(userDir, "user-skill", `---
-name: user-skill
-version: 1.0.0
-tools: []
----
-User skill body.`);
-
-    createSkillDir(projectDir, "project-skill", `---
-name: project-skill
-version: 1.0.0
-tools: []
----
-Project skill body.`);
-
-    const loader = new SkillLoader();
-    const skills = await loader.loadAll(userDir, projectDir);
+    const skills = await new SkillLoader().loadAll(userDir, projectDir);
+    const byName = new Map(skills.map((s) => [s.name, s]));
 
     expect(skills).toHaveLength(2);
-    const names = skills.map((s) => s.name);
-    expect(names).toContain("user-skill");
-    expect(names).toContain("project-skill");
-  });
-
-  it("project-level skill overrides user-level skill with same name", async () => {
-    const userDir = path.join(tmpDir, "user-skills");
-    const projectDir = path.join(tmpDir, "project-skills");
-    fs.mkdirSync(userDir, { recursive: true });
-    fs.mkdirSync(projectDir, { recursive: true });
-
-    createSkillDir(userDir, "my-skill", `---
-name: my-skill
-version: 1.0.0
-tools: []
----
-User version.`);
-
-    createSkillDir(projectDir, "my-skill", `---
-name: my-skill
-version: 2.0.0
-tools: []
----
-Project version.`);
-
-    const loader = new SkillLoader();
-    const skills = await loader.loadAll(userDir, projectDir);
-
-    expect(skills).toHaveLength(1);
-    expect(skills[0].version).toBe("2.0.0");
-    expect(skills[0].description).toContain("Project version");
+    expect(byName.get("my-skill")?.description).toBe("项目版");
+    expect(byName.get("only-project")?.description).toBe("仅项目");
   });
 });
