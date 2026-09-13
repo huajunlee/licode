@@ -58,7 +58,7 @@ export const journalRecallTool: Tool<typeof JournalRecallParams> = {
   name: "journal_recall",
   description:
     "查询用户的日记/日志记录（过去发生过的事）。仅当用户明确询问过去事件时调用（如“今天/某天干了什么”“最近发生了什么”“和某人发生过什么”），" +
-    "不要在用户没问过去事件时主动调用以“了解上下文”。写日记用 /diary，查人物画像用 profile_recall。" +
+    "不要在用户没问过去事件时主动调用以“了解上下文”。写日记用 /diary；人物档案在 `.licode/people/` 下，用 Read 直接读。" +
     "可按日期范围（start_date/end_date）或关键词/人名（query）查询，两者可叠加（范围内搜索）；不带参数返回最近几条。" +
     "查单日：start_date 与 end_date 填相同日期；只填其中一个也按那一天查询。",
   parameters: JournalRecallParams,
