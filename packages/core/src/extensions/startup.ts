@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { SystemPrompt } from "../conversation/system-prompt.js";
 import type { EventPipeline } from "../events/pipeline.js";
 import type { ToolRegistry } from "../tools/registry.js";
@@ -55,6 +56,15 @@ function resolveProjectPath(workingDirectory: string, ...parts: string[]): strin
   return path.join(workingDirectory, ".licode", ...parts);
 }
 
+/**
+ * 随 @licode/core 一起发布的内置技能目录。构建脚本把它从
+ * src/extensions/skills/builtin 拷到 dist/extensions/skills/builtin，
+ * 故这里按本模块（编译后在 dist/extensions/）所在目录解析。
+ */
+function builtinSkillsDir(): string {
+  return path.join(path.dirname(fileURLToPath(import.meta.url)), "skills", "builtin");
+}
+
 function loadHookConfig(configPath: string): Record<string, HookConfig> {
   if (!fs.existsSync(configPath)) return {};
   const raw = fs.readFileSync(configPath, "utf-8");
@@ -77,12 +87,13 @@ export async function initializeExtensions(
   options.toolRegistry.registerAll(mcp.getTools());
 
   const skillLoader = new SkillLoader();
-  const skillsRoot = resolveProjectPath(options.workingDirectory, "skills");
+  // 顺序即优先级：内置 < 用户 < 项目（后加载的同名技能覆盖先加载的）
   const skills = await skillLoader.loadAll(
+    builtinSkillsDir(),
     options.userSkillsDirectory,
-    skillsRoot
+    resolveProjectPath(options.workingDirectory, "skills")
   );
-  const skillLayer = skillsToPromptLayer(skills, skillsRoot);
+  const skillLayer = skillsToPromptLayer(skills);
   if (skillLayer) options.systemPrompt.addLayer(skillLayer);
 
   const hooks = new HookManager();

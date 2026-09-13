@@ -9,19 +9,18 @@ export interface Skill {
 }
 
 export class SkillLoader {
-  async loadAll(userDir?: string, projectDir?: string): Promise<Skill[]> {
-    const userSkills = userDir ? await this.loadFromDir(userDir) : [];
-    const projectSkills = projectDir ? await this.loadFromDir(projectDir) : [];
-
-    // Project-level skills override user-level skills with the same name
+  /**
+   * 按顺序加载多个目录，**后加载的同名技能覆盖先加载的**。
+   * 调用方据此表达优先级：内置 < 用户 < 项目。
+   */
+  async loadAll(...dirs: (string | undefined)[]): Promise<Skill[]> {
     const byName = new Map<string, Skill>();
-    for (const skill of userSkills) {
-      byName.set(skill.name, skill);
+    for (const dir of dirs) {
+      if (!dir) continue;
+      for (const skill of await this.loadFromDir(dir)) {
+        byName.set(skill.name, skill);
+      }
     }
-    for (const skill of projectSkills) {
-      byName.set(skill.name, skill);
-    }
-
     return [...byName.values()];
   }
 

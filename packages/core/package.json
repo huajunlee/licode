@@ -11,7 +11,7 @@
     }
   },
   "scripts": {
-    "build": "tsc && cp -r src/conversation/templates dist/conversation/",
+    "build": "tsc && cp -r src/conversation/templates dist/conversation/ && rm -rf dist/extensions/skills/builtin && cp -r src/extensions/skills/builtin dist/extensions/skills/",
     "dev": "tsc --watch"
   },
   "dependencies": {
