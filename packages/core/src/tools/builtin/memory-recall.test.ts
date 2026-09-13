@@ -71,7 +71,7 @@ describe("memory_recall tool", () => {
     expect(res.content).toContain("未找到相关记忆");
   });
 
-  it("degrades to 未找到相关记忆 when runRecall throws (never throws)", async () => {
+  it("runRecall 抛错时回报「召回失败」，不伪装成「没有记忆」(never throws)", async () => {
     const { deps: d } = deps({
       runRecall: async () => { throw new Error("boom"); },
     });
@@ -79,7 +79,10 @@ describe("memory_recall tool", () => {
     const res = await tool.execute({ query: "q", keywords: [] }, { workingDirectory: "/tmp", sessionId: "s" });
     expect(res.status).toBe("success");
     if (res.status !== "success") return;
-    expect(res.content).toContain("未找到相关记忆");
+    expect(res.content).toContain("记忆召回失败");
+    expect(res.content).toContain("boom");
+    // 关键：不能与「确实没有记忆」混为一谈
+    expect(res.content).not.toContain("未找到相关记忆");
   });
 
   it("skips recordUsage while dream is running", async () => {

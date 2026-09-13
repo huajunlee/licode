@@ -50,8 +50,19 @@ export function createMemoryRecallTool(deps: MemoryRecallToolDeps): Tool<typeof 
       let slugs: string[];
       try {
         slugs = (await deps.runRecall(input.query, input.keywords)).slice(0, maxResults);
-      } catch {
-        return { status: "success", content: "未找到相关记忆。" };
+      } catch (err) {
+        // 刻意仍返回 success（本工具永不抛错，避免打断主循环），但措辞必须区别于
+        // 「未找到相关记忆」：以前两者都回同一句，调用方（包括读日志的人）分不出
+        // 「用户确实没有相关记忆」和「召回子 agent 挂了」，后者会让人误以为
+        // 没有证据可用而直接作答。
+        const reason = err instanceof Error ? err.message : String(err);
+        return {
+          status: "success",
+          content:
+            `记忆召回失败：${reason}\n` +
+            "这不代表没有相关记忆，只是这次查询没成功。" +
+            "可以换个说法重试，或直接用 Read 读 `.licode/memory/<type>/<slug>.md`。",
+        };
       }
 
       const fresh = slugs.filter((s) => !registry.has(s));
