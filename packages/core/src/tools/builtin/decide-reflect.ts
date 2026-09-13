@@ -7,7 +7,7 @@ import type { Message } from "../../llm/provider.js";
 const REFLECT_MODEL = "deepseek-chat";
 
 const DecideReflectParams = z.object({
-  plan: z.string().describe("待评估的计划文本（decide_plan 的渲染输出，含 question/dimensions/options/steps/people）"),
+  plan: z.string().describe("待评估的计划文本（含决策问题、维度、选项、执行步骤、相关人物）"),
 });
 
 export type ReflectVerdict = {
@@ -115,8 +115,8 @@ async function reflectChat(prompt: string): Promise<string> {
 export const decideReflectTool: Tool<typeof DecideReflectParams> = {
   name: "decide_reflect",
   description:
-    "仅在 decide_plan 产出计划后调用，评估计划是否完备。返回 {passed, gaps, suggestions}。" +
-    "passed=true 表示计划已覆盖关键点、可执行；passed=false 列出 gaps 与建议，主模型应据此修订计划（decide_plan focus=gaps+suggestions）重评，最多 2 轮，第 2 轮仍不过则接受当前计划执行。" +
+    "复杂决策写完计划后调用，评估计划是否完备。返回 {passed, gaps, suggestions}。" +
+    "passed=true 表示计划已覆盖关键点、可执行；passed=false 列出 gaps 与建议，主模型应据此修订计划后重评，最多 2 轮，第 2 轮仍不过则接受当前计划执行。" +
     "不要在其他场景调用。",
   parameters: DecideReflectParams,
   async execute(input) {

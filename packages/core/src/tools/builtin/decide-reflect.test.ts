@@ -96,7 +96,9 @@ describe("decideReflectTool execute", () => {
     if (res.status === "error") expect(res.errorType).toBe("execution");
     expect(elapsed).toBeLessThan(2000);
   });
-  it("description 限定仅 decide_plan 后调用", () => {
-    expect(decideReflectTool.description).toContain("decide_plan");
+  it("description 限定仅写完计划后调用", () => {
+    expect(decideReflectTool.description).toContain("计划");
+    expect(decideReflectTool.description).toContain("最多 2 轮");
+    expect(decideReflectTool.description).toContain("不要在其他场景调用");
   });
 });

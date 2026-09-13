@@ -51,7 +51,7 @@ const DecideSaveParams = z.object({
 export const decideSaveTool: Tool<typeof DecideSaveParams> = {
   name: "decide_save",
   description:
-    "仅在用户明确确认要保存决策后调用。流程：先由 decide 给出分析 -> 你询问\"要不要记下来\" -> 用户同意 -> 才调本工具写入日记。" +
+    "仅在用户明确确认要保存决策后调用。流程：先按 decide 技能给出分析 -> 你询问\"要不要记下来\" -> 用户同意 -> 才调本工具写入日记。" +
     "绝不主动保存，用户没明确同意不要调用。",
   parameters: DecideSaveParams,
   async execute(input, context) {

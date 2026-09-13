@@ -1,5 +1,6 @@
 import React from "react";
 import { render } from "ink";
+import * as fs from "node:fs";
 import {
   initSpec,
   listSpecs,
@@ -22,6 +23,7 @@ import {
   createRecallAgent,
   buildRecentContext,
   memoryPresenceLayer,
+  peoplePresenceLayer,
   LoadedMemoryRegistry,
   SystemPrompt,
   ToolRegistry,
@@ -210,6 +212,15 @@ export async function initializeConversationRuntime(
       })
     );
   }
+
+  // 人物档案提示层：告知模型 `.licode/people/` 在哪、文件长什么样。
+  // 原先这份"广告"由 profile_recall 工具的描述承担，该工具已迁入 decide skill。
+  const peopleDir = `${options.cwd}/.licode/people`;
+  const peopleCount = fs.existsSync(peopleDir)
+    ? (await fs.promises.readdir(peopleDir)).filter((f) => f.endsWith(".md")).length
+    : 0;
+  const peopleLayer = peoplePresenceLayer(peopleCount);
+  if (peopleLayer) systemPrompt.addLayer(peopleLayer);
 
   return { provider, manager, tools, commands, extensions };
 }

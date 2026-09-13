@@ -43,8 +43,6 @@ export {
   globTool,
   grepTool,
   journalRecallTool,
-  profileRecallTool,
-  decideTool,
   decideSaveTool,
 } from "./tools/builtin/index.js";
 
@@ -187,6 +185,7 @@ export type { PersonProfile, PersonProfileMeta, Interaction, RelationshipState }
 export { emptyProfile } from "./people/types.js";
 export { serializeProfile, parseProfile } from "./people/serialize.js";
 export { PersonProfileStore } from "./people/store.js";
+export { peoplePresenceLayer } from "./people/presence-layer.js";
 export type { ProfileAction } from "./people/store.js";
 export { autoFileEntry } from "./people/profile-file.js";
 export type { AutoFileDeps, AutoFileResult } from "./people/profile-file.js";
