@@ -96,11 +96,16 @@ describe("initializeExtensions", () => {
       commandRouter: commands,
     });
 
+    const skillLayer = systemPrompt
+      .getLayers()
+      .find((layer) => layer.name === "skills");
+    expect(skillLayer).toBeDefined();
+    expect(skillLayer!.always).toBe(true);
+    expect(skillLayer!.content).toContain("- hello：打招呼时使用");
+    expect(skillLayer!.content).not.toContain("这是技能正文");
+
     expect(tools.list()).toEqual(
       expect.arrayContaining(["builtin", "mcp__mock__echo"])
-    );
-    expect(systemPrompt.getLayers().map((layer) => layer.name)).toContain(
-      "skill:hello"
     );
     expect(commands.list().map((cmd) => cmd.name)).toEqual(
       expect.arrayContaining(["help", "clear", "context", "memory"])

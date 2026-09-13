@@ -16,7 +16,7 @@ import { subagentCommand, SubAgentSettings } from "../multi-agent/commands.js";
 import { createAgentTool } from "../multi-agent/agent-tool.js";
 import { SubAgentManager } from "../multi-agent/subagent.js";
 import type { AgentRunner } from "../multi-agent/types.js";
-import { skillToPromptLayer } from "./skills/adapter.js";
+import { skillsToPromptLayer } from "./skills/adapter.js";
 import { SkillLoader } from "./skills/loader.js";
 import type { Skill } from "./skills/loader.js";
 
@@ -77,13 +77,13 @@ export async function initializeExtensions(
   options.toolRegistry.registerAll(mcp.getTools());
 
   const skillLoader = new SkillLoader();
+  const skillsRoot = resolveProjectPath(options.workingDirectory, "skills");
   const skills = await skillLoader.loadAll(
     options.userSkillsDirectory,
-    resolveProjectPath(options.workingDirectory, "skills")
+    skillsRoot
   );
-  for (const skill of skills) {
-    options.systemPrompt.addLayer(skillToPromptLayer(skill));
-  }
+  const skillLayer = skillsToPromptLayer(skills, skillsRoot);
+  if (skillLayer) options.systemPrompt.addLayer(skillLayer);
 
   const hooks = new HookManager();
   hooks.load(loadHookConfig(resolveProjectPath(options.workingDirectory, "hooks.json")));
