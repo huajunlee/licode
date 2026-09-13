@@ -320,7 +320,7 @@ flowchart TD
 | 事件管线层（通道 A） | 请求编排，仅过 user-message | EventPipeline（before:agentLoop 扩展 -> createAgentLoopMiddleware -> hook:after:agentLoop -> 错误处理） |
 | 流式 UI 通道（通道 B） | 循环内事件 -> 界面刷新 | EventBus（llm-token/thinking/tool-execute-*/agent-loop-complete/context-compressed/error -> React setState） |
 | Agent 引擎层 | 决策循环与任务编排（含 token 校准、上下文压缩） | AgentLoop（ReAct）、TokenCalibrator、ContextCompressor |
-| 工具执行层 | 文件、命令、搜索操作 | 6 内置工具 + MCP + Skills |
+| 工具执行层 | 文件、命令、搜索操作 | 6 内置工具 + MCP（Skills 不走工具，见 §14） |
 | LLM 适配层 | 大模型调用与 Token 管理 | LLMProvider、流式响应 |
 
 ### 1. CLI 交互层
@@ -464,7 +464,7 @@ AgentLoop 是 LICode 的核心决策发动机，实现 **ReAct（Reasoning + Act
 
 **AgentLoop 的组成：**
 
-AgentLoop 直接持有八类部件；Skill/MCP/SubAgent 不在其中——它们经 adapter 翻译成统一的 `Tool` 注册进 ToolRegistry，被 loop 透明使用。
+AgentLoop 直接持有八类部件；MCP/SubAgent 不在其中——它们经 adapter 翻译成统一的 `Tool` 注册进 ToolRegistry，被 loop 透明使用。Skill 则不走工具这条路：它由 `skillsToPromptLayer` 合成一个**常驻书目层**（只有 name + description），正文留在磁盘、由模型按需 Read。
 
 ```mermaid
 flowchart LR
@@ -480,21 +480,21 @@ flowchart LR
         EB["EventBus · 广播事件"]
     end
 
-    subgraph ext ["扩展源（经 adapter 转 Tool，对 loop 透明）"]
+    subgraph ext ["扩展源（MCP/SubAgent 经 adapter 转 Tool；Skill 转 prompt 书目层）"]
         direction TB
         BUILTIN["内置工具 Read/Write/Edit/Bash/Glob/Grep"]
         MCP["MCP 工具"]
-        SKL["Skill 工具"]
+        SKL["Skill 书目层（name+description）"]
         SUB["SubAgent 工具"]
     end
 
     BUILTIN -.->|registerAll| TR
     MCP -.->|mcpToolToAdapter| TR
-    SKL -.->|skillToolToAdapter| TR
+    SKL -.->|skillsToPromptLayer| CM
     SUB -.->|createAgentTool| TR
 ```
 
-其中 LLMProvider / ConversationManager / ToolRegistry / ContextCompressor / EventBus 为**注入**（来自 `AgentConfig`），ToolExecutor / TerminationPolicy / TokenCounter 为**内部构造**；内置工具 + MCP + Skill + SubAgent 经 adapter 转 `Tool` 注册进 ToolRegistry，对 loop 完全透明——新增一类扩展只需写 adapter，loop 无需改动。
+其中 LLMProvider / ConversationManager / ToolRegistry / ContextCompressor / EventBus 为**注入**（来自 `AgentConfig`），ToolExecutor / TerminationPolicy / TokenCounter 为**内部构造**；内置工具 + MCP + SubAgent 经 adapter 转 `Tool` 注册进 ToolRegistry，对 loop 完全透明——新增一类扩展只需写 adapter，loop 无需改动。Skill 是例外：不转工具，而是注入常驻书目层（见 §14）。
 
 **ReAct 循环时序：**
 
@@ -584,7 +584,7 @@ LICode 通过 `LLMProvider` 接口抽象大模型调用，当前支持 Anthropic
 
 ### 5. ToolRegistry（工具注册表）
 
-所有工具（内置、MCP、Skills）统一注册到 `ToolRegistry`。
+所有工具（内置、MCP）统一注册到 `ToolRegistry`；Skill 不注册为工具，而是注入常驻书目层（见 §14）。
 
 **工具注册流程：**
 
@@ -686,7 +686,7 @@ Message 类型：
   10    tool-use（工具说明）  按需     内置模板
   10    CLAUDE.md           always    项目根目录（loaders 注入，always 不裁剪）
   12    spec files           按需      spec-kit 加载
-  15    skills（技能描述）   按需      用户/项目配置
+  15    skills（书目：name+description） always  项目配置（正文按需 Read）
 ```
 
 **组装策略：** `always: true` 的层始终包含，可选层按优先级依次填充，最后一个可选层可能被截断。
@@ -796,31 +796,36 @@ MCPClientManager
 
 ### 14. Skills 系统
 
-用户和项目可以自定义技能包，存放在 `.licode/skills/` 目录下：
+用户和项目可以自定义技能包，存放在 `.licode/skills/` 目录下。格式与 Claude Code 的 Skill 一致：
 
 ```
 .licode/skills/
   └── my-skill/
-      └── skill.md       ← YAML frontmatter + Markdown 描述
-          ---
-          name: my-skill
-          version: 1.0.0
-          tools:
-            - name: deploy
-              description: 部署到测试环境
-              parameters:
-                - name: env
-                  type: string
-                  default: staging
-          ---
-          # 技能描述正文（注入为 system prompt 层）
+      ├── SKILL.md          ← frontmatter（name + description 必填）+ 正文
+      ├── reference.md      ← 可选：按需读取的参考文档
+      └── scripts/
+          └── deploy.sh     ← 可选：按需执行的脚本
 ```
 
-**加载流程：**
-1. SkillLoader 设计上扫描用户目录（`~/.licode/skills/`）和项目目录（`.licode/skills/`）；注：当前 CLI 接线仅传入项目目录，`~/.licode/skills/` 暂未扫描
+```markdown
+---
+name: my-skill
+description: 部署到测试环境时使用
+---
+
+# 部署流程
+
+（正文：模型需要时才读进来）
+```
+
+**加载流程（渐进披露）：**
+1. SkillLoader 扫描项目目录 `.licode/skills/`（`userSkillsDirectory` 设计上支持，但当前 CLI 未传入，故只扫项目目录）
 2. 项目级 skill 覆盖用户级同名 skill
-3. 技能描述注入为系统提示词层（priority 15）
-4. 技能工具注册到 ToolRegistry，命名空间 `skill__{toolName}`
+3. 只有 **name + description** 被注入为一个常驻系统提示词层（层名 `skills`，priority 15，`always: true`）——即"书目"
+4. **正文不注入**：模型判断任务与某技能描述相符时，用 Read 读它的 `SKILL.md` 全文；附件用 Read 读，`scripts/` 里的脚本用 Bash 执行
+5. 缺 `name` 或 `description` 的技能被跳过；小写的 `skill.md`（旧格式）不再加载
+
+**与旧版的差别**：旧版把技能正文整体注入 system prompt，并把脚本登记成 `skill__{toolName}` 工具；新版正文按需读、脚本走 Bash——因此脚本现在会经过权限守卫（旧版直接 spawn，绕过权限）。
 
 ### 15. Hooks 系统
 
@@ -1855,7 +1860,7 @@ LICode 共 **11 处直接调用 LLM**（1 主对话 + 9 侧调用 + 1 legacy 未
 │   ├── hooks.json                    ← 生命周期钩子配置
 │   ├── skills/                       ← 项目级技能包
 │   │   └── go-review/
-│   │       └── skill.md
+│   │       └── SKILL.md
 │   ├── worktrees/                    ← 子 Agent 的 Git 隔离工作区
 │   │   └── core-migration/          ← 每个子 Agent 一个目录（路径 .licode/worktrees/{agent-name}）
 │   └── logs/                         ← Hook 输出日志（如果你配置了）
@@ -1957,13 +1962,13 @@ updatedAt: 2026-07-27T08:00:00.000Z
 
 ---
 
-#### 5. `.licode/skills/{skill-name}/skill.md` — 技能包
+#### 5. `.licode/skills/{skill-name}/SKILL.md` — 技能包
 
 **何时创建**：手动创建。
 
-**作用**：为 LICode 添加领域专长（如 Go 代码审查、部署脚本），每项技能可以附带专属工具。
+**作用**：为 LICode 添加领域专长（如 Go 代码审查、部署脚本），每项技能可以附带参考文档与 `scripts/` 脚本。
 
-**加载时机**：LICode 启动时扫描 `.licode/skills/`，注入为 system prompt 层（priority 15）。
+**加载时机**：LICode 启动时扫描 `.licode/skills/`，只把 `name` + `description` 注入为一个常驻书目层（层名 `skills`，priority 15，`always: true`）；正文由模型按需 Read（见 §14）。
 
 ---
 
@@ -2014,9 +2019,9 @@ specs/用户通知功能/
 | | CLAUDE.md | Skills |
 |---|---|---|
 | 层级 | 项目全局 | 可复用模块 |
-| 内容 | 编码规范、技术栈、约定 | 领域专长 + 专属工具 |
-| 工具 | 不附带工具 | 可附带 Zod 定义的专属工具 |
-| 优先级 | 动态加载 | priority 15 |
+| 内容 | 编码规范、技术栈、约定 | 领域专长（SKILL.md 正文） |
+| 工具 | 不附带工具 | 不转工具；脚本走 Bash |
+| 优先级 | 动态加载 | 书目层 priority 15（always，正文按需 Read） |
 
 ---
 
@@ -2028,7 +2033,7 @@ specs/用户通知功能/
 | 说"记住 …"，或日常纠正被自动提取 | 记忆 .md 文件 + MEMORY.md 索引 | `.licode/memory/{type}/{slug}.md` |
 | 配置 MCP 服务端 | 无新文件（已手动创建） | `.licode/mcp/config.json` |
 | 配置 Hooks | Hook 日志文件（可选） | `.licode/logs/` (由 Hook 命令决定) |
-| 创建 Skill | skill.md + 工具注册 | `.licode/skills/{name}/skill.md` |
+| 创建 Skill | SKILL.md（自动汇总为书目层） | `.licode/skills/{name}/SKILL.md` |
 | 使用子 Agent | Git worktree 目录 | `.licode/worktrees/{name}/` |
 | 运行 `licode spec init` | spec + tasks + checklist | `specs/{name}/` |
 | 编写 CLAUDE.md | 无新文件（已手动创建） | `./CLAUDE.md` |
@@ -2301,7 +2306,7 @@ LICode 的定位是"能自主完成复杂开发任务的终端 AI 助手"，而�
 
 可以，有两种方式：
 1. **MCP 协议**：在 `.licode/mcp/config.json` 中配置 MCP 服务端，接入外部工具服务。详见 [Recipe 4](recipes/mcp-config.md)。
-2. **Skills 系统**：在 `.licode/skills/` 下创建技能包，定义专属工具和角色。详见 [Recipe 9](recipes/system-prompt.md)。
+2. **Skills 系统**：在 `.licode/skills/` 下创建技能包（`SKILL.md`），为 LICode 添加领域专长。详见 [Recipe 9](recipes/system-prompt.md)。
 
 **Q: LICode 的工具会不会执行危险命令？**
 

@@ -122,7 +122,7 @@ LICode 运行时有**两条独立的事件通道**：
 |------|------|
 | **内置工具** | Read / Write / Edit / Bash / Glob / Grep（6 基础）+ decide 等（6 第二大脑） |
 | **MCP 协议** | `.licode/mcp/config.json` 配置服务端，工具自动注册为 `mcp__{server}__{tool}` |
-| **Skills 技能包** | `.licode/skills/` 自定义领域专长 + 专属工具 |
+| **Skills 技能包** | `.licode/skills/` 自定义领域专长，渐进披露：启动只载 `name`+`description` 书目，正文按需 Read、脚本走 Bash |
 | **Hooks 钩子** | `before:agentLoop` / `after:agentLoop` 生命周期执行 Shell 命令或 in-process 函数 |
 | **Slash 命令** | `/help`、`/clear`、`/context`、`/memory`、`/diary`、`/subagent` 等 |
 
@@ -187,7 +187,7 @@ LICode 运行时有**两条独立的事件通道**：
 │ 事件管线层      Pipeline 洋葱模型（仅过 user-message）      │
 │ 流式 UI 通道    EventBus（loop 每步 emit → 界面刷新）       │
 │ Agent 引擎层    AgentLoop（ReAct + token 校准 + 压缩）      │
-│ 工具执行层      内置 6 工具 + MCP + Skills + SubAgent       │
+│ 工具执行层      内置 6 工具 + MCP + SubAgent                │
 │ LLM 适配层      LLMProvider（Anthropic 兼容流式接口）        │
 └─────────────────────────────────────────────────────────┘
 ```
