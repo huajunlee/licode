@@ -42,8 +42,10 @@ describe("initializeExtensions", () => {
     const skillDir = path.join(licodeDir, "skills", "hello");
     mkdirSync(skillDir, { recursive: true });
 
+    // 代码读的是 .licode/mcp/config.json（见 startup.ts 的 resolveProjectPath(..., "mcp", "config.json")）
+    mkdirSync(path.join(licodeDir, "mcp"), { recursive: true });
     writeFileSync(
-      path.join(licodeDir, "mcp.json"),
+      path.join(licodeDir, "mcp", "config.json"),
       JSON.stringify({
         mcpServers: {
           mock: {
