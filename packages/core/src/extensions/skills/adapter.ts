@@ -16,8 +16,10 @@ export function skillsToPromptLayer(skills: Skill[]): SystemPromptLayer | null {
     "下面每个技能对应一个目录（路径列在条目后），目录内含 SKILL.md。",
     "当任务与某个技能的描述相符时，用 Read 读取它的 SKILL.md 全文；",
     "技能目录内的附件用 Read 读取，`scripts/` 里的脚本用 Bash 执行。",
+    "这些路径是技能随 LICode 安装的位置，不是你的工作目录，也不是用户的项目根——",
+    "用户数据在各处说明的相对路径下（如 `.licode/`）。",
     "",
-    ...skills.map((s) => `- ${s.name}：${s.description}\n  目录：${s.dir}`),
+    ...skills.map((s) => `- ${s.name}：${s.description}\n  目录（技能自带）：${s.dir}`),
   ];
 
   return {

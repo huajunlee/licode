@@ -72,6 +72,27 @@ export function currentDateLayer(now: Date = new Date()): SystemPromptLayer {
   };
 }
 
+/**
+ * 动态层：工作目录。always-on，priority 2（safety 之后、current-date 之前）。
+ *
+ * 之前系统提示里没有任何一处写明 cwd，而技能书目层会逐条列出安装目录下的绝对路径
+ * （如 .../node_modules/@licode/core/dist/extensions/skills/builtin/decide），
+ * 模型便把那个路径当成了项目根，跑去里面找 .licode/people——端到端测试里
+ * 第 4、12 条 Bash 的错路径就是这么来的。写明 cwd 后模型不必再从别处反推。
+ */
+export function workingDirectoryLayer(cwd: string): SystemPromptLayer {
+  return {
+    name: "working-directory",
+    priority: 2,
+    always: true,
+    content:
+      `你的工作目录是 ${path.resolve(cwd)}。\n` +
+      `Read / Write / Edit / Glob / Grep / Bash 的相对路径都相对它解析；` +
+      `用户的项目数据（.licode/ 等）就在它下面。\n` +
+      `上下文里其他绝对路径（例如技能目录）位于安装位置，不是项目根。`,
+  };
+}
+
 export class SystemPrompt {
   private layers: SystemPromptLayer[] = [];
   private tokenCounter = new TokenCounter();

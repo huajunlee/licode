@@ -18,6 +18,7 @@ import {
   initializeExtensions,
   loadDefaultLayers,
   currentDateLayer,
+  workingDirectoryLayer,
   MemoryStore,
   createMemoryRecallTool,
   createRecallAgent,
@@ -181,6 +182,7 @@ export async function initializeConversationRuntime(
     systemPrompt.addLayer(layer);
   }
   systemPrompt.addLayer(currentDateLayer());
+  systemPrompt.addLayer(workingDirectoryLayer(options.cwd));
   await loadCLAUDE(systemPrompt, { cwd: options.cwd });
   await loadSpecFiles(systemPrompt, { cwd: options.cwd });
   manager.systemPrompt = systemPrompt;
