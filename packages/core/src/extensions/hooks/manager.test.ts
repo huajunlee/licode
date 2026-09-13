@@ -1,8 +1,45 @@
 import { describe, it, expect } from "vitest";
 import { HookManager, hookMiddleware, resolvePosition } from "./manager.js";
-import type { HookConfig, HookPosition } from "./types.js";
+import type { HookConfig, HookPosition, RegisteredHook } from "./types.js";
 import { EventPipeline } from "../../events/pipeline.js";
 import type { PipelineEvent } from "../../events/types.js";
+
+describe("shell 钩子进程提前退出", () => {
+  it("写 stdin 撞上 EPIPE 时不产生未捕获异常", async () => {
+    // 命令立刻退出且从不读 stdin；payload 大到超过管道缓冲，
+    // 让写入必然撞上已关闭的管道——这正是生产里 hook 命令写错时的情形
+    const manager = new HookManager();
+    const hook = {
+      name: "dies-immediately",
+      events: ["agent-loop-complete"],
+      command: "true",
+      timeout: 5000,
+      blocking: true,
+      resolvedPosition: "before:agentLoop",
+    } as RegisteredHook;
+    const bigEvent = {
+      type: "agent-loop-complete",
+      message: "x".repeat(500_000),
+    } as unknown as PipelineEvent;
+
+    // onEvent 自身不抛（它内部 catch 了），EPIPE 是流上的未捕获异常，
+    // 所以只能从 process 这一层观察
+    let uncaught: unknown = null;
+    const onUncaught = (e: unknown) => {
+      uncaught = e;
+    };
+    process.on("uncaughtException", onUncaught);
+    try {
+      await manager.onEvent(bigEvent, [hook]);
+      // 留一点时间让流上的错误浮上来
+      await new Promise((r) => setTimeout(r, 150));
+    } finally {
+      process.off("uncaughtException", onUncaught);
+    }
+
+    expect(uncaught).toBeNull();
+  });
+});
 
 describe("resolvePosition", () => {
   it('resolves "pre-agent" alias to "before:agentLoop"', () => {

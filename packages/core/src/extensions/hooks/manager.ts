@@ -26,8 +26,23 @@ function spawnHook(command: string, event: PipelineEvent, timeoutMs: number): Pr
       resolve();
     });
 
-    proc.stdin!.write(JSON.stringify(event));
-    proc.stdin!.end();
+    // 钩子进程可能在我们写完之前就退出（命令写错、或它根本不读 stdin），
+    // 此时管道已关，write 会触发 EPIPE。没有这个监听器它就是个**未捕获异常**，
+    // 足以把整个 CLI 带崩——注意上面 proc.on("error") 捕的是子进程自身的错误，
+    // 捕不到 stdin 流上的。实测：命令为 `true` + 大 payload 时必然复现。
+    proc.stdin!.on("error", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+
+    try {
+      proc.stdin!.write(JSON.stringify(event));
+      proc.stdin!.end();
+    } catch {
+      // 同步抛出（流已销毁）时同样不该往上冒
+      clearTimeout(timer);
+      resolve();
+    }
   });
 }
 
