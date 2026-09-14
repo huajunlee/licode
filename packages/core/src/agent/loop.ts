@@ -1,5 +1,8 @@
-import type { LLMProvider } from "../llm/provider.js";
+import * as path from "node:path";
+import type { LLMProvider, Message } from "../llm/provider.js";
 import type { ConversationManager } from "../conversation/manager.js";
+import type { Skill } from "../extensions/skills/loader.js";
+import { polishAnswer, shouldPolish } from "./polish.js";
 import type { ToolRegistry } from "../tools/registry.js";
 import { ToolExecutor } from "../tools/executor.js";
 import {
@@ -53,6 +56,11 @@ export interface AgentConfig {
    */
   compressor?: ContextCompressor;
   eventBus?: EventBus;
+  /**
+   * 已加载的技能。loop 用它判断本次会话哪些技能被读过，
+   * 以便在交付前对声明了 polishWith 的技能执行强制改写。
+   */
+  skills?: Skill[];
 }
 
 export class AgentLoop {
@@ -70,11 +78,13 @@ export class AgentLoop {
     importantTurnsBudget?: number;
   };
   private compressor?: ContextCompressor;
+  private skills: Skill[];
 
   constructor(config: AgentConfig) {
     this.llm = config.llm;
     this.conversation = config.conversation;
     this.tools = config.tools;
+    this.skills = config.skills ?? [];
     this.context = {
       outputReserve: config.context?.outputReserve ?? 8192,
       compressThreshold: config.context?.compressThreshold ?? 0.85,
@@ -93,6 +103,66 @@ export class AgentLoop {
     this.termination = new TerminationPolicy(config.termination ?? {});
     this.eventBus = config.eventBus;
     this.compressor = config.compressor;
+  }
+
+  /**
+   * 交付前的强制改写。
+   *
+   * 只看一件事：本次会话有没有读过某个声明了 `polishWith` 的技能
+   * （判据是 Read 过它目录下的 SKILL.md）。读过就按它指定的技能改写最终回答。
+   *
+   * 这是 harness 层的保证——技能正文里写"请记得改写"是可以被跳过的，
+   * 而这里插在交付路径上，模型没有机会绕过。
+   *
+   * 任何一步出问题都保留原稿：宁可交付没润色的答案，也不能交付空答案或报错。
+   */
+  private async applyPolish(messages: readonly Message[], draft: string): Promise<string> {
+    if (process.env.LICODE_POLISH === "off") return draft;
+
+    const engaged = this.skills.filter((s) => s.polishWith && this.wasRead(messages, s));
+    const target = engaged[0];
+    if (!target) return draft;
+
+    const polisher = this.skills.find((s) => s.name === target.polishWith);
+    if (!polisher) return draft;
+    // 规则正文挂在 target.polishBody 上（loadAll 回填），借用过来
+    const prepared: Skill = { ...polisher, polishBody: target.polishBody };
+    if (!shouldPolish(prepared, draft)) return draft;
+
+    try {
+      const polished = await polishAnswer({
+        skill: prepared,
+        llm: this.llm,
+        model: this.conversation.metadata.model,
+        draft,
+      });
+      // 落盘与事件都必须用改写后的文本，否则用户看到的和存下来的不是同一份
+      this.conversation.replaceLastAssistantMessage(polished);
+      this.eventBus?.emit({
+        type: "skill-polish-applied",
+        skill: target.name,
+        via: target.polishWith!,
+      });
+      return polished;
+    } catch {
+      return draft;
+    }
+  }
+
+  /** 判断某个技能的 SKILL.md 是否在本次会话里被 Read 过 */
+  private wasRead(messages: readonly Message[], skill: Skill): boolean {
+    const marker = path.join(skill.dir, "SKILL.md");
+    return messages.some(
+      (m) =>
+        m.role === "assistant" &&
+        Array.isArray(m.content) &&
+        m.content.some(
+          (b) =>
+            b.name === "Read" &&
+            typeof (b.input as { file_path?: unknown })?.file_path === "string" &&
+            path.resolve((b.input as { file_path: string }).file_path) === path.resolve(marker)
+        )
+    );
   }
 
   async run(userInput: string): Promise<PipelineEvent> {
@@ -191,9 +261,15 @@ export class AgentLoop {
             this.conversation.appendToAssistantMessage("");
           }
           this.conversation.finalizeAssistantMessage(response.usage, response.thinking);
+
+          // 交付前改写：本次会话读过、且声明了 polishWith 的技能，在此强制生效。
+          // 放在 emit 之前——事件里的 message 与存盘的消息都必须是改写后的文本，
+          // 否则用户看到的和落盘的不是同一份。
+          const finalText = await this.applyPolish(this.conversation.getMessages(), response.content);
+
           this.eventBus?.emit({
             type: "agent-loop-complete",
-            message: response.content,
+            message: finalText,
             usage: response.usage,
           });
           await this.conversation.save();

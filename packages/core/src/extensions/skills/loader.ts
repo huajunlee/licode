@@ -6,6 +6,17 @@ export interface Skill {
   name: string;
   description: string;
   dir: string;
+  /**
+   * 交付前必须对最终回答施加的后处理技能名。
+   *
+   * 技能正文只能"请"模型照做，模型可以跳过；这个声明是给 harness 看的：
+   * 本次会话只要读过声明了 polishWith 的技能，AgentLoop 就会在交付前
+   * 自动用被指定的技能改写最终回答（见 agent/polish.ts）。
+   * 例如 decide 声明 polishWith: shuorenhua，保证结论不会以 AI 腔调交付。
+   */
+  polishWith?: string;
+  /** polishWith 指向的技能正文（由 loadAll 在解析完全部技能后回填）。 */
+  polishBody?: string;
 }
 
 export class SkillLoader {
@@ -21,7 +32,25 @@ export class SkillLoader {
         byName.set(skill.name, skill);
       }
     }
-    return [...byName.values()];
+    const skills = [...byName.values()];
+
+    // 回填 polishWith 指向的技能正文。放在这里而不是 loadSkill 里，
+    // 因为 polishWith 可能指向另一个目录里的技能（如内置 decide → 内置 shuorenhua），
+    // 单目录解析时还看不到对方。
+    for (const s of skills) {
+      if (!s.polishWith) continue;
+      const target = byName.get(s.polishWith);
+      if (target) s.polishBody = await this.readBody(target.dir);
+    }
+
+    return skills;
+  }
+
+  /** 读 SKILL.md 的正文（去掉 frontmatter）。 */
+  async readBody(skillDir: string): Promise<string> {
+    const raw = await fs.promises.readFile(path.join(skillDir, "SKILL.md"), "utf-8");
+    const m = raw.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/);
+    return (m ? m[1] : raw).trim();
   }
 
   async loadFromDir(dir: string): Promise<Skill[]> {
@@ -57,7 +86,10 @@ export class SkillLoader {
       typeof frontmatter.description === "string" ? frontmatter.description.trim() : "";
     if (!name || !description) return null;
 
+    const polishWith =
+      typeof frontmatter.polishWith === "string" ? frontmatter.polishWith.trim() : undefined;
+
     // 正文刻意不读进内存：模型需要时自行 Read SKILL.md（渐进披露）
-    return { name, description, dir: skillDir };
+    return { name, description, dir: skillDir, ...(polishWith ? { polishWith } : {}) };
   }
 }

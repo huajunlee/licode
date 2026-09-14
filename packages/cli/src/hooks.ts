@@ -735,6 +735,8 @@ export function useConversation(
                   tools,
                   eventBus,
                   compressor: compressor ?? undefined,
+                  // 交付前改写需要知道哪些技能被读过、谁声明了 polishWith
+                  skills: extensionsRef.current?.skills,
                 })
               )
               // after:agentLoop fires shell hooks + in-process function hooks (e.g. memory extraction)
@@ -798,6 +800,8 @@ export function useConversation(
               tools,
               eventBus,
               compressor: compressor ?? undefined,
+              // 交付前改写需要知道哪些技能被读过、谁声明了 polishWith
+              skills: extensionsRef.current?.skills,
             })
           )
           // after:agentLoop fires shell hooks + in-process function hooks (e.g. memory extraction)

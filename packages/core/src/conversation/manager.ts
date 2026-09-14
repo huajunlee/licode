@@ -112,6 +112,20 @@ export class ConversationManager {
   }
 
   /**
+   * 用改写后的文本替换最后一条助手消息。
+   *
+   * 交付前改写（agent/polish.ts）走这条路：事件里播的和存盘的消息必须一致，
+   * 否则用户看到的和之后恢复会话看到的不是同一份。
+   */
+  replaceLastAssistantMessage(text: string): void {
+    const last = this.messages[this.messages.length - 1];
+    if (last && last.role === "assistant" && typeof last.content === "string") {
+      last.content = text;
+      this.metadata.updatedAt = new Date().toISOString();
+    }
+  }
+
+  /**
    * 取出并移除「本次响应追加的助手文本消息」，返回其文本。
    *
    * 流式过程中每个 token 都会调 appendToAssistantMessage，于是 tool_use 响应里

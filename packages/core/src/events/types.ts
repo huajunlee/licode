@@ -25,6 +25,8 @@ export type PipelineEvent =
   | { type: "tool-execute-start"; toolName: string; input: Record<string, unknown> }
   | { type: "tool-execute-complete"; toolName: string; result: ToolResult }
   | { type: "agent-loop-complete"; message: string; usage: TokenUsage }
+  /** 交付前改写已生效：skill 的技能按 via 技能的规则改写了最终回答 */
+  | { type: "skill-polish-applied"; skill: string; via: string }
   | { type: "agent-loop-terminated"; reason: string; stats: TerminationStats };
 
 export type Middleware = (
