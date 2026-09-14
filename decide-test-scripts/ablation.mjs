@@ -22,18 +22,20 @@ import { initializeConversationRuntime } from "/Users/lixiaohua/Project/agent/LI
 import { AgentLoop } from "/Users/lixiaohua/Project/agent/LICode/.claude/worktrees/skill-progressive-disclosure/packages/core/dist/agent/loop.js";
 
 const ROOT = "/Users/lixiaohua/Project/agent/LICode/.claude/worktrees/skill-progressive-disclosure";
-const cwd = `${ROOT}/decide-test-workspace`;
+// 可用环境变量换题/换工作区，便于跑多组消融
+const cwd = process.env.ABLATION_WORKSPACE || `${ROOT}/decide-test-workspace`;
 const SKILL_DIR = `${ROOT}/packages/core/dist/extensions/skills/builtin/decide`;
 // 必须挪到 builtin 目录**之外**！loader 会遍历 builtin 的每个子目录、
 // 按 SKILL.md 里的 frontmatter name 注册技能——改名成 decide.stash 放在原地
 // 等于没动，两臂都会带上 decide，实验变成 decide-vs-decide（踩过这个坑）。
 const STASH = `${ROOT}/.ablation-stash/decide`;
-const OUT = `${ROOT}/ablation-result.md`;
+const OUT = process.env.ABLATION_OUT || `${ROOT}/ablation-result.md`;
 
 const model = process.env.ANTHROPIC_MODEL || "deepseek-v4-flash";
 const TRIALS = Number(process.env.ABLATION_TRIALS || 3);
 
-const QUESTION = "我爸妈一直想让我回老家考公务员，但我更想留在大城市做技术。我该听他们的吗？";
+const QUESTION = process.env.ABLATION_QUESTION ||
+  "我爸妈一直想让我回老家考公务员，但我更想留在大城市做技术。我该听他们的吗？";
 
 if (process.cwd() !== cwd) {
   console.error(`❌ 进程 cwd (${process.cwd()}) 必须等于工作区 (${cwd})`);
@@ -42,23 +44,16 @@ if (process.cwd() !== cwd) {
 
 // ---------- 判据 ----------
 
-/** 答案里出现的、用户真实记录过的具体日期（fixture 日记里的日期） */
-const KNOWN_DATES = [
-  "2026-08-01", "2026-08-02", "2026-08-03", "2026-08-05",
-  "2026-08-21", "2026-08-28", "2026-09-05", "2026-09-10",
-];
+/** 从日记目录名解析出所有真实日期——用不着手写清单 */
+const KNOWN_DATES = fs.existsSync(`${cwd}/.licode/journal`)
+  ? fs.readdirSync(`${cwd}/.licode/journal`).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
+  : [];
+
 /** fixture 里独有的具体事实——没读过数据不可能知道 */
-const KNOWN_FACTS = [
-  { key: "中海油", desc: "父母要求投递中海油海南分公司" },
-  { key: "豪悦客", desc: "带父母吃牛排的具体店名" },
-  { key: "字节跳动", desc: "投递字节跳动" },
-  { key: "师兄", desc: "09-10 与师兄交流" },
-  { key: "堵闷", desc: "08-28 挂电话后的情绪（强度4）" },
-  { key: "两难", desc: "09-05 的情绪（强度4）" },
-  { key: "6000", desc: "大城市月支出至少六千" },
-  { key: "3000", desc: "实习工资三千出头" },
-  { key: "网站编辑", desc: "实习岗位性质" },
-];
+const KNOWN_FACTS = (process.env.ABLATION_FACTS ||
+  "中海油,豪悦客,字节跳动,师兄,堵闷,两难,6000,3000,网站编辑")
+  .split(",")
+  .map((k) => ({ key: k }));
 
 /** 模型有没有 Read 过某个路径（看 tool_use 的入参，不看结果文本） */
 function readsPath(messages, frag) {
@@ -175,7 +170,40 @@ async function runOne(arm, trial) {
   // 完整转录（供人工判读）
   const tr = [`## ${arm} · 第 ${trial} 次`, "", `耗时 ${rec.seconds}s | 工具调用 ${rec.toolCount} 次`, ""];
   tr.push(`调用序列：\`${toolCalls.join(" → ") || "(无)"}\``, "");
-  if (errors.length) tr.push(`错误：${errors.join(" | ")}`, "");
+  if (errors.length) tr.push(`**错误**：${errors.join(" | ")}`, "");
+
+  // 逐步展开：模型的思考/正文 + 每次工具调用的入参与结果摘要。
+  // 记录这些是为了判读「它是怎么找证据的」——比如基线是调 journal_recall，
+  // 还是绕道 Glob/Read 直接翻文件。
+  tr.push("<details><summary>展开逐步记录</summary>", "");
+  let step = 0;
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    if (m.role === "assistant") {
+      step++;
+      tr.push(`**第 ${step} 步**`, "");
+      if (Array.isArray(m.thinking) && m.thinking.length) {
+        tr.push("模型思考：", "", `> ${m.thinking.map((t) => t.thinking).join("\n> ").slice(0, 800)}`, "");
+      }
+      if (m.text) tr.push("调用工具前的话：", "", `> ${String(m.text).slice(0, 400)}`, "");
+      if (Array.isArray(m.content)) {
+        for (const b of m.content) {
+          tr.push(`- 调用 \`${b.name}\`：\`${JSON.stringify(b.input).slice(0, 300)}\``);
+        }
+        tr.push("");
+      }
+    } else if (m.role === "user" && Array.isArray(m.content)) {
+      const prev = messages[i - 1];
+      const uses = prev?.role === "assistant" && Array.isArray(prev.content) ? prev.content : [];
+      m.content.forEach((r, k) => {
+        const nm = uses[k]?.name ?? "?";
+        tr.push(`  ↳ \`${nm}\` 返回：\`${String(r.content ?? "").replace(/\n/g, " ").slice(0, 200)}\``);
+      });
+      tr.push("");
+    }
+  }
+  tr.push("</details>", "");
+
   tr.push("### 最终回答", "", answer || "**(空)**", "", "---", "");
   transcripts.push(tr.join("\n"));
 
