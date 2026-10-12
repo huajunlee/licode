@@ -11,6 +11,42 @@ description: 联网搜索公开信息时使用。当本地记忆、日记和人�
 
 ## 怎么搜
 
+搜索有两个入口，**优先用 ego-browser，不行再降级**。原因：`search.mjs` 走 DuckDuckGo，
+短时间多次请求容易被反爬拦截（见文末"一个实际限制"）；ego-browser 是真实浏览器，
+抗反爬、能读 JS 渲染的页面，更适合拿原始内容。
+
+### 首选：ego-browser
+
+先确认本机有它：
+
+```bash
+command -v ego-browser && ls "<ego 技能目录>/SKILL.md"
+```
+
+ego-browser 的用法以它自己的技能文档为准（通常位于 `~/.agents/skills/ego-browser/SKILL.md`），
+**先读那份文档再操作**，不要凭对 Playwright 的印象去猜它的 API。基本用法是跑一段 Node 脚本：
+
+```bash
+ego-browser nodejs < script.js
+```
+
+搜索走 Bing（比 DuckDuckGo 稳），用 `goto()` 打开搜索页再读结果：
+
+```js
+const task = await taskSpace("search keywords");
+const page = task.page("p1");
+await page.goto("https://www.bing.com/search?q=" + encodeURIComponent("查询词"));
+await page.waitForLoadState();
+console.log(await page.snapshot({ scope: "full_page" }));
+```
+
+两个坑：① 前台执行容易超时（浏览器服务拉起 + 等待），把脚本写进文件后台跑
+（`ego-browser nodejs < script.js > out.log 2>&1 &`）再读日志更稳；② 用完记得 `task.finish()`。
+
+**本机没有 ego-browser，或它失败/超时**，就降到下面的 `search.mjs`。
+
+### 降级：search.mjs（DuckDuckGo）
+
 技能目录（见你的技能书目层）下的 `scripts/search.mjs`：
 
 ```bash
@@ -61,6 +97,6 @@ node "<技能目录>/scripts/search.mjs" "查询词" [结果条数]
 
 ## 一个实际限制
 
-DuckDuckGo 会对短时间内的高频请求返回反爬拦截页，脚本检测到会明确报错并退出 1。
-**不要连着一口气搜五六次**；一次搜不到就换查询词，而不是原样重试。
-被拦截时等一会儿再试。
+这是 `search.mjs`（降级入口）的限制：DuckDuckGo 会对短时间内的高频请求返回反爬拦截页，
+脚本检测到会明确报错并退出 1。**不要连着一口气搜五六次**；一次搜不到就换查询词，
+而不是原样重试。被拦截时等一会儿再试——**或者改用首选入口 ego-browser，它不受这个限制**。
